@@ -1,9 +1,9 @@
 {
   "id": "mindmap-writing",
-  "name": "Mindmap Writing",
+  "name": "Mindmap Note Writing",
   "version": "0.0.1",
   "minAppVersion": "1.5.0",
   "description": "Ecriture en branche : redigez les chapitres d'une note sous forme de carte mentale.",
-  "author": "Bigorneau15652",
+  "author": "Bigorneau",
   "isDesktopOnly": false
 }

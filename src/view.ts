@@ -12,7 +12,7 @@ export class MindmapView extends ItemView {
   }
 
   getDisplayText(): string {
-    return `Mindmap Writing`;
+    return `Mindmap Note Writing`;
   }
 
   getIcon(): string {
@@ -33,7 +33,7 @@ export class MindmapView extends ItemView {
     el.empty();
     el.addClass(`mmw-view`);
     const file: TFile | null = this.app.workspace.getActiveFile();
-    el.createEl(`h3`, { text: `Mindmap Writing` });
+    el.createEl(`h3`, { text: `Mindmap Note Writing` });
     if (file) {
       el.createEl(`p`, { text: `Note active : ${file.basename}` });
     } else {
