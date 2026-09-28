@@ -1,4 +1,4 @@
-# Mindmap Writing
+# Mindmap Note Writing
 
 Plugin Obsidian d'ecriture en branche : une note est representee sous forme de carte mentale dont chaque noeud porte un veritable paragraphe.
 

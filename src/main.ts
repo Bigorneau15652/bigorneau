@@ -5,7 +5,7 @@ export default class MindmapWritingPlugin extends Plugin {
   async onload() {
     this.registerView(VIEW_TYPE_MINDMAP, (leaf) => new MindmapView(leaf));
 
-    this.addRibbonIcon(`network`, `Ouvrir Mindmap Writing`, () => {
+    this.addRibbonIcon(`network`, `Ouvrir Mindmap Note Writing`, () => {
       void this.activateView();
     });
 
