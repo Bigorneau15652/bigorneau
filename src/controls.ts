@@ -1,0 +1,434 @@
+// Commandes de la carte, inspirees d'Excalidraw : en bas a gauche, le menu burger (reglages), la palette
+// (apparence de la carte), puis le zoom, l'annulation et la compacite. N'utilise que le DOM standard.
+import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
+
+export interface ControlActions {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  recenter: () => void;
+  expandAll: () => void;
+  collapseAll: () => void;
+  undo: () => void;
+  redo: () => void;
+  openSettings: () => void;
+  // Applique et enregistre des reglages.
+  change: (patch: Partial<MmSettings>) => void;
+}
+
+type PopupKind = `menu` | `style` | null;
+
+const svg = (inner: string, size = 18, extra = ``): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${inner}</svg>`;
+
+const ICONS: Record<string, string> = {
+  menu: svg(`<path d="M4 6h16M4 12h16M4 18h16"/>`),
+  palette: svg(
+    `<path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3c2.2 0 4-1.8 4-4 0-4.4-4.5-7.4-9.3-7.4z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>`
+  ),
+  minus: svg(`<path d="M5 12h14"/>`),
+  plus: svg(`<path d="M5 12h14M12 5v14"/>`),
+  undo: svg(`<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>`),
+  redo: svg(`<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>`),
+  locate: svg(`<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>`),
+  collapse: svg(`<path d="m7 20 5-5 5 5M7 4l5 5 5-5"/>`),
+  expand: svg(`<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>`),
+  settings: svg(
+    `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>`
+  ),
+  compact: svg(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/>`),
+  check: svg(`<path d="m5 12 5 5 9-10"/>`, 14),
+};
+
+// Icones des options du panneau d'apparence.
+const OPT = {
+  width: (w: number): string => svg(`<path d="M4 12h16" stroke-width="${w * 1.6}"/>`, 20),
+  solid: svg(`<path d="M4 12h16"/>`, 20),
+  dashed: svg(`<path d="M3 12h4M10 12h4M17 12h4"/>`, 20),
+  dotted: svg(`<path d="M4 12h.01M9 12h.01M14 12h.01M19 12h.01" stroke-width="3"/>`, 20),
+  rough0: svg(`<path d="M3 13h18"/>`, 20),
+  rough1: svg(`<path d="M3 14c4-3 6 3 9 0s6-3 9 0"/>`, 20),
+  rough2: svg(`<path d="M3 15c2-9 4 7 6-2s4 7 6-2 4 5 6-1"/>`, 20),
+  sharp: svg(`<rect x="5" y="5" width="14" height="14" rx="0" stroke-dasharray="3 3"/>`, 20),
+  round: svg(`<rect x="5" y="5" width="14" height="14" rx="5" stroke-dasharray="3 3"/>`, 20),
+  elbow: svg(`<path d="M6 4v10a4 4 0 0 0 4 4h8"/>`, 20),
+  curve: svg(`<path d="M6 4c0 11 4 14 12 14"/>`, 20),
+  straight: svg(`<path d="M6 5 18 17"/>`, 20),
+  alignLeft: svg(`<path d="M4 6h16M4 12h10M4 18h14"/>`, 20),
+  alignCenter: svg(`<path d="M4 6h16M7 12h10M5 18h14"/>`, 20),
+  alignRight: svg(`<path d="M4 6h16M10 12h10M6 18h14"/>`, 20),
+};
+
+const STROKE_COLORS = [
+  { value: ``, label: `Couleur du thème` },
+  { value: `#e03131`, label: `Rouge` },
+  { value: `#2f9e44`, label: `Vert` },
+  { value: `#1971c2`, label: `Bleu` },
+  { value: `#f08c00`, label: `Orange` },
+];
+
+const FILL_COLORS = [
+  { value: ``, label: `Transparent` },
+  { value: `#ffc9c9`, label: `Rose` },
+  { value: `#b2f2bb`, label: `Vert clair` },
+  { value: `#a5d8ff`, label: `Bleu clair` },
+  { value: `#ffec99`, label: `Jaune` },
+];
+
+const WIDTHS = [1, 1.8, 2.6, 3.6, 5];
+const FONT_SCALES = [
+  { value: 0.8, label: `XS` },
+  { value: 0.9, label: `S` },
+  { value: 1, label: `M` },
+  { value: 1.15, label: `L` },
+  { value: 1.3, label: `XL` },
+];
+
+function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function iconButton(icon: string, title: string, onClick: () => void, cls = `mmw-btn`): HTMLButtonElement {
+  const b = h(`button`, cls);
+  b.type = `button`;
+  b.innerHTML = icon;
+  b.title = title;
+  b.setAttribute(`aria-label`, title);
+  b.addEventListener(`click`, onClick);
+  return b;
+}
+
+export class MapControls {
+  private root: HTMLElement;
+  private popup: HTMLElement;
+  private menuBtn: HTMLButtonElement;
+  private styleBtn: HTMLButtonElement;
+  private zoomLabel: HTMLElement;
+  private slider: HTMLInputElement;
+  private open: PopupKind = null;
+
+  constructor(host: HTMLElement, private getSettings: () => MmSettings, private actions: ControlActions) {
+    this.root = h(`div`, `mmw-controls`);
+    this.popup = h(`div`, `mmw-popup`);
+    this.popup.style.display = `none`;
+
+    const dock = h(`div`, `mmw-dock`);
+    this.menuBtn = iconButton(ICONS.menu, `Menu et réglages`, () => this.toggle(`menu`));
+    this.styleBtn = iconButton(ICONS.palette, `Apparence de la carte`, () => this.toggle(`style`));
+    dock.append(this.menuBtn, this.styleBtn);
+
+    const zoom = h(`div`, `mmw-dock mmw-zoom`);
+    this.zoomLabel = h(`span`, `mmw-zoom-label`, `100 %`);
+    this.slider = h(`input`, `mmw-compact-slider`);
+    this.slider.type = `range`;
+    this.slider.min = `0.5`;
+    this.slider.max = `1.6`;
+    this.slider.step = `0.05`;
+    this.slider.title = `Compacité de l'affichage`;
+    this.slider.setAttribute(`aria-label`, `Compacité de l'affichage`);
+    this.slider.addEventListener(`input`, () => this.actions.change({ compactness: Number(this.slider.value) }));
+    zoom.append(
+      iconButton(ICONS.minus, `Dézoomer`, () => this.actions.zoomOut()),
+      this.zoomLabel,
+      iconButton(ICONS.plus, `Zoomer`, () => this.actions.zoomIn()),
+      iconButton(ICONS.locate, `Recentrer la carte`, () => this.actions.recenter()),
+      h(`span`, `mmw-sep`),
+      iconButton(ICONS.undo, `Annuler (dans la note)`, () => this.actions.undo()),
+      iconButton(ICONS.redo, `Rétablir (dans la note)`, () => this.actions.redo()),
+      h(`span`, `mmw-sep`)
+    );
+    const compactIcon = h(`span`, `mmw-compact-icon`);
+    compactIcon.innerHTML = ICONS.compact;
+    compactIcon.title = `Compacité`;
+    zoom.append(compactIcon, this.slider);
+
+    this.root.append(this.popup, dock, zoom);
+    host.appendChild(this.root);
+    this.refresh();
+  }
+
+  contains(target: EventTarget | null): boolean {
+    return target instanceof Node && this.root.contains(target);
+  }
+
+  setZoom(scale: number): void {
+    this.zoomLabel.textContent = `${Math.round(scale * 100)} %`;
+  }
+
+  closePopup(): void {
+    if (this.open === null) return;
+    this.open = null;
+    this.refresh();
+  }
+
+  isOpen(): boolean {
+    return this.open !== null;
+  }
+
+  private toggle(kind: Exclude<PopupKind, null>): void {
+    this.open = this.open === kind ? null : kind;
+    this.refresh();
+  }
+
+  // Met a jour l'affichage des commandes et du panneau ouvert d'apres les reglages.
+  refresh(): void {
+    this.slider.value = String(this.getSettings().compactness);
+    this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu`);
+    this.styleBtn.classList.toggle(`mmw-active`, this.open === `style`);
+    if (this.open === null) {
+      this.popup.style.display = `none`;
+      this.popup.replaceChildren();
+      return;
+    }
+    const scroll = this.popup.scrollTop;
+    this.popup.replaceChildren(this.open === `menu` ? this.buildMenu() : this.buildStylePanel());
+    this.popup.style.display = ``;
+    this.popup.scrollTop = scroll;
+  }
+
+  // ---------------------------------------------------------------- menu
+
+  private buildMenu(): HTMLElement {
+    const s = this.getSettings();
+    const a = this.actions;
+    const menu = h(`div`, `mmw-menu`);
+
+    const item = (icon: string, label: string, fn: () => void): HTMLElement => {
+      const b = h(`button`, `mmw-menu-item`);
+      b.type = `button`;
+      const i = h(`span`, `mmw-menu-icon`);
+      i.innerHTML = icon;
+      b.append(i, h(`span`, `mmw-menu-label`, label));
+      b.addEventListener(`click`, fn);
+      return b;
+    };
+    const toggle = (label: string, value: boolean, fn: (v: boolean) => void): HTMLElement => {
+      const b = h(`button`, `mmw-menu-item`);
+      b.type = `button`;
+      const box = h(`span`, `mmw-check` + (value ? ` mmw-checked` : ``));
+      box.innerHTML = value ? ICONS.check : ``;
+      b.append(box, h(`span`, `mmw-menu-label`, label));
+      b.addEventListener(`click`, () => fn(!value));
+      return b;
+    };
+
+    menu.append(
+      item(ICONS.locate, `Recentrer la carte`, () => a.recenter()),
+      item(ICONS.collapse, `Tout replier`, () => a.collapseAll()),
+      item(ICONS.expand, `Tout déplier`, () => a.expandAll()),
+      h(`div`, `mmw-menu-sep`),
+      toggle(`Afficher le préfixe Markdown (#)`, s.showPrefix, (v) => a.change({ showPrefix: v })),
+      toggle(`Titres longs : passer à la ligne`, s.longTitles === `wrap`, (v) => a.change({ longTitles: v ? `wrap` : `ellipsis` })),
+      toggle(`Griser les chapitres inactifs`, s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
+      toggle(`Inclure les sous-titres dans le chapitre actif`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
+    );
+
+    const contrast = h(`div`, `mmw-menu-row`);
+    contrast.append(h(`div`, `mmw-menu-title`, `Contraste des chapitres inactifs`));
+    const range = h(`input`, `mmw-range`);
+    range.type = `range`;
+    range.min = `15`;
+    range.max = `90`;
+    range.step = `5`;
+    range.value = String(Math.round(s.inactiveOpacity * 100));
+    range.addEventListener(`change`, () => a.change({ inactiveOpacity: Number(range.value) / 100 }));
+    contrast.append(range);
+    menu.append(contrast);
+
+    const positions: { value: PanePosition; label: string }[] = [
+      { value: `right`, label: `Droite` },
+      { value: `left`, label: `Gauche` },
+      { value: `top`, label: `Dessus` },
+      { value: `bottom`, label: `Dessous` },
+    ];
+    const pos = h(`div`, `mmw-menu-row`);
+    pos.append(h(`div`, `mmw-menu-title`, `Position de la note`));
+    pos.append(this.options(positions.map((p) => ({ value: p.value, text: p.label })), s.panePosition, (v) => a.change({ panePosition: v as PanePosition }), true));
+    menu.append(pos);
+
+    menu.append(
+      h(`div`, `mmw-menu-sep`),
+      item(ICONS.settings, `Tous les paramètres`, () => a.openSettings()),
+      h(`div`, `mmw-menu-help`, `Flèches : se déplacer. Entrée : rédiger. Espace : plier ou déplier. Molette avec Ctrl ou Cmd : zoomer.`)
+    );
+    return menu;
+  }
+
+  // ---------------------------------------------------------------- panneau d'apparence
+
+  private buildStylePanel(): HTMLElement {
+    const s = this.getSettings();
+    const a = this.actions;
+    const panel = h(`div`, `mmw-style`);
+
+    const section = (title: string, ...content: HTMLElement[]): void => {
+      const sec = h(`div`, `mmw-section`);
+      sec.append(h(`div`, `mmw-section-title`, title), ...content);
+      panel.append(sec);
+    };
+
+    section(`Trait`, this.swatches(STROKE_COLORS, s.strokeColor, (v) => a.change({ strokeColor: v }), `#1e1e1e`));
+    section(`Arrière-plan`, this.swatches(FILL_COLORS, s.fillColor, (v) => a.change({ fillColor: v }), `#ffffff`));
+    section(
+      `Largeur du contour`,
+      this.options(
+        WIDTHS.map((w) => ({ value: String(w), html: OPT.width(w), title: `Largeur ${w}` })),
+        String(s.strokeWidth),
+        (v) => a.change({ strokeWidth: Number(v) })
+      )
+    );
+    section(
+      `Style du trait`,
+      this.options(
+        [
+          { value: `solid`, html: OPT.solid, title: `Continu` },
+          { value: `dashed`, html: OPT.dashed, title: `Tirets` },
+          { value: `dotted`, html: OPT.dotted, title: `Pointillés` },
+        ],
+        s.strokeDash,
+        (v) => a.change({ strokeDash: v as MmSettings[`strokeDash`] })
+      )
+    );
+    section(
+      `Style de tracé`,
+      this.options(
+        [
+          { value: `0`, html: OPT.rough0, title: `Architecte : trait net` },
+          { value: `1`, html: OPT.rough1, title: `Artiste : trait de crayon` },
+          { value: `2`, html: OPT.rough2, title: `Caricaturiste : trait très irrégulier` },
+        ],
+        String(s.roughness),
+        (v) => a.change({ roughness: Number(v) as MmSettings[`roughness`] })
+      )
+    );
+    section(
+      `Angles`,
+      this.options(
+        [
+          { value: `sharp`, html: OPT.sharp, title: `Angles aigus` },
+          { value: `round`, html: OPT.round, title: `Angles arrondis` },
+        ],
+        s.corners,
+        (v) => a.change({ corners: v as MmSettings[`corners`] })
+      )
+    );
+    section(
+      `Contour des cases`,
+      this.options(
+        [
+          { value: `yes`, text: `Avec contour` },
+          { value: `no`, text: `Sans contour` },
+        ],
+        s.showFrames ? `yes` : `no`,
+        (v) => a.change({ showFrames: v === `yes` }),
+        true
+      )
+    );
+    section(
+      `Branches`,
+      this.options(
+        [
+          { value: `elbow`, html: OPT.elbow, title: `En angle` },
+          { value: `curve`, html: OPT.curve, title: `Courbes` },
+          { value: `straight`, html: OPT.straight, title: `Droites` },
+        ],
+        s.branchStyle,
+        (v) => a.change({ branchStyle: v as MmSettings[`branchStyle`] })
+      )
+    );
+    section(
+      `Police`,
+      this.options(
+        [
+          { value: `default`, text: `Aa`, title: `Police de l'interface` },
+          { value: `handwritten`, text: `Aa`, title: `Écriture manuscrite`, font: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` },
+          { value: `mono`, text: `</>`, title: `Code`, font: `var(--font-monospace, monospace)` },
+        ],
+        s.fontFamily,
+        (v) => a.change({ fontFamily: v as MmSettings[`fontFamily`] })
+      )
+    );
+    section(
+      `Taille de la police`,
+      this.options(
+        FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label })),
+        String(s.fontScale),
+        (v) => a.change({ fontScale: Number(v) })
+      )
+    );
+    section(
+      `Alignement du texte`,
+      this.options(
+        [
+          { value: `left`, html: OPT.alignLeft, title: `À gauche` },
+          { value: `center`, html: OPT.alignCenter, title: `Centré` },
+          { value: `right`, html: OPT.alignRight, title: `À droite` },
+        ],
+        s.textAlign,
+        (v) => a.change({ textAlign: v as MmSettings[`textAlign`] })
+      )
+    );
+
+    const reset = h(`button`, `mmw-reset`, `Réinitialiser l'apparence`);
+    reset.type = `button`;
+    reset.addEventListener(`click`, () => a.change(appearanceDefaults()));
+    panel.append(reset);
+    return panel;
+  }
+
+  // Rangee d'options exclusives.
+  private options(
+    items: { value: string; html?: string; text?: string; title?: string; font?: string }[],
+    current: string,
+    onPick: (value: string) => void,
+    wide = false
+  ): HTMLElement {
+    const row = h(`div`, `mmw-options` + (wide ? ` mmw-options-wide` : ``));
+    for (const it of items) {
+      const b = h(`button`, `mmw-option` + (it.value === current ? ` mmw-selected-option` : ``));
+      b.type = `button`;
+      if (it.html) b.innerHTML = it.html;
+      else b.textContent = it.text ?? ``;
+      if (it.font) b.style.fontFamily = it.font;
+      if (it.title) {
+        b.title = it.title;
+        b.setAttribute(`aria-label`, it.title);
+      }
+      b.addEventListener(`click`, () => onPick(it.value));
+      row.appendChild(b);
+    }
+    return row;
+  }
+
+  // Pastilles de couleur : les couleurs proposees et une couleur libre.
+  private swatches(colors: { value: string; label: string }[], current: string, onPick: (value: string) => void, fallback: string): HTMLElement {
+    const row = h(`div`, `mmw-swatches`);
+    for (const c of colors) {
+      const b = h(`button`, `mmw-swatch` + (c.value === current ? ` mmw-selected-swatch` : ``));
+      b.type = `button`;
+      b.title = c.label;
+      b.setAttribute(`aria-label`, c.label);
+      if (c.value === ``) b.classList.add(colors === STROKE_COLORS ? `mmw-swatch-theme` : `mmw-swatch-none`);
+      else b.style.background = c.value;
+      b.addEventListener(`click`, () => onPick(c.value));
+      row.appendChild(b);
+    }
+    const isCustom = current !== `` && !colors.some((c) => c.value === current);
+    const custom = h(`label`, `mmw-swatch mmw-swatch-custom` + (isCustom ? ` mmw-selected-swatch` : ``));
+    custom.title = `Couleur personnalisée`;
+    const input = h(`input`);
+    input.type = `color`;
+    input.value = isCustom ? current : fallback;
+    input.addEventListener(`change`, () => onPick(input.value));
+    if (isCustom) custom.style.background = current;
+    custom.appendChild(input);
+    row.append(h(`span`, `mmw-sep-vertical`), custom);
+    return row;
+  }
+
+  destroy(): void {
+    this.root.remove();
+  }
+}

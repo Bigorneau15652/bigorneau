@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNote } from "../src/model";
 import { buildLayoutTree, computeLayout, flatten, sequential, trunkX, LNode } from "../src/layout";
-import { elbowPoints, framePath, resample, rng, trunkBranch, trunkLine } from "../src/sketch";
+import { elbowPoints, framePath, resample, rng, trunkBranch, trunkLine, trunkRadius } from "../src/sketch";
 
 const NOTE = `# Racine\n## A\n### A1\n### A2\n#### A2a\n## B\n## C\n### C1\n`;
 
@@ -81,15 +81,37 @@ test(`navigation : noeud precedent et suivant dans l ordre d affichage`, () => {
 });
 
 test(`trait de crayon : stable d un affichage a l autre et extremites conservees`, () => {
-  const a = trunkLine(`sketch`, 0, 0, 100, `graine`);
-  const b = trunkLine(`sketch`, 0, 0, 100, `graine`);
-  const c = trunkLine(`sketch`, 0, 0, 100, `autre`);
+  const a = trunkLine(`elbow`, 0, 0, 100, `graine`, 1);
+  const b = trunkLine(`elbow`, 0, 0, 100, `graine`, 1);
+  const c = trunkLine(`elbow`, 0, 0, 100, `autre`, 1);
   assert.equal(a, b);
   assert.notEqual(a, c);
   assert.ok(a!.startsWith(`M 0.0 0.0`));
   assert.ok(a!.endsWith(`0.0 100.0`));
-  assert.ok(trunkBranch(`sketch`, 10, 0, 90, 80, `t`).endsWith(`90.0 80.0`));
+  assert.ok(trunkBranch(`elbow`, 10, 0, 90, 80, `t`, `round`, 1).endsWith(`90.0 80.0`));
   assert.equal(trunkLine(`curve`, 0, 0, 100, `x`), null);
+});
+
+test(`style de trace : net, crayon et tres irregulier`, () => {
+  // Trait net : ligne droite sans variation.
+  assert.equal(trunkLine(`elbow`, 0, 0, 100, `g`, 0), `M 0.0 0.0 L 0.0 100.0`);
+  // L irregularite croit avec le style de trace : ecart maximal a la verticale.
+  const spread = (rough: 1 | 2): number => {
+    const d = trunkLine(`elbow`, 0, 0, 200, `graine`, rough)!;
+    const xs = [...d.matchAll(/(-?\d+\.\d) -?\d+\.\d/g)].map((m) => Math.abs(Number(m[1])));
+    return Math.max(...xs);
+  };
+  assert.ok(spread(2) > spread(1));
+  assert.ok(spread(1) > 0);
+});
+
+test(`angles : aigus ou arrondis, sans angle arrondi le raccord est droit`, () => {
+  const sharp = trunkBranch(`elbow`, 0, 0, 60, 40, `k`, `sharp`, 0);
+  assert.equal(sharp, `M 0.0 40.0 L 60.0 40.0`);
+  const round = trunkBranch(`elbow`, 0, 0, 60, 40, `k`, `round`, 0);
+  assert.ok(round.split(` L `).length > 5);
+  assert.equal(trunkRadius(0, 40, 0, 60, `sharp`), 0);
+  assert.ok(trunkRadius(0, 40, 0, 60, `round`) > 0);
 });
 
 test(`outils de trace : nombres valides et formes attendues`, () => {
@@ -102,7 +124,12 @@ test(`outils de trace : nombres valides et formes attendues`, () => {
   const r = rng(`x`);
   const v = r();
   assert.ok(v >= 0 && v < 1);
-  assert.equal(framePath(`none`, 0, 0, 10, 10, `k`, false), null);
-  assert.equal(framePath(`straight`, 0, 0, 10, 10, `k`, false)?.kind, `rect`);
-  assert.equal(framePath(`sketch`, 0, 0, 80, 30, `k`, false)?.kind, `path`);
+  // Trace net : un rectangle, arrondi ou non. Trace irregulier : un chemin.
+  assert.deepEqual(framePath(0, 0, 80, 30, `k`, false, `sharp`, 0), { kind: `rect`, rx: 0 });
+  assert.equal(framePath(0, 0, 80, 30, `k`, false, `round`, 0).kind, `rect`);
+  const rect = framePath(0, 0, 80, 30, `k`, false, `round`, 0);
+  assert.ok(rect.kind === `rect` && rect.rx > 0);
+  assert.equal(framePath(0, 0, 80, 30, `k`, false, `round`, 1).kind, `path`);
+  const sharpPath = framePath(0, 0, 80, 30, `k`, false, `sharp`, 2);
+  assert.ok(sharpPath.kind === `path` && sharpPath.d.endsWith(`Z`));
 });

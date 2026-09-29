@@ -1,12 +1,12 @@
 {
   "name": "obsidian-mindmap-writing",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Plugin Obsidian d'ecriture en branche (carte mentale)",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "esbuild tests/model.test.ts tests/layout.test.ts tests/keys.test.ts --bundle --platform=node --format=cjs --outdir=.test-build && node --test .test-build/model.test.js .test-build/layout.test.js .test-build/keys.test.js"
+    "test": "esbuild tests/model.test.ts tests/layout.test.ts tests/keys.test.ts tests/settings.test.ts --bundle --platform=node --format=cjs --outdir=.test-build && node --test .test-build/model.test.js .test-build/layout.test.js .test-build/keys.test.js .test-build/settings.test.js"
   },
   "license": "MIT",
   "devDependencies": {

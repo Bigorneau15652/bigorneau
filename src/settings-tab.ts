@@ -1,7 +1,9 @@
 import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import { comboLabel, eventToCombo } from "./keys";
 import type MindmapWritingPlugin from "./main";
-import { BranchStyle, CursorPosition, DEFAULT_SETTINGS, FrameStyle, LongTitles, MmSettings, PanePosition, ParagraphMode } from "./settings";
+import { appearanceDefaults, CursorPosition, DEFAULT_SETTINGS, LongTitles, MmSettings, PanePosition } from "./settings";
+
+type KeyField = `keyPrev` | `keyNext` | `keyParent` | `keyChild`;
 
 export class MmSettingTab extends PluginSettingTab {
   private plugin: MindmapWritingPlugin;
@@ -16,95 +18,11 @@ export class MmSettingTab extends PluginSettingTab {
     const s = this.plugin.settings;
     containerEl.empty();
 
-    new Setting(containerEl).setName(`Apparence de la carte`).setHeading();
-
-    new Setting(containerEl)
-      .setName(`Titres longs`)
-      .setDesc(`Comportement d'un titre plus large que la case : coupé avec des points de suspension (le titre complet s'affiche au survol) ou passage à la ligne.`)
-      .addDropdown((d) =>
-        d
-          .addOption(`ellipsis`, `Couper avec des points de suspension`)
-          .addOption(`wrap`, `Passer à la ligne`)
-          .setValue(s.longTitles)
-          .onChange(async (v) => {
-            s.longTitles = v as LongTitles;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(`Largeur maximale des cases`)
-      .setDesc(`En pixels.`)
-      .addSlider((sl) =>
-        sl
-          .setLimits(120, 480, 10)
-          .setValue(s.maxWidth)
-          .setDynamicTooltip()
-          .onChange(async (v) => {
-            s.maxWidth = v;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(`Contour des cases`)
-      .addDropdown((d) =>
-        d
-          .addOption(`sketch`, `Trait de crayon`)
-          .addOption(`rounded`, `Angles arrondis`)
-          .addOption(`straight`, `Rectangle`)
-          .addOption(`none`, `Sans contour`)
-          .setValue(s.frameStyle)
-          .onChange(async (v) => {
-            s.frameStyle = v as FrameStyle;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(`Style des branches`)
-      .addDropdown((d) =>
-        d
-          .addOption(`sketch`, `Trait de crayon`)
-          .addOption(`curve`, `Courbe`)
-          .addOption(`elbow`, `En angle`)
-          .addOption(`straight`, `Droit`)
-          .setValue(s.branchStyle)
-          .onChange(async (v) => {
-            s.branchStyle = v as BranchStyle;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(`Afficher le préfixe Markdown`)
-      .setDesc(`Affiche les dièses (#, ##, ###) devant chaque titre de la carte.`)
-      .addToggle((t) =>
-        t.setValue(s.showPrefix).onChange(async (v) => {
-          s.showPrefix = v;
-          await this.plugin.saveSettings();
-        })
-      );
-
     new Setting(containerEl).setName(`Rédaction`).setHeading();
 
     new Setting(containerEl)
-      .setName(`Mode de rédaction`)
-      .setDesc(`Note Obsidian en vis-à-vis : la carte pilote l'éditeur réel d'Obsidian, ouvert à côté (aperçu en direct, images, tableaux, callouts, Excalidraw, Dataview). Éditeur intégré simple : zone de texte limitée à un seul nœud, sans aperçu en direct.`)
-      .addDropdown((d) =>
-        d
-          .addOption(`native`, `Note Obsidian en vis-à-vis (recommandé)`)
-          .addOption(`simple`, `Éditeur intégré simple (limité)`)
-          .setValue(s.paragraphMode)
-          .onChange(async (v) => {
-            s.paragraphMode = v as ParagraphMode;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(`Position de la zone de rédaction`)
-      .setDesc(`Emplacement par rapport à la carte. Avec l'éditeur intégré simple, la taille se règle en faisant glisser la barre de séparation.`)
+      .setName(`Position de la note`)
+      .setDesc(`Emplacement de la note, ouverte à côté de la carte, par rapport à la carte.`)
       .addDropdown((d) =>
         d
           .addOption(`right`, `À droite de la carte`)
@@ -143,6 +61,55 @@ export class MmSettingTab extends PluginSettingTab {
           })
       );
 
+    new Setting(containerEl).setName(`Carte`).setHeading();
+
+    new Setting(containerEl)
+      .setName(`Titres longs`)
+      .setDesc(`Comportement d'un titre plus large que la case : coupé avec des points de suspension (le titre complet s'affiche au survol) ou passage à la ligne.`)
+      .addDropdown((d) =>
+        d
+          .addOption(`ellipsis`, `Couper avec des points de suspension`)
+          .addOption(`wrap`, `Passer à la ligne`)
+          .setValue(s.longTitles)
+          .onChange(async (v) => {
+            s.longTitles = v as LongTitles;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(`Largeur maximale des cases`)
+      .setDesc(`En pixels.`)
+      .addSlider((sl) =>
+        sl
+          .setLimits(120, 480, 10)
+          .setValue(s.maxWidth)
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            s.maxWidth = v;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(`Afficher le préfixe Markdown`)
+      .setDesc(`Affiche les dièses (#, ##, ###) devant chaque titre de la carte.`)
+      .addToggle((t) =>
+        t.setValue(s.showPrefix).onChange(async (v) => {
+          s.showPrefix = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(`Apparence`)
+      .setDesc(`Couleurs, traits, angles, police et taille du texte se règlent avec le bouton en forme de palette, en bas à gauche de la carte.`)
+      .addButton((b) =>
+        b.setButtonText(`Réinitialiser l'apparence`).onClick(async () => {
+          await this.plugin.updateSettings(appearanceDefaults());
+        })
+      );
+
     new Setting(containerEl).setName(`Chapitre actif`).setHeading();
 
     new Setting(containerEl)
@@ -171,7 +138,7 @@ export class MmSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(`Inclure les sous-titres dans le chapitre actif`)
-      .setDesc(`Activé : le chapitre actif comprend le titre où se trouve le curseur, son texte et tous ses sous-titres. Désactivé : le titre et son texte seulement.`)
+      .setDesc(`Désactivé (par défaut) : seul le titre où se trouve le curseur et son texte sont actifs. Activé : ses sous-titres le sont aussi.`)
       .addToggle((t) =>
         t.setValue(s.includeSubtitles).onChange(async (v) => {
           s.includeSubtitles = v;
@@ -187,7 +154,7 @@ export class MmSettingTab extends PluginSettingTab {
   }
 
   // Ligne de reglage d'une touche : un bouton qui attend la combinaison a enregistrer.
-  private addKeySetting(containerEl: HTMLElement, name: string, field: `keyPrev` | `keyNext` | `keyParent` | `keyChild`) {
+  private addKeySetting(containerEl: HTMLElement, name: string, field: KeyField) {
     const s = this.plugin.settings;
     const isMac = Platform.isMacOS;
     new Setting(containerEl)
@@ -204,7 +171,7 @@ export class MmSettingTab extends PluginSettingTab {
             window.removeEventListener(`keydown`, listener, true);
             if (e.key !== `Escape`) {
               s[field] = eventToCombo(e, isMac);
-              void this.plugin.saveSettings();
+              void this.plugin.saveSettings(false);
             }
             btn.setButtonText(comboLabel(s[field], isMac));
           };
@@ -217,7 +184,7 @@ export class MmSettingTab extends PluginSettingTab {
           .setTooltip(`Rétablir la valeur d'origine`)
           .onClick(async () => {
             s[field] = (DEFAULT_SETTINGS as MmSettings)[field];
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettings(false);
             this.display();
           })
       );

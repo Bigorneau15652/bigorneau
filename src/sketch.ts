@@ -1,6 +1,6 @@
 // Trace des cadres et des branches : trait de crayon (leger tremblement, stable d'un affichage
 // a l'autre), courbe, angle ou droit.
-import type { BranchStyle, FrameStyle } from "./settings";
+import type { BranchStyle, Corners, Roughness } from "./settings";
 
 export interface Pt {
   x: number;
@@ -8,6 +8,8 @@ export interface Pt {
 }
 
 const WOBBLE = 0.45;
+// Multiplicateur de l'irregularite selon le style de trace (0 : net, 1 : crayon, 2 : tres irregulier).
+const ROUGH: Record<Roughness, number> = { 0: 0, 1: 1, 2: 3 };
 
 function hash(str: string): number {
   let h = 1779033703 ^ str.length;
@@ -118,71 +120,75 @@ export function elbowPoints(x1: number, y1: number, x2: number, y2: number, sx: 
   return pts;
 }
 
-// Lien d'un noeud vers un de ses enfants : (x1,y1) milieu du bord droit du parent,
-// (x2,y2) milieu du bord gauche de l'enfant.
-export function childLink(style: BranchStyle, x1: number, y1: number, x2: number, y2: number, seed: string): string {
-  if (style === `straight`) return `M ${f(x1)} ${f(y1)} L ${f(x2)} ${f(y2)}`;
-  if (style === `curve`) {
-    const mx = (x1 + x2) / 2;
-    return `M ${f(x1)} ${f(y1)} C ${f(mx)} ${f(y1)} ${f(mx)} ${f(y2)} ${f(x2)} ${f(y2)}`;
-  }
-  const sx = x1 + Math.min(26, (x2 - x1) / 2);
-  const pts = elbowPoints(x1, y1, x2, y2, sx, 12);
-  if (style === `elbow`) return polyPath(pts);
-  const rnd = rng(seed);
-  return smoothPath(wobble(resample(pts, 10, false), rnd, WOBBLE * 0.7, false), false);
-}
-
-export function trunkRadius(ly0: number, y2: number, lx: number, x2: number): number {
+export function trunkRadius(ly0: number, y2: number, lx: number, x2: number, corners: Corners = `round`): number {
+  if (corners === `sharp`) return 0;
   return Math.max(0, Math.min(24, y2 - ly0, x2 - lx));
 }
 
-// Ligne verticale issue du noeud racine (styles crayon et angle uniquement).
-export function trunkLine(style: BranchStyle, x: number, y1: number, y2: number, seed: string): string | null {
+// Ligne verticale issue d'un noeud (styles angle et crayon uniquement).
+export function trunkLine(style: BranchStyle, x: number, y1: number, y2: number, seed: string, rough: Roughness = 1): string | null {
   if (style === `curve` || style === `straight`) return null;
-  if (style === `elbow`) return `M ${f(x)} ${f(y1)} L ${f(x)} ${f(y2)}`;
+  if (rough === 0) return `M ${f(x)} ${f(y1)} L ${f(x)} ${f(y2)}`;
   const pts = resample([{ x, y: y1 }, { x, y: y2 }], 40, false);
-  return smoothPath(wobble(pts, rng(seed), WOBBLE, false), false);
+  return smoothPath(wobble(pts, rng(seed), WOBBLE * ROUGH[rough], false), false);
 }
 
-// Branche entre la ligne verticale du noeud racine et un noeud de premier niveau.
-export function trunkBranch(style: BranchStyle, lx: number, ly0: number, x2: number, y2: number, seed: string): string {
+// Branche entre la ligne verticale d'un noeud et un de ses enfants.
+export function trunkBranch(
+  style: BranchStyle,
+  lx: number,
+  ly0: number,
+  x2: number,
+  y2: number,
+  seed: string,
+  corners: Corners = `round`,
+  rough: Roughness = 1
+): string {
   if (style === `straight`) return `M ${f(lx)} ${f(ly0)} L ${f(x2)} ${f(y2)}`;
   if (style === `curve`) {
     const cx = lx + (x2 - lx) * 0.35;
     return `M ${f(lx)} ${f(ly0)} C ${f(lx)} ${f(y2)} ${f(cx)} ${f(y2)} ${f(x2)} ${f(y2)}`;
   }
-  const r = trunkRadius(ly0, y2, lx, x2);
-  const pts: Pt[] = [];
-  const c = { x: lx + r, y: y2 - r };
-  for (let k = 0; k <= ARC_STEPS; k++) {
-    const t = (k / ARC_STEPS) * (Math.PI / 2);
-    pts.push({ x: c.x - r * Math.cos(t), y: c.y + r * Math.sin(t) });
+  const r = trunkRadius(ly0, y2, lx, x2, corners);
+  let pts: Pt[];
+  if (r === 0) {
+    pts = [{ x: lx, y: y2 }, { x: x2, y: y2 }];
+  } else {
+    pts = [];
+    const c = { x: lx + r, y: y2 - r };
+    for (let k = 0; k <= ARC_STEPS; k++) {
+      const t = (k / ARC_STEPS) * (Math.PI / 2);
+      pts.push({ x: c.x - r * Math.cos(t), y: c.y + r * Math.sin(t) });
+    }
+    pts.push({ x: x2, y: y2 });
   }
-  pts.push({ x: x2, y: y2 });
-  if (style === `elbow`) return polyPath(pts);
-  return smoothPath(wobble(resample(pts, 8, false), rng(seed), WOBBLE * 0.6, false), false);
+  if (rough === 0) return polyPath(pts);
+  return smoothPath(wobble(resample(pts, 8, false), rng(seed), WOBBLE * 0.6 * ROUGH[rough], false), false);
 }
 
-export type FrameShape = { kind: `path`; d: string } | { kind: `rect`; rx: number } | null;
+export type FrameShape = { kind: `path`; d: string } | { kind: `rect`; rx: number };
 
-export function framePath(style: FrameStyle, x: number, y: number, w: number, h: number, seed: string, isRoot: boolean): FrameShape {
-  if (style === `none`) return null;
-  if (style === `straight`) return { kind: `rect`, rx: 0 };
-  if (style === `rounded`) return { kind: `rect`, rx: isRoot ? 4 : Math.min(10, h / 2) };
-  const r = Math.min(isRoot ? 9 : 8, h / 2);
-  const pts: Pt[] = [];
-  const corner = (cx: number, cy: number, a0: number): void => {
-    for (let k = 0; k <= 4; k++) {
-      const a = a0 + (k / 4) * (Math.PI / 2);
-      pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
-    }
-  };
-  corner(x + w - r, y + r, -Math.PI / 2);
-  corner(x + w - r, y + h - r, 0);
-  corner(x + r, y + h - r, Math.PI / 2);
-  corner(x + r, y + r, Math.PI);
-  const amp = isRoot ? 0.45 : 0.3;
-  const sampled = resample(pts, 9, true);
-  return { kind: `path`, d: smoothPath(wobble(sampled, rng(seed), amp, true), true) };
+// Contour d'une case : un rectangle net ou un trace irregulier, avec des angles aigus ou arrondis.
+export function framePath(x: number, y: number, w: number, h: number, seed: string, isRoot: boolean, corners: Corners = `round`, rough: Roughness = 1): FrameShape {
+  const r = corners === `sharp` ? 0 : Math.min(isRoot ? 9 : 8, h / 2);
+  if (rough === 0) return { kind: `rect`, rx: r };
+  let pts: Pt[] = [];
+  if (r === 0) {
+    pts = [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+  } else {
+    const corner = (cx: number, cy: number, a0: number): void => {
+      for (let k = 0; k <= 4; k++) {
+        const a = a0 + (k / 4) * (Math.PI / 2);
+        pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+      }
+    };
+    corner(x + w - r, y + r, -Math.PI / 2);
+    corner(x + w - r, y + h - r, 0);
+    corner(x + r, y + h - r, Math.PI / 2);
+    corner(x + r, y + r, Math.PI);
+  }
+  const amp = (isRoot ? 0.45 : 0.3) * ROUGH[rough];
+  const wobbled = wobble(resample(pts, 9, true), rng(seed), amp, true);
+  if (r === 0) return { kind: `path`, d: polyPath(wobbled) + ` Z` };
+  return { kind: `path`, d: smoothPath(wobbled, true) };
 }
