@@ -1,19 +1,25 @@
 // Affichage de la carte : cases, branches, zoom, deplacement, pliage et selection.
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
-import { computeStats, MmDoc } from "./model";
+import { computeStats, flattenDoc, MmDoc, MmNode } from "./model";
 import { buildLayoutTree, Bounds, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
 import { framePath, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
 import type { MmSettings } from "./settings";
+import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
 export interface MapCallbacks {
-  // Applique et enregistre des reglages modifies depuis les commandes de la carte.
+  // Applique et enregistre des reglages qui ne sont pas des styles de case.
   onChange: (patch: Partial<MmSettings>) => void;
+  // Modifie le style de la selection : par niveau de titre, ou de la case seule si `individual`.
+  onStyle: (patch: StylePatch, individual: boolean) => void;
+  onResetStyle: (individual: boolean) => void;
   onUndo: () => void;
   onRedo: () => void;
   onOpenSettings: () => void;
-  // Appele quand l'utilisateur change de noeud selectionne (null : plus aucun noeud).
+  // Appele quand l'utilisateur change de noeud principal selectionne (null : plus aucun noeud).
   onSelect?: (key: string | null) => void;
+  // Appele a chaque changement de la selection (une ou plusieurs cases).
+  onSelectionChange?: (keys: string[]) => void;
   // Appele quand l'utilisateur appuie sur Entree avec un noeud selectionne.
   onEnter?: () => void;
 }
@@ -22,19 +28,45 @@ const SVG_NS = `http://www.w3.org/2000/svg`;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 3;
 
+// Taille du texte selon le niveau : racine, premier niveau, autres niveaux.
+const BASE_EM = [1.5, 1.15, 1];
+
+export const FONT_CSS: Record<string, string> = {
+  default: `inherit`,
+  handwritten: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive`,
+  mono: `var(--font-monospace, monospace)`,
+};
+
+// Espace autour du texte d'une case : plus la carte est compacte, plus il diminue,
+// et davantage encore quand la case n'a pas de contour.
+export function padFactor(compactness: number, frames: boolean): number {
+  return Math.min(1, Math.max(frames ? 0.55 : 0.08, compactness));
+}
+
+function dashValue(d: NodeStyle[`strokeDash`]): string {
+  return d === `dashed` ? `9 6` : d === `dotted` ? `0.1 6` : `none`;
+}
+
+function strokeCss(st: NodeStyle, widthFactor = 1): string {
+  return `stroke:${st.strokeColor || `var(--text-normal)`};stroke-width:${st.strokeWidth * widthFactor}px;stroke-dasharray:${dashValue(st.strokeDash)};`;
+}
+
 export class MapRenderer {
   private mapEl: HTMLElement;
   private worldEl: HTMLElement;
   private svgEl: SVGSVGElement;
   private messageEl: HTMLElement;
   private statusEl: HTMLElement;
+  private marqueeEl: HTMLElement;
   private controls: MapControls;
 
   private doc: MmDoc | null = null;
   private identical = true;
   private fileKey = ``;
   private collapsed = new Set<string>();
+  // Noeud principal selectionne (celui que la note suit) et ensemble des noeuds selectionnes.
   private selected: string | null = null;
+  private selectedKeys = new Set<string>();
   private root: LNode | null = null;
   private list: LNode[] = [];
   private els = new Map<string, HTMLElement>();
@@ -46,6 +78,7 @@ export class MapRenderer {
   private fitPending = true;
   private needsRebuild = false;
   private drag: { sx: number; sy: number; tx0: number; ty0: number; moved: boolean } | null = null;
+  private marquee: { sx: number; sy: number; moved: boolean } | null = null;
   private cleanups: (() => void)[] = [];
 
   constructor(private container: HTMLElement, private getSettings: () => MmSettings, private callbacks: MapCallbacks) {
@@ -59,7 +92,10 @@ export class MapRenderer {
     this.svgEl.setAttribute(`class`, `mmw-svg`);
     this.messageEl = document.createElement(`div`);
     this.messageEl.className = `mmw-message`;
-    this.mapEl.append(this.worldEl, this.messageEl);
+    this.marqueeEl = document.createElement(`div`);
+    this.marqueeEl.className = `mmw-marquee`;
+    this.marqueeEl.style.display = `none`;
+    this.mapEl.append(this.worldEl, this.messageEl, this.marqueeEl);
 
     this.controls = new MapControls(this.mapEl, this.getSettings, {
       zoomIn: () => this.zoomBy(1.2),
@@ -71,6 +107,10 @@ export class MapRenderer {
       redo: () => this.callbacks.onRedo(),
       openSettings: () => this.callbacks.onOpenSettings(),
       change: (patch) => this.callbacks.onChange(patch),
+      style: (patch, individual) => this.callbacks.onStyle(patch, individual),
+      resetStyle: (individual) => this.callbacks.onResetStyle(individual),
+      currentStyle: () => this.currentStyle(),
+      scopeLabel: (individual) => this.scopeLabel(individual),
     });
 
     this.statusEl = document.createElement(`div`);
@@ -109,6 +149,7 @@ export class MapRenderer {
     if (fileKey !== this.fileKey) {
       this.collapsed.clear();
       this.selected = null;
+      this.selectedKeys.clear();
       this.fitPending = true;
       this.fileKey = fileKey;
     }
@@ -117,12 +158,37 @@ export class MapRenderer {
     this.rebuild();
   }
 
+  // ---------------------------------------------------------------- styles
+
+  // Style effectif d'une case : reglages de la carte, style de son niveau, style de la case.
+  private styleOf(n: LNode): NodeStyle {
+    const s = this.getSettings();
+    const level = n.depth === 0 ? 0 : n.node.level;
+    return resolveStyle(globalStyle(s), this.doc?.root.meta?.levels, level, n.node.meta?.style);
+  }
+
+  // Style montre par le panneau d'apparence : celui du noeud principal selectionne, sinon celui de la carte.
+  private currentStyle(): NodeStyle {
+    const s = this.getSettings();
+    const n = this.selected ? this.list.find((x) => x.key === this.selected) : undefined;
+    return n ? this.styleOf(n) : globalStyle(s);
+  }
+
+  private scopeLabel(individual: boolean): string {
+    const keys = this.getSelection();
+    if (!this.doc || keys.length === 0) return `toute la carte`;
+    const flat = flattenDoc(this.doc);
+    const byKey = new Map<string, MmNode>(flat.map((e) => [e.key, e.node]));
+    const levels = keys.map((k) => (k === `r` ? 0 : byKey.get(k)?.level ?? 0));
+    return describeScope(levels, keys.length, keys.length >= flat.length, individual);
+  }
+
   // ---------------------------------------------------------------- construction
 
   rebuild(): void {
     const s = this.getSettings();
-    this.applyAppearance(s);
-    this.controls.refresh();
+    this.mapEl.style.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
+    this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
 
     if (!this.doc) {
       this.worldEl.replaceChildren();
@@ -131,6 +197,7 @@ export class MapRenderer {
       this.messageEl.textContent = `Ouvrez une note du coffre pour afficher sa carte.`;
       this.messageEl.style.display = `block`;
       this.statusEl.textContent = ``;
+      this.controls.refresh();
       return;
     }
     this.messageEl.style.display = `none`;
@@ -163,8 +230,11 @@ export class MapRenderer {
     }
     this.draw(s);
 
+    // Les noeuds qui n'existent plus sont retires de la selection.
+    const valid = new Set(flattenDoc(this.doc).map((e) => e.key));
+    for (const k of [...this.selectedKeys]) if (!valid.has(k)) this.selectedKeys.delete(k);
     if (this.selected && !this.els.has(this.selected)) this.selected = null;
-    if (this.selected) this.els.get(this.selected)!.classList.add(`mmw-selected`);
+    this.applySelection();
 
     const stats = computeStats(this.doc);
     this.statusEl.textContent = `${stats.nodeCount} nœud${stats.nodeCount > 1 ? `s` : ``}. ${
@@ -172,36 +242,26 @@ export class MapRenderer {
     }`;
     this.statusEl.classList.toggle(`mmw-ko`, !this.identical);
 
+    this.controls.refresh();
     if (this.fitPending) this.fit();
     else this.applyTransform();
-  }
-
-  // Traduit les reglages d'apparence en variables CSS de la carte.
-  private applyAppearance(s: MmSettings): void {
-    const st = this.mapEl.style;
-    st.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
-    st.setProperty(`--mmw-stroke`, s.strokeColor || `var(--text-normal)`);
-    st.setProperty(`--mmw-fill`, s.fillColor || `transparent`);
-    st.setProperty(`--mmw-stroke-w`, `${s.strokeWidth}px`);
-    st.setProperty(`--mmw-dash`, s.strokeDash === `dashed` ? `9 6` : s.strokeDash === `dotted` ? `0.1 6` : `none`);
-    st.setProperty(
-      `--mmw-font`,
-      s.fontFamily === `handwritten` ? `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` : s.fontFamily === `mono` ? `var(--font-monospace, monospace)` : `inherit`
-    );
-    st.setProperty(`--mmw-font-scale`, String(s.fontScale));
-    st.setProperty(`--mmw-align`, s.textAlign);
-    this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
   }
 
   private createNodeEl(n: LNode, s: MmSettings): HTMLElement {
     const el = document.createElement(`div`);
     el.className = `mmw-node mmw-depth-${Math.min(n.depth, 3)}`;
     el.dataset.key = n.key;
+    const st = this.styleOf(n);
+    el.style.setProperty(`--mmw-node-color`, st.strokeColor || `var(--text-normal)`);
+    el.style.setProperty(`--mmw-node-font`, FONT_CSS[st.fontFamily] ?? `inherit`);
+    el.style.setProperty(`--mmw-node-size`, `${BASE_EM[Math.min(n.depth, 2)] * st.fontScale}em`);
+    el.style.setProperty(`--mmw-node-align`, st.textAlign);
+    el.style.setProperty(`--mmw-pad`, String(padFactor(s.compactness, st.showFrames)));
     const title = n.node.title;
     const prefix = s.showPrefix && n.depth > 0 ? `${`#`.repeat(n.node.level)} ` : ``;
     if (title === `` && prefix === ``) {
       el.classList.add(`mmw-empty-title`);
-      el.textContent = ` `;
+      el.textContent = ` `;
     } else {
       el.textContent = prefix + title;
       el.title = prefix + title;
@@ -220,20 +280,27 @@ export class MapRenderer {
     return el;
   }
 
-  private path(d: string, cls: string): void {
+  private path(d: string, cls: string, css: string): void {
     const p = document.createElementNS(SVG_NS, `path`);
     p.setAttribute(`d`, d);
     p.setAttribute(`class`, cls);
+    p.setAttribute(`style`, css);
     this.svgEl.appendChild(p);
   }
 
   private draw(s: MmSettings): void {
     this.svgEl.replaceChildren();
     if (!this.root) return;
-    for (const n of s.showFrames ? this.list : []) {
-      const shape = framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, s.corners, s.roughness);
-      const cls = n.depth === 0 ? `mmw-frame mmw-frame-root` : `mmw-frame`;
-      if (shape.kind === `path`) this.path(shape.d, cls);
+    const styles = new Map<string, NodeStyle>(this.list.map((n) => [n.key, this.styleOf(n)]));
+    const styleOf = (n: LNode): NodeStyle => styles.get(n.key)!;
+
+    for (const n of this.list) {
+      const st = styleOf(n);
+      if (!st.showFrames) continue;
+      const shape = framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, st.corners, st.roughness);
+      const cls = `mmw-frame`;
+      const css = strokeCss(st, n.depth === 0 ? 1.45 : 1) + `fill:${st.fillColor || `transparent`};`;
+      if (shape.kind === `path`) this.path(shape.d, cls, css);
       else {
         const r = document.createElementNS(SVG_NS, `rect`);
         r.setAttribute(`x`, String(n.x));
@@ -242,28 +309,32 @@ export class MapRenderer {
         r.setAttribute(`height`, String(n.h));
         r.setAttribute(`rx`, String(shape.rx));
         r.setAttribute(`class`, cls);
+        r.setAttribute(`style`, css);
         this.svgEl.appendChild(r);
       }
     }
+
     const root = this.root;
-    const chain = (x: number, y1: number, y2: number, seed: string): void => {
+    const chain = (x: number, y1: number, y2: number, seed: string, st: NodeStyle): void => {
       if (y2 - y1 < 1) return;
-      this.path(trunkLine(s.branchStyle, x, y1, y2, seed, s.roughness) ?? `M ${x} ${y1} L ${x} ${y2}`, `mmw-line`);
+      this.path(trunkLine(s.branchStyle, x, y1, y2, seed, st.roughness) ?? `M ${x} ${y1} L ${x} ${y2}`, `mmw-line`, strokeCss(st));
     };
     // Lien entre la racine et le premier noeud de premier niveau.
     if (root.children.length > 0) {
       const first = root.children[0];
-      chain(trunkX(first), root.y + root.h, first.y, `root>${first.key}`);
+      chain(trunkX(first), root.y + root.h, first.y, `root>${first.key}`, styleOf(root));
     }
     for (const n of this.list) {
       if (n.depth === 0) continue;
+      const st = styleOf(n);
       const y0 = n.y + n.h;
       const tx = trunkX(n);
       let trunkEnd = y0;
       for (const c of n.children) {
+        const cs = styleOf(c);
         const cy = c.y + c.h / 2;
-        trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x, s.corners));
-        this.path(trunkBranch(s.branchStyle, tx, y0, c.x, cy, `${n.key}>${c.key}`, s.corners, s.roughness), `mmw-line`);
+        trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x, cs.corners));
+        this.path(trunkBranch(s.branchStyle, tx, y0, c.x, cy, `${n.key}>${c.key}`, cs.corners, cs.roughness), `mmw-line`, strokeCss(cs));
       }
       // Les noeuds de premier niveau sont relies entre eux par la meme ligne verticale.
       if (n.depth === 1 && n.parent) {
@@ -271,7 +342,7 @@ export class MapRenderer {
         const next = siblings[siblings.indexOf(n) + 1];
         if (next) trunkEnd = Math.max(trunkEnd, next.y);
       }
-      chain(tx, y0, trunkEnd, `trunk${n.key}`);
+      chain(tx, y0, trunkEnd, `trunk${n.key}`, st);
     }
   }
 
@@ -290,7 +361,7 @@ export class MapRenderer {
 
   collapseAll(): void {
     if (!this.doc) return;
-    const walk = (node: MmDoc[`root`], key: string, depth: number): void => {
+    const walk = (node: MmNode, key: string, depth: number): void => {
       if (depth >= 1 && node.children.length > 0) this.collapsed.add(key);
       node.children.forEach((c, i) => walk(c, `${key}.${i}`, depth + 1));
     };
@@ -302,21 +373,56 @@ export class MapRenderer {
     this.rebuild();
   }
 
+  private applySelection(): void {
+    for (const [key, el] of this.els) el.classList.toggle(`mmw-selected`, this.selectedKeys.has(key));
+  }
+
+  private selectionChanged(): void {
+    this.applySelection();
+    this.callbacks.onSelectionChange?.(this.getSelection());
+    this.controls.refresh();
+  }
+
   // notify : faux quand la selection est modifiee par le programme et non par l'utilisateur.
   select(key: string | null, notify = true): void {
     const previous = this.selected;
-    if (previous) this.els.get(previous)?.classList.remove(`mmw-selected`);
+    const before = this.selectedKeys.size;
     this.selected = key && this.els.has(key) ? key : null;
+    this.selectedKeys = this.selected ? new Set([this.selected]) : new Set();
     if (this.selected) {
-      this.els.get(this.selected)!.classList.add(`mmw-selected`);
       const n = this.list.find((x) => x.key === this.selected);
       if (n) this.ensureVisible(n);
     }
-    if (notify && this.selected !== previous) this.callbacks.onSelect?.(this.selected);
+    this.selectionChanged();
+    if (notify && (this.selected !== previous || before > 1)) this.callbacks.onSelect?.(this.selected);
+  }
+
+  // Ajoute ou retire un noeud de la selection (Maj + clic).
+  private toggleSelect(key: string): void {
+    if (this.selectedKeys.has(key)) {
+      this.selectedKeys.delete(key);
+      if (this.selected === key) this.selected = [...this.selectedKeys][0] ?? null;
+    } else {
+      this.selectedKeys.add(key);
+      this.selected = key;
+    }
+    this.selectionChanged();
+    this.callbacks.onSelect?.(this.selected);
+  }
+
+  // Selectionne tous les noeuds de la carte, y compris ceux qui sont replies.
+  selectAll(): void {
+    if (!this.doc) return;
+    this.selectedKeys = new Set(flattenDoc(this.doc).map((e) => e.key));
+    this.selectionChanged();
   }
 
   getSelectedKey(): string | null {
     return this.selected;
+  }
+
+  getSelection(): string[] {
+    return [...this.selectedKeys];
   }
 
   focus(): void {
@@ -410,15 +516,25 @@ export class MapRenderer {
     }
     const node = target.closest(`.mmw-node`) as HTMLElement | null;
     if (node) {
-      this.select(node.dataset.key!);
+      if (e.shiftKey) this.toggleSelect(node.dataset.key!);
+      else this.select(node.dataset.key!);
       return;
     }
-    this.drag = { sx: e.clientX, sy: e.clientY, tx0: this.tx, ty0: this.ty, moved: false };
+    if (e.shiftKey) {
+      // Maj + glisser sur le fond : selection au rectangle.
+      this.marquee = { sx: e.clientX, sy: e.clientY, moved: false };
+    } else {
+      this.drag = { sx: e.clientX, sy: e.clientY, tx0: this.tx, ty0: this.ty, moved: false };
+      this.mapEl.classList.add(`mmw-panning`);
+    }
     this.mapEl.setPointerCapture(e.pointerId);
-    this.mapEl.classList.add(`mmw-panning`);
   }
 
   private onPointerMove(e: PointerEvent): void {
+    if (this.marquee) {
+      this.updateMarquee(e);
+      return;
+    }
     if (!this.drag) return;
     const dx = e.clientX - this.drag.sx;
     const dy = e.clientY - this.drag.sy;
@@ -430,6 +546,12 @@ export class MapRenderer {
   }
 
   private onPointerUp(e: PointerEvent): void {
+    if (this.marquee) {
+      this.marquee = null;
+      this.marqueeEl.style.display = `none`;
+      if (this.mapEl.hasPointerCapture(e.pointerId)) this.mapEl.releasePointerCapture(e.pointerId);
+      return;
+    }
     if (!this.drag) return;
     if (!this.drag.moved) this.select(null);
     this.drag = null;
@@ -437,9 +559,40 @@ export class MapRenderer {
     if (this.mapEl.hasPointerCapture(e.pointerId)) this.mapEl.releasePointerCapture(e.pointerId);
   }
 
+  // Dessine le rectangle de selection et selectionne les cases qu'il touche.
+  private updateMarquee(e: PointerEvent): void {
+    const m = this.marquee!;
+    if (Math.abs(e.clientX - m.sx) + Math.abs(e.clientY - m.sy) > 4) m.moved = true;
+    if (!m.moved) return;
+    const rect = this.mapEl.getBoundingClientRect();
+    const x1 = Math.min(m.sx, e.clientX) - rect.left;
+    const y1 = Math.min(m.sy, e.clientY) - rect.top;
+    const x2 = Math.max(m.sx, e.clientX) - rect.left;
+    const y2 = Math.max(m.sy, e.clientY) - rect.top;
+    const st = this.marqueeEl.style;
+    st.display = `block`;
+    st.left = `${x1}px`;
+    st.top = `${y1}px`;
+    st.width = `${x2 - x1}px`;
+    st.height = `${y2 - y1}px`;
+    const hit = this.list.filter((n) => {
+      const nx1 = n.x * this.scale + this.tx;
+      const ny1 = n.y * this.scale + this.ty;
+      return nx1 < x2 && nx1 + n.w * this.scale > x1 && ny1 < y2 && ny1 + n.h * this.scale > y1;
+    });
+    this.selectedKeys = new Set(hit.map((n) => n.key));
+    this.selected = hit.length > 0 ? hit[0].key : null;
+    this.selectionChanged();
+  }
+
   // ---------------------------------------------------------------- clavier
 
   private onKey(e: KeyboardEvent): void {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === `a`) {
+      e.preventDefault();
+      this.selectAll();
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const cur = this.selected ? this.list.find((n) => n.key === this.selected) ?? null : null;
     const go = (n: LNode | null): void => {
@@ -500,6 +653,6 @@ export class MapRenderer {
 }
 
 function countDescendants(n: LNode): number {
-  const walk = (m: MmDoc[`root`]): number => m.children.reduce((sum, c) => sum + 1 + walk(c), 0);
+  const walk = (m: MmNode): number => m.children.reduce((sum, c) => sum + 1 + walk(c), 0);
   return walk(n.node);
 }

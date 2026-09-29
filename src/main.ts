@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { debounce, MarkdownView, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { debounce, Editor, MarkdownView, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
 import { comboMatches } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
@@ -194,6 +194,16 @@ export default class MindmapWritingPlugin extends Plugin {
       if (text === null && v instanceof MarkdownView && v.file && v.file.path === file.path) text = v.getViewData();
     });
     return text;
+  }
+
+  // Editeur (mode Edition ou Aperçu en direct) dans lequel la note est ouverte, s'il existe.
+  getOpenEditor(file: TFile): Editor | null {
+    let editor: Editor | null = null;
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const v = leaf.view;
+      if (!editor && v instanceof MarkdownView && v.file && v.file.path === file.path && v.getMode() === `source`) editor = v.editor;
+    });
+    return editor;
   }
 
   async activateView() {

@@ -1,6 +1,8 @@
 // Commandes de la carte, inspirees d'Excalidraw : en bas a gauche, le menu burger (reglages), la palette
-// (apparence de la carte), puis le zoom, l'annulation et la compacite. N'utilise que le DOM standard.
-import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
+// (apparence de la carte, des niveaux de titre ou d'une case), puis le zoom, l'annulation et la compacite.
+// N'utilise que le DOM standard.
+import type { MmSettings, PanePosition } from "./settings";
+import type { NodeStyle, StylePatch } from "./style";
 
 export interface ControlActions {
   zoomIn: () => void;
@@ -11,8 +13,14 @@ export interface ControlActions {
   undo: () => void;
   redo: () => void;
   openSettings: () => void;
-  // Applique et enregistre des reglages.
+  // Applique et enregistre des reglages qui ne sont pas des styles de case.
   change: (patch: Partial<MmSettings>) => void;
+  // Modifie le style de la selection (par niveau de titre, ou de la case seule si `individual`).
+  style: (patch: StylePatch, individual: boolean) => void;
+  resetStyle: (individual: boolean) => void;
+  // Style montre dans le panneau et libelle de la portee de la modification.
+  currentStyle: () => NodeStyle;
+  scopeLabel: (individual: boolean) => string;
 }
 
 type PopupKind = `menu` | `style` | null;
@@ -90,29 +98,44 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
   return el;
 }
 
-function iconButton(icon: string, title: string, onClick: () => void, cls = `mmw-btn`): HTMLButtonElement {
+// Etiquette affichee quand la souris survole l'element, et lue par les lecteurs d'ecran.
+function tip(el: HTMLElement, text: string): void {
+  el.dataset.tip = text;
+  el.setAttribute(`aria-label`, text);
+}
+
+function iconButton(icon: string, label: string, onClick: () => void, cls = `mmw-btn`): HTMLButtonElement {
   const b = h(`button`, cls);
   b.type = `button`;
   b.innerHTML = icon;
-  b.title = title;
-  b.setAttribute(`aria-label`, title);
+  tip(b, label);
   b.addEventListener(`click`, onClick);
   return b;
 }
 
+const isMac = (): boolean => typeof navigator !== `undefined` && /Mac/.test(navigator.platform);
+
 export class MapControls {
   private root: HTMLElement;
   private popup: HTMLElement;
+  private tipEl: HTMLElement;
   private menuBtn: HTMLButtonElement;
   private styleBtn: HTMLButtonElement;
   private zoomLabel: HTMLElement;
   private slider: HTMLInputElement;
+  private scopeEl: HTMLElement | null = null;
   private open: PopupKind = null;
+  private tipTimer: number | null = null;
+  // Vrai quand Cmd (ou Ctrl) est maintenu : la modification ne concerne que la case selectionnee.
+  private mod = false;
+  private cleanups: (() => void)[] = [];
 
   constructor(host: HTMLElement, private getSettings: () => MmSettings, private actions: ControlActions) {
     this.root = h(`div`, `mmw-controls`);
     this.popup = h(`div`, `mmw-popup`);
     this.popup.style.display = `none`;
+    this.tipEl = h(`div`, `mmw-tip`);
+    this.tipEl.style.display = `none`;
 
     const dock = h(`div`, `mmw-dock`);
     this.menuBtn = iconButton(ICONS.menu, `Menu et réglages`, () => this.toggle(`menu`));
@@ -123,11 +146,10 @@ export class MapControls {
     this.zoomLabel = h(`span`, `mmw-zoom-label`, `100 %`);
     this.slider = h(`input`, `mmw-compact-slider`);
     this.slider.type = `range`;
-    this.slider.min = `0.5`;
+    this.slider.min = `0.2`;
     this.slider.max = `1.6`;
     this.slider.step = `0.05`;
-    this.slider.title = `Compacité de l'affichage`;
-    this.slider.setAttribute(`aria-label`, `Compacité de l'affichage`);
+    tip(this.slider, `Compacité de l'affichage`);
     this.slider.addEventListener(`input`, () => this.actions.change({ compactness: Number(this.slider.value) }));
     zoom.append(
       iconButton(ICONS.minus, `Dézoomer`, () => this.actions.zoomOut()),
@@ -141,12 +163,47 @@ export class MapControls {
     );
     const compactIcon = h(`span`, `mmw-compact-icon`);
     compactIcon.innerHTML = ICONS.compact;
-    compactIcon.title = `Compacité`;
+    tip(compactIcon, `Compacité de l'affichage`);
     zoom.append(compactIcon, this.slider);
 
-    this.root.append(this.popup, dock, zoom);
+    this.root.append(this.popup, dock, zoom, this.tipEl);
     host.appendChild(this.root);
+
+    // Etiquettes au survol, avec un court delai.
+    this.listen(this.root, `mouseover`, (e) => {
+      const el = (e.target as HTMLElement).closest(`[data-tip]`) as HTMLElement | null;
+      if (el && this.root.contains(el)) this.scheduleTip(el);
+    });
+    this.listen(this.root, `mouseout`, (e) => {
+      if ((e.target as HTMLElement).closest(`[data-tip]`)) this.hideTip();
+    });
+    // Cmd (ou Ctrl) maintenu au moment d'un clic : la modification ne concerne que la case selectionnee.
+    this.listen(this.root, `pointerdown`, (e) => {
+      this.mod = (e as PointerEvent).metaKey || (e as PointerEvent).ctrlKey;
+      this.hideTip();
+    }, true);
+
+    // Un clic en dehors des commandes, ou Echap, ferme le panneau ouvert.
+    const doc = host.ownerDocument;
+    this.listen(doc, `pointerdown`, (e) => {
+      if (this.open !== null && !this.root.contains(e.target as Node)) this.closePopup();
+    }, true);
+    this.listen(doc, `keydown`, (e) => {
+      const k = e as KeyboardEvent;
+      this.setModifier(k.metaKey || k.ctrlKey);
+      if (k.key === `Escape` && this.open !== null) {
+        k.stopPropagation();
+        this.closePopup();
+      }
+    }, true);
+    this.listen(doc, `keyup`, (e) => this.setModifier((e as KeyboardEvent).metaKey || (e as KeyboardEvent).ctrlKey), true);
+
     this.refresh();
+  }
+
+  private listen(target: EventTarget, type: string, fn: (e: Event) => void, capture = false): void {
+    target.addEventListener(type, fn, capture);
+    this.cleanups.push(() => target.removeEventListener(type, fn, capture));
   }
 
   contains(target: EventTarget | null): boolean {
@@ -160,6 +217,7 @@ export class MapControls {
   closePopup(): void {
     if (this.open === null) return;
     this.open = null;
+    this.hideTip();
     this.refresh();
   }
 
@@ -172,11 +230,50 @@ export class MapControls {
     this.refresh();
   }
 
+  private setModifier(value: boolean): void {
+    if (this.mod === value) return;
+    this.mod = value;
+    this.updateScope();
+  }
+
+  private updateScope(): void {
+    if (this.scopeEl) this.scopeEl.textContent = this.actions.scopeLabel(this.mod);
+  }
+
+  // ---------------------------------------------------------------- etiquettes
+
+  private scheduleTip(el: HTMLElement): void {
+    if (this.tipTimer !== null) window.clearTimeout(this.tipTimer);
+    this.tipTimer = window.setTimeout(() => this.showTip(el), 300);
+  }
+
+  private showTip(el: HTMLElement): void {
+    this.tipTimer = null;
+    if (!el.isConnected || !el.dataset.tip) return;
+    const t = this.tipEl;
+    t.textContent = el.dataset.tip;
+    t.style.display = `block`;
+    const r = el.getBoundingClientRect();
+    const view = el.ownerDocument.defaultView ?? window;
+    const left = Math.min(Math.max(r.left + r.width / 2 - t.offsetWidth / 2, 8), view.innerWidth - t.offsetWidth - 8);
+    let top = r.top - t.offsetHeight - 8;
+    if (top < 8) top = r.bottom + 8;
+    t.style.left = `${left}px`;
+    t.style.top = `${top}px`;
+  }
+
+  private hideTip(): void {
+    if (this.tipTimer !== null) window.clearTimeout(this.tipTimer);
+    this.tipTimer = null;
+    this.tipEl.style.display = `none`;
+  }
+
   // Met a jour l'affichage des commandes et du panneau ouvert d'apres les reglages.
   refresh(): void {
     this.slider.value = String(this.getSettings().compactness);
     this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu`);
     this.styleBtn.classList.toggle(`mmw-active`, this.open === `style`);
+    this.scopeEl = null;
     if (this.open === null) {
       this.popup.style.display = `none`;
       this.popup.replaceChildren();
@@ -251,7 +348,7 @@ export class MapControls {
     menu.append(
       h(`div`, `mmw-menu-sep`),
       item(ICONS.settings, `Tous les paramètres`, () => a.openSettings()),
-      h(`div`, `mmw-menu-help`, `Flèches : se déplacer. Entrée : rédiger. Espace : plier ou déplier. Molette avec Ctrl ou Cmd : zoomer.`)
+      h(`div`, `mmw-menu-help`, `Flèches : se déplacer. Entrée : rédiger. Espace : plier ou déplier. Cmd ou Ctrl + A : tout sélectionner. Maj + clic ou Maj + glisser : sélection multiple. Molette avec Cmd ou Ctrl : zoomer.`)
     );
     return menu;
   }
@@ -259,9 +356,20 @@ export class MapControls {
   // ---------------------------------------------------------------- panneau d'apparence
 
   private buildStylePanel(): HTMLElement {
-    const s = this.getSettings();
     const a = this.actions;
+    const st = a.currentStyle();
+    const apply = (patch: StylePatch): void => a.style(patch, this.mod);
     const panel = h(`div`, `mmw-style`);
+
+    // Portee de la modification : toute la carte, un niveau de titre ou une case.
+    const scope = h(`div`, `mmw-scope`);
+    scope.append(h(`span`, `mmw-scope-label`, `Appliqué à : `));
+    this.scopeEl = h(`strong`, `mmw-scope-value`, a.scopeLabel(this.mod));
+    scope.append(this.scopeEl);
+    panel.append(scope);
+    if (a.scopeLabel(false) !== `toute la carte`) {
+      panel.append(h(`div`, `mmw-scope-hint`, `Maintenez ${isMac() ? `Cmd` : `Ctrl`} en cliquant pour ne modifier que la case sélectionnée.`));
+    }
 
     const section = (title: string, ...content: HTMLElement[]): void => {
       const sec = h(`div`, `mmw-section`);
@@ -269,14 +377,14 @@ export class MapControls {
       panel.append(sec);
     };
 
-    section(`Trait`, this.swatches(STROKE_COLORS, s.strokeColor, (v) => a.change({ strokeColor: v }), `#1e1e1e`));
-    section(`Arrière-plan`, this.swatches(FILL_COLORS, s.fillColor, (v) => a.change({ fillColor: v }), `#ffffff`));
+    section(`Trait`, this.swatches(STROKE_COLORS, st.strokeColor, (v) => apply({ strokeColor: v }), `#1e1e1e`));
+    section(`Arrière-plan`, this.swatches(FILL_COLORS, st.fillColor, (v) => apply({ fillColor: v }), `#ffffff`));
     section(
       `Largeur du contour`,
       this.options(
         WIDTHS.map((w) => ({ value: String(w), html: OPT.width(w), title: `Largeur ${w}` })),
-        String(s.strokeWidth),
-        (v) => a.change({ strokeWidth: Number(v) })
+        String(st.strokeWidth),
+        (v) => apply({ strokeWidth: Number(v) })
       )
     );
     section(
@@ -287,8 +395,8 @@ export class MapControls {
           { value: `dashed`, html: OPT.dashed, title: `Tirets` },
           { value: `dotted`, html: OPT.dotted, title: `Pointillés` },
         ],
-        s.strokeDash,
-        (v) => a.change({ strokeDash: v as MmSettings[`strokeDash`] })
+        st.strokeDash,
+        (v) => apply({ strokeDash: v as NodeStyle[`strokeDash`] })
       )
     );
     section(
@@ -299,8 +407,8 @@ export class MapControls {
           { value: `1`, html: OPT.rough1, title: `Artiste : trait de crayon` },
           { value: `2`, html: OPT.rough2, title: `Caricaturiste : trait très irrégulier` },
         ],
-        String(s.roughness),
-        (v) => a.change({ roughness: Number(v) as MmSettings[`roughness`] })
+        String(st.roughness),
+        (v) => apply({ roughness: Number(v) as NodeStyle[`roughness`] })
       )
     );
     section(
@@ -310,8 +418,8 @@ export class MapControls {
           { value: `sharp`, html: OPT.sharp, title: `Angles aigus` },
           { value: `round`, html: OPT.round, title: `Angles arrondis` },
         ],
-        s.corners,
-        (v) => a.change({ corners: v as MmSettings[`corners`] })
+        st.corners,
+        (v) => apply({ corners: v as NodeStyle[`corners`] })
       )
     );
     section(
@@ -321,8 +429,8 @@ export class MapControls {
           { value: `yes`, text: `Avec contour` },
           { value: `no`, text: `Sans contour` },
         ],
-        s.showFrames ? `yes` : `no`,
-        (v) => a.change({ showFrames: v === `yes` }),
+        st.showFrames ? `yes` : `no`,
+        (v) => apply({ showFrames: v === `yes` }),
         true
       )
     );
@@ -334,7 +442,7 @@ export class MapControls {
           { value: `curve`, html: OPT.curve, title: `Courbes` },
           { value: `straight`, html: OPT.straight, title: `Droites` },
         ],
-        s.branchStyle,
+        this.getSettings().branchStyle,
         (v) => a.change({ branchStyle: v as MmSettings[`branchStyle`] })
       )
     );
@@ -346,16 +454,16 @@ export class MapControls {
           { value: `handwritten`, text: `Aa`, title: `Écriture manuscrite`, font: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` },
           { value: `mono`, text: `</>`, title: `Code`, font: `var(--font-monospace, monospace)` },
         ],
-        s.fontFamily,
-        (v) => a.change({ fontFamily: v as MmSettings[`fontFamily`] })
+        st.fontFamily,
+        (v) => apply({ fontFamily: v as NodeStyle[`fontFamily`] })
       )
     );
     section(
       `Taille de la police`,
       this.options(
-        FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label })),
-        String(s.fontScale),
-        (v) => a.change({ fontScale: Number(v) })
+        FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label, title: `Taille ${f.label}` })),
+        String(st.fontScale),
+        (v) => apply({ fontScale: Number(v) })
       )
     );
     section(
@@ -366,14 +474,15 @@ export class MapControls {
           { value: `center`, html: OPT.alignCenter, title: `Centré` },
           { value: `right`, html: OPT.alignRight, title: `À droite` },
         ],
-        s.textAlign,
-        (v) => a.change({ textAlign: v as MmSettings[`textAlign`] })
+        st.textAlign,
+        (v) => apply({ textAlign: v as NodeStyle[`textAlign`] })
       )
     );
 
-    const reset = h(`button`, `mmw-reset`, `Réinitialiser l'apparence`);
+    const hasSelection = a.scopeLabel(false) !== `toute la carte`;
+    const reset = h(`button`, `mmw-reset`, hasSelection ? `Rétablir le style de la sélection` : `Réinitialiser l'apparence`);
     reset.type = `button`;
-    reset.addEventListener(`click`, () => a.change(appearanceDefaults()));
+    reset.addEventListener(`click`, () => a.resetStyle(this.mod));
     panel.append(reset);
     return panel;
   }
@@ -392,10 +501,7 @@ export class MapControls {
       if (it.html) b.innerHTML = it.html;
       else b.textContent = it.text ?? ``;
       if (it.font) b.style.fontFamily = it.font;
-      if (it.title) {
-        b.title = it.title;
-        b.setAttribute(`aria-label`, it.title);
-      }
+      if (it.title) tip(b, it.title);
       b.addEventListener(`click`, () => onPick(it.value));
       row.appendChild(b);
     }
@@ -408,8 +514,7 @@ export class MapControls {
     for (const c of colors) {
       const b = h(`button`, `mmw-swatch` + (c.value === current ? ` mmw-selected-swatch` : ``));
       b.type = `button`;
-      b.title = c.label;
-      b.setAttribute(`aria-label`, c.label);
+      tip(b, c.label);
       if (c.value === ``) b.classList.add(colors === STROKE_COLORS ? `mmw-swatch-theme` : `mmw-swatch-none`);
       else b.style.background = c.value;
       b.addEventListener(`click`, () => onPick(c.value));
@@ -417,7 +522,7 @@ export class MapControls {
     }
     const isCustom = current !== `` && !colors.some((c) => c.value === current);
     const custom = h(`label`, `mmw-swatch mmw-swatch-custom` + (isCustom ? ` mmw-selected-swatch` : ``));
-    custom.title = `Couleur personnalisée`;
+    tip(custom, `Couleur personnalisée`);
     const input = h(`input`);
     input.type = `color`;
     input.value = isCustom ? current : fallback;
@@ -429,6 +534,9 @@ export class MapControls {
   }
 
   destroy(): void {
+    this.hideTip();
+    this.cleanups.forEach((fn) => fn());
+    this.cleanups = [];
     this.root.remove();
   }
 }

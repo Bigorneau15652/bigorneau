@@ -1,10 +1,12 @@
 import { EditorView } from "@codemirror/view";
 import { setActiveRange } from "./active-chapter";
 import { revealRange } from "./reveal";
-import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { Editor, ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import type MindmapWritingPlugin from "./main";
-import { activeLines, flattenDoc, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
-import type { PanePosition } from "./settings";
+import { activeLines, applyLineEdits, flattenDoc, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
+import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
+import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
+import type { StylePatch } from "./style";
 import { MapRenderer } from "./renderer";
 
 export const VIEW_TYPE_MINDMAP = `mindmap-writing-view`;
@@ -48,6 +50,8 @@ export class MindmapView extends ItemView {
 
     this.renderer = new MapRenderer(this.mapHost, () => this.plugin.settings, {
       onChange: (patch) => void this.plugin.updateSettings(patch),
+      onStyle: (patch, individual) => void this.applyStyle(patch, individual),
+      onResetStyle: (individual) => void this.resetStyle(individual),
       onUndo: () => this.undoRedo(`undo`),
       onRedo: () => this.undoRedo(`redo`),
       onOpenSettings: () => this.plugin.openSettings(),
@@ -104,6 +108,65 @@ export class MindmapView extends ItemView {
       return;
     }
     this.updateActiveRange();
+  }
+
+  // ---------------------------------------------------------------- styles
+
+  // Modifie le style de la selection (voir planStyle pour les regles de portee). Les styles par niveau
+  // et par case sont inscrits dans des commentaires invisibles de la note.
+  private async applyStyle(patch: StylePatch, individual: boolean) {
+    const renderer = this.renderer;
+    if (!renderer || !this.doc) {
+      await this.plugin.updateSettings(patch as Partial<MmSettings>);
+      return;
+    }
+    const plan = planStyle(this.doc, renderer.getSelection(), patch, individual);
+    if (plan.settings) await this.plugin.updateSettings(plan.settings as Partial<MmSettings>);
+    await this.applyMetaChanges(plan.changes);
+  }
+
+  // Retire les styles de la selection (par niveau, ou de la case seule), ou reinitialise toute la carte.
+  private async resetStyle(individual: boolean) {
+    const renderer = this.renderer;
+    if (!renderer || !this.doc) return;
+    const plan = planReset(this.doc, renderer.getSelection(), individual);
+    if (plan.resetSettings) await this.plugin.updateSettings(appearanceDefaults());
+    await this.applyMetaChanges(plan.changes);
+  }
+
+  // Ecrit des commentaires de style dans la note : dans l'editeur d'Obsidian s'il est ouvert (l'annulation
+  // de la note les couvre), sinon directement dans le fichier.
+  private async applyMetaChanges(changes: MetaChange[]) {
+    const file = this.plugin.lastFile;
+    if (!file || changes.length === 0) return;
+    const editor = this.plugin.getOpenEditor(file);
+    if (editor) {
+      const edits = metaEditsFor(parseNote(editor.getValue(), file.name), changes);
+      if (edits.length > 0) this.applyEditsToEditor(editor, edits);
+    } else {
+      await this.app.vault.process(file, (data) => {
+        const doc = parseNote(data, file.name);
+        const edits = metaEditsFor(doc, changes);
+        return edits.length > 0 ? applyLineEdits(data, edits, doc.eol) : data;
+      });
+    }
+    await this.refresh();
+  }
+
+  private applyEditsToEditor(editor: Editor, edits: LineEdit[]) {
+    const last = editor.lastLine();
+    const changes = edits.map((e) => {
+      if (e.kind === `replace`) {
+        return { from: { line: e.line, ch: 0 }, to: { line: e.line, ch: editor.getLine(e.line).length }, text: e.text };
+      }
+      if (e.kind === `delete`) {
+        if (e.line < last) return { from: { line: e.line, ch: 0 }, to: { line: e.line + 1, ch: 0 }, text: `` };
+        return { from: { line: e.line - 1, ch: editor.getLine(e.line - 1).length }, to: { line: e.line, ch: editor.getLine(e.line).length }, text: `` };
+      }
+      if (e.line <= last) return { from: { line: e.line, ch: 0 }, text: `${e.text}\n` };
+      return { from: { line: last, ch: editor.getLine(last).length }, text: `\n${e.text}` };
+    });
+    editor.transaction({ changes });
   }
 
   // ---------------------------------------------------------------- chapitre actif
@@ -260,7 +323,7 @@ export class MindmapView extends ItemView {
     const headLine = Math.min(node.line ?? 0, last);
 
     // Premiere et derniere lignes du texte du noeud (sans les lignes vides finales).
-    const first = Math.min(headLine + 1, last);
+    const first = Math.min((node.metaLine ?? headLine) + 1, last);
     let end = Math.min((node.endLine ?? first + 1) - 1, last);
     while (end > first && editor.getLine(end).trim() === ``) end--;
     end = Math.max(end, headLine);
