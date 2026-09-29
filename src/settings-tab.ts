@@ -118,8 +118,18 @@ export class MmSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(`Passer directement à la saisie au clic sur un titre`)
+      .setDesc(`Désactivé : un clic sur un titre de la carte amène la note au chapitre sans quitter la carte, et Entrée passe à la saisie. Activé : le clavier passe aussitôt dans la note.`)
+      .addToggle((t) =>
+        t.setValue(s.focusNoteOnSelect).onChange(async (v) => {
+          s.focusNoteOnSelect = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
       .setName(`Position du curseur à l'ouverture d'un paragraphe`)
-      .setDesc(`S'applique quand vous appuyez sur Entrée sur un titre sélectionné de la carte.`)
+      .setDesc(`S'applique à la sélection d'un titre dans la carte. Par défaut, le curseur est à la fin du texte du chapitre pour le compléter.`)
       .addDropdown((d) =>
         d
           .addOption(`last`, `Là où la saisie s'était arrêtée`)

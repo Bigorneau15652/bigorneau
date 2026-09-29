@@ -1,4 +1,5 @@
 import { EditorView } from "@codemirror/view";
+import { revealRange } from "./reveal";
 import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import type MindmapWritingPlugin from "./main";
 import { flattenDoc, joinBody, locateInSections, MmDoc, nodeByKey, parseNote, pathTitles, serializeNote, splitBody } from "./model";
@@ -200,7 +201,8 @@ export class MindmapView extends ItemView {
     if (cursor.line > node.line && cursor.line < node.endLine) this.noteCursors.set(key, { line: cursor.line, ch: cursor.ch });
   }
 
-  // Affiche le titre du noeud dans la note. Avec focus, place aussi le curseur dans le texte du noeud.
+  // Affiche le chapitre du noeud dans la note, curseur dans son texte pret a etre complete.
+  // Avec focus, le clavier passe aussi dans la note.
   private async revealInNote(key: string, focus: boolean) {
     const file = this.plugin.lastFile;
     const node = this.doc ? nodeByKey(this.doc, key) : null;
@@ -210,48 +212,41 @@ export class MindmapView extends ItemView {
     if (!(view instanceof MarkdownView)) return;
     const editor = view.editor;
     const last = editor.lastLine();
-    const line = Math.min(node.line ?? 0, last);
+    const headLine = Math.min(node.line ?? 0, last);
 
-    if (view.getMode() === `source`) {
-      this.scrollToLine(view, line);
-    } else {
-      leaf.setEphemeralState({ line });
-    }
+    // Premiere et derniere lignes du texte du noeud (sans les lignes vides finales).
+    const first = Math.min(headLine + 1, last);
+    let end = Math.min((node.endLine ?? first + 1) - 1, last);
+    while (end > first && editor.getLine(end).trim() === ``) end--;
+    end = Math.max(end, headLine);
+    const hasText = end >= first && editor.getLine(end).trim() !== ``;
+    const endLine = hasText ? end : headLine;
 
-    if (focus) {
-      if (view.getMode() !== `source`) {
-        await view.setState({ ...view.getState(), mode: `source` }, { history: false });
-      }
-      this.app.workspace.setActiveLeaf(leaf, { focus: true });
-      const first = Math.min(line + 1, last);
-      let end = Math.min((node.endLine ?? first + 1) - 1, last);
-      while (end > first && editor.getLine(end).trim() === ``) end--;
-      end = Math.max(end, first);
-      const remembered = this.noteCursors.get(key);
-      const mode = this.plugin.settings.cursorPosition;
-      let target = { line: end, ch: editor.getLine(end).length };
-      if (mode === `start`) target = { line: first, ch: 0 };
-      else if (mode === `last` && remembered && remembered.line >= first && remembered.line <= end) target = remembered;
-      editor.setCursor(target);
-      editor.focus();
-    } else if (node.line !== undefined) {
-      editor.setCursor({ line, ch: 0 });
-    }
-  }
+    const remembered = this.noteCursors.get(key);
+    const mode = this.plugin.settings.cursorPosition;
+    let cursor = { line: endLine, ch: editor.getLine(endLine).length };
+    if (mode === `start`) cursor = { line: hasText ? first : headLine, ch: 0 };
+    else if (mode === `last` && remembered && remembered.line >= first && remembered.line <= endLine) cursor = remembered;
 
-  private scrollToLine(view: MarkdownView, line: number) {
-    const editor = view.editor;
-    try {
-      const cm = (editor as unknown as { cm?: EditorView }).cm;
-      if (cm) {
-        const pos = cm.state.doc.line(Math.min(line + 1, cm.state.doc.lines)).from;
-        cm.dispatch({ effects: EditorView.scrollIntoView(pos, { y: `start`, yMargin: 12 }) });
+    if (view.getMode() !== `source`) {
+      if (focus) await view.setState({ ...view.getState(), mode: `source` }, { history: false });
+      else {
+        leaf.setEphemeralState({ line: headLine });
         return;
       }
-    } catch {
-      // repli ci-dessous
     }
-    editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
+
+    const cm = (editor as unknown as { cm?: EditorView }).cm;
+    if (cm) {
+      revealRange(cm, { headLine, endLine, cursorLine: cursor.line, cursorCh: cursor.ch });
+    } else {
+      editor.setCursor(cursor);
+      editor.scrollIntoView({ from: { line: headLine, ch: 0 }, to: { line: endLine, ch: 0 } }, true);
+    }
+    if (focus) {
+      this.app.workspace.setActiveLeaf(leaf, { focus: true });
+      editor.focus();
+    }
   }
 
   // ---------------------------------------------------------------- vue Paragraphe simple
@@ -260,7 +255,7 @@ export class MindmapView extends ItemView {
     if (this.isNative()) {
       this.rememberNoteCursor(this.selectedKey);
       this.selectedKey = key;
-      if (key) await this.revealInNote(key, false);
+      if (key) await this.revealInNote(key, this.plugin.settings.focusNoteOnSelect);
       return;
     }
     await this.flushPane();
