@@ -18,6 +18,7 @@ export interface MmSettings {
   paneSize: number;
   cursorPosition: CursorPosition;
   paragraphMode: ParagraphMode;
+  focusNoteOnSelect: boolean;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -31,4 +32,5 @@ export const DEFAULT_SETTINGS: MmSettings = {
   paneSize: 380,
   cursorPosition: `last`,
   paragraphMode: `native`,
+  focusNoteOnSelect: false,
 };
