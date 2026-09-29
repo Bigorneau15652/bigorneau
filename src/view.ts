@@ -1,13 +1,49 @@
 import { EditorView } from "@codemirror/view";
 import { setActiveRange } from "./active-chapter";
 import { revealRange } from "./reveal";
-import { Editor, ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { Editor, ItemView, MarkdownView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
+import { addNode, deleteNodes, DeletionReport, describeDeletion, EditResult, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { activeLines, applyLineEdits, flattenDoc, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
 import type { StylePatch } from "./style";
-import { MapRenderer } from "./renderer";
+import { MapEdit, MapRenderer } from "./renderer";
+
+// Fenetre de confirmation avant de supprimer des titres et leur contenu.
+class ConfirmDeleteModal extends Modal {
+  private confirmed = false;
+
+  constructor(app: import("obsidian").App, private report: DeletionReport, private done: (ok: boolean) => void) {
+    super(app);
+  }
+
+  onOpen() {
+    const r = this.report;
+    const what = r.nodes === 1 ? `« ${r.titles[0]} »` : `${r.nodes} titres`;
+    this.titleEl.setText(`Supprimer ${what} ?`);
+    const parts: string[] = [];
+    if (r.subtitles > 0) parts.push(`${r.subtitles} sous-titre${r.subtitles > 1 ? `s` : ``}`);
+    parts.push(`environ ${r.words} mot${r.words > 1 ? `s` : ``} de texte`);
+    this.contentEl.createEl(`p`, { text: `Cette suppression retire aussi ${parts.join(` et `)}. Vous pourrez l'annuler avec l'historique de la note (Cmd ou Ctrl + Z).` });
+    let confirmButton: HTMLElement | null = null;
+    new Setting(this.contentEl)
+      .addButton((b) => {
+        b.setButtonText(`Supprimer`).setWarning().onClick(() => {
+          this.confirmed = true;
+          this.close();
+        });
+        confirmButton = b.buttonEl;
+      })
+      .addButton((b) => b.setButtonText(`Annuler`).onClick(() => this.close()));
+    (confirmButton as HTMLElement | null)?.focus();
+  }
+
+  onClose() {
+    this.contentEl.empty();
+    this.done(this.confirmed);
+  }
+}
 
 export const VIEW_TYPE_MINDMAP = `mindmap-writing-view`;
 
@@ -57,6 +93,8 @@ export class MindmapView extends ItemView {
       onOpenSettings: () => this.plugin.openSettings(),
       onSelect: (key) => void this.onSelect(key),
       onEnter: () => this.focusNote(),
+      onEdit: (edit) => void this.onEdit(edit),
+      onMessage: (text) => new Notice(text),
     });
     await this.refresh();
   }
@@ -108,6 +146,75 @@ export class MindmapView extends ItemView {
       return;
     }
     this.updateActiveRange();
+  }
+
+  // ---------------------------------------------------------------- modifications de la structure
+
+  // Creer, renommer ou supprimer depuis la carte : le nouveau texte est calcule puis ecrit dans l'editeur
+  // de la note en une seule transaction, ce qui rend l'annulation d'Obsidian utilisable.
+  private async onEdit(edit: MapEdit) {
+    const file = this.plugin.lastFile;
+    const renderer = this.renderer;
+    if (!file || !renderer) return;
+    const readText = async (): Promise<string> => {
+      const editor = this.plugin.getOpenEditor(file);
+      return editor ? editor.getValue() : await this.app.vault.read(file);
+    };
+
+    if (edit.kind === `delete`) {
+      const report = describeDeletion(await readText(), file.name, edit.keys);
+      if (report.nodes === 0) {
+        new Notice(`La racine ne peut pas être supprimée.`);
+        return;
+      }
+      const ok = await new Promise<boolean>((resolve) => new ConfirmDeleteModal(this.app, report, resolve).open());
+      if (!ok) {
+        renderer.focus();
+        return;
+      }
+    }
+
+    const before = await readText();
+    let result: EditResult | null;
+    if (edit.kind === `delete`) result = deleteNodes(before, file.name, edit.keys);
+    else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
+    else {
+      result = addNode(before, file.name, edit.key, edit.kind);
+      if (!result) new Notice(`Le niveau de titre maximum (6) est atteint : impossible d'ajouter un sous-titre.`);
+    }
+    if (!result) return;
+
+    await this.writeText(file, before, result.text);
+    const doc = parseNote(result.text, file.name);
+    this.doc = doc;
+    renderer.setDoc(doc, file.path, serializeNote(doc) === result.text);
+    const key = result.key;
+    if (edit.kind !== `rename` && key) {
+      this.selectedKey = key;
+      renderer.reveal(key);
+      renderer.select(key, false);
+      await this.revealInNote(key, false);
+      this.updateActiveRange();
+    }
+    if (edit.kind === `delete`) renderer.focus();
+    else if (edit.kind !== `rename` && key) renderer.startRename(key);
+  }
+
+  // Remplace le texte de la note en ne touchant que la partie modifiee.
+  private async writeText(file: TFile, before: string, after: string) {
+    const editor = this.plugin.getOpenEditor(file);
+    if (!editor) {
+      await this.app.vault.process(file, (data) => (data === before ? after : data));
+      return;
+    }
+    const limit = Math.min(before.length, after.length);
+    let start = 0;
+    while (start < limit && before[start] === after[start]) start++;
+    let tail = 0;
+    while (tail < limit - start && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+    editor.transaction({
+      changes: [{ from: editor.offsetToPos(start), to: editor.offsetToPos(before.length - tail), text: after.slice(start, after.length - tail) }],
+    });
   }
 
   // ---------------------------------------------------------------- styles

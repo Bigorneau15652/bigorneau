@@ -185,9 +185,12 @@ export class MapControls {
 
     // Un clic en dehors des commandes, ou Echap, ferme le panneau ouvert.
     const doc = host.ownerDocument;
-    this.listen(doc, `pointerdown`, (e) => {
-      if (this.open !== null && !this.root.contains(e.target as Node)) this.closePopup();
-    }, true);
+    const outside = (e: Event) => {
+      if (this.open !== null && !this.isOnPanel(e.target)) this.closePopup();
+    };
+    this.listen(doc, `pointerdown`, outside, true);
+    this.listen(doc, `mousedown`, outside, true);
+    this.listen(doc.defaultView ?? window, `blur`, () => this.closePopup());
     this.listen(doc, `keydown`, (e) => {
       const k = e as KeyboardEvent;
       this.setModifier(k.metaKey || k.ctrlKey);
@@ -204,6 +207,11 @@ export class MapControls {
   private listen(target: EventTarget, type: string, fn: (e: Event) => void, capture = false): void {
     target.addEventListener(type, fn, capture);
     this.cleanups.push(() => target.removeEventListener(type, fn, capture));
+  }
+
+  // Vrai si la cible est le panneau ouvert ou une barre de boutons (et non la zone vide du conteneur).
+  private isOnPanel(target: EventTarget | null): boolean {
+    return target instanceof Element && this.root.contains(target) && target.closest(`.mmw-popup, .mmw-dock`) !== null;
   }
 
   contains(target: EventTarget | null): boolean {
