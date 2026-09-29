@@ -1,3 +1,32 @@
 .mmw-view {
   padding: 16px;
+  overflow: auto;
+}
+
+.mmw-summary {
+  margin-bottom: 8px;
+}
+
+.mmw-ok {
+  color: var(--text-success);
+}
+
+.mmw-ko {
+  color: var(--text-error);
+  font-weight: 600;
+}
+
+.mmw-tree,
+.mmw-tree ul {
+  list-style: none;
+  padding-left: 20px;
+}
+
+.mmw-root-title {
+  font-weight: 700;
+}
+
+.mmw-empty,
+.mmw-info {
+  color: var(--text-muted);
 }
