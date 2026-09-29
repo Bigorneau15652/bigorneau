@@ -351,3 +351,9 @@
 .mmw-split.mmw-native .mmw-pane-host {
   display: none;
 }
+
+/* Chapitres inactifs de la note reliee a la carte */
+.cm-line.mmw-inactive {
+  opacity: var(--mmw-inactive-opacity, 0.45);
+  transition: opacity 0.15s ease;
+}

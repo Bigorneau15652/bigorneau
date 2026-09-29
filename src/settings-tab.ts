@@ -1,6 +1,7 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Platform, PluginSettingTab, Setting } from "obsidian";
+import { comboLabel, eventToCombo } from "./keys";
 import type MindmapWritingPlugin from "./main";
-import type { BranchStyle, CursorPosition, FrameStyle, LongTitles, PanePosition, ParagraphMode } from "./settings";
+import { BranchStyle, CursorPosition, DEFAULT_SETTINGS, FrameStyle, LongTitles, MmSettings, PanePosition, ParagraphMode } from "./settings";
 
 export class MmSettingTab extends PluginSettingTab {
   private plugin: MindmapWritingPlugin;
@@ -139,6 +140,85 @@ export class MmSettingTab extends PluginSettingTab {
           .onChange(async (v) => {
             s.cursorPosition = v as CursorPosition;
             await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl).setName(`Chapitre actif`).setHeading();
+
+    new Setting(containerEl)
+      .setName(`Griser les chapitres inactifs dans la note`)
+      .setDesc(`Le chapitre qui contient le curseur reste en contraste normal, les autres sont grisés mais lisibles. S'applique à l'éditeur (modes Édition et Aperçu en direct) de la note reliée à la carte. Un tableau affiché en aperçu en direct garde son contraste.`)
+      .addToggle((t) =>
+        t.setValue(s.contrastEnabled).onChange(async (v) => {
+          s.contrastEnabled = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(`Contraste des chapitres inactifs`)
+      .setDesc(`Plus la valeur est basse, plus le texte inactif est clair.`)
+      .addSlider((sl) =>
+        sl
+          .setLimits(15, 90, 5)
+          .setValue(Math.round(s.inactiveOpacity * 100))
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            s.inactiveOpacity = v / 100;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(`Inclure les sous-titres dans le chapitre actif`)
+      .setDesc(`Activé : le chapitre actif comprend le titre où se trouve le curseur, son texte et tous ses sous-titres. Désactivé : le titre et son texte seulement.`)
+      .addToggle((t) =>
+        t.setValue(s.includeSubtitles).onChange(async (v) => {
+          s.includeSubtitles = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl).setName(`Navigation entre chapitres depuis la note`).setHeading();
+    this.addKeySetting(containerEl, `Chapitre précédent`, `keyPrev`);
+    this.addKeySetting(containerEl, `Chapitre suivant`, `keyNext`);
+    this.addKeySetting(containerEl, `Chapitre parent`, `keyParent`);
+    this.addKeySetting(containerEl, `Premier sous-titre`, `keyChild`);
+  }
+
+  // Ligne de reglage d'une touche : un bouton qui attend la combinaison a enregistrer.
+  private addKeySetting(containerEl: HTMLElement, name: string, field: `keyPrev` | `keyNext` | `keyParent` | `keyChild`) {
+    const s = this.plugin.settings;
+    const isMac = Platform.isMacOS;
+    new Setting(containerEl)
+      .setName(name)
+      .setDesc(`Fonctionne dans la note reliée à la carte. Cliquez sur le bouton puis tapez la combinaison voulue (Échap pour annuler).`)
+      .addButton((btn) => {
+        btn.setButtonText(comboLabel(s[field], isMac));
+        btn.onClick(() => {
+          btn.setButtonText(`Tapez la combinaison...`);
+          const listener = (e: KeyboardEvent) => {
+            if ([`Control`, `Shift`, `Alt`, `Meta`].includes(e.key)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            window.removeEventListener(`keydown`, listener, true);
+            if (e.key !== `Escape`) {
+              s[field] = eventToCombo(e, isMac);
+              void this.plugin.saveSettings();
+            }
+            btn.setButtonText(comboLabel(s[field], isMac));
+          };
+          window.addEventListener(`keydown`, listener, true);
+        });
+      })
+      .addExtraButton((b) =>
+        b
+          .setIcon(`reset`)
+          .setTooltip(`Rétablir la valeur d'origine`)
+          .onClick(async () => {
+            s[field] = (DEFAULT_SETTINGS as MmSettings)[field];
+            await this.plugin.saveSettings();
+            this.display();
           })
       );
   }

@@ -1,8 +1,9 @@
 import { EditorView } from "@codemirror/view";
+import { setActiveRange } from "./active-chapter";
 import { revealRange } from "./reveal";
 import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import type MindmapWritingPlugin from "./main";
-import { flattenDoc, joinBody, locateInSections, MmDoc, nodeByKey, parseNote, pathTitles, serializeNote, splitBody } from "./model";
+import { activeLines, flattenDoc, joinBody, locateInSections, MmDoc, nodeAtLine, nodeByKey, parseNote, pathTitles, serializeNote, splitBody } from "./model";
 import { ParagraphPane } from "./paragraph";
 import { MapRenderer } from "./renderer";
 
@@ -28,6 +29,9 @@ export class MindmapView extends ItemView {
   private cursors = new Map<string, number>();
   private noteLeaf: WorkspaceLeaf | null = null;
   private noteCursors = new Map<string, { line: number; ch: number }>();
+  private lastNoteLine = -1;
+  private lastNoteLines = -1;
+  private currentPath = ``;
 
   constructor(leaf: WorkspaceLeaf, plugin: MindmapWritingPlugin) {
     super(leaf);
@@ -72,6 +76,7 @@ export class MindmapView extends ItemView {
   }
 
   async onClose() {
+    this.clearActive();
     await this.flushPane();
     this.renderer?.destroy();
     this.pane?.destroy();
@@ -135,6 +140,14 @@ export class MindmapView extends ItemView {
       renderer.setDoc(null, ``, true);
       return;
     }
+    if (file.path !== this.currentPath) {
+      // Autre note : la selection et les positions memorisees ne s'appliquent plus.
+      this.currentPath = file.path;
+      this.selectedKey = null;
+      this.noteCursors.clear();
+      this.lastNoteLine = -1;
+      this.lastNoteLines = -1;
+    }
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.cachedRead(file));
     if (token !== this.renderToken || this.renderer !== renderer) return;
     const doc = parseNote(text, file.name);
@@ -151,10 +164,90 @@ export class MindmapView extends ItemView {
       if (this.isNative()) void this.revealInNote(this.selectedKey, false);
       else this.loadPane();
     }
+    this.updateActiveRange();
   }
 
   private isNative(): boolean {
     return this.plugin.settings.paragraphMode === `native`;
+  }
+
+  // ---------------------------------------------------------------- chapitre actif
+
+  // Vrai si l'editeur est celui du volet de note ouvert par cette carte.
+  ownsEditor(cm: EditorView): boolean {
+    const leaf = this.noteLeaf;
+    return !!leaf && leaf.view.containerEl.contains(cm.dom);
+  }
+
+  private getNoteCm(): EditorView | null {
+    for (const cm of this.plugin.editorViews) if (this.ownsEditor(cm)) return cm;
+    return null;
+  }
+
+  // Le curseur de la note a change de ligne : la carte selectionne le chapitre correspondant.
+  onNoteMoved(cm: EditorView) {
+    const file = this.plugin.lastFile;
+    const renderer = this.renderer;
+    if (!file || !renderer || !this.isNative()) return;
+    const state = cm.state;
+    const head = state.selection.main.head;
+    const line = state.doc.lineAt(head);
+    const line0 = line.number - 1;
+    // Une frappe dans la meme ligne ne change pas de chapitre : le changement se fait a la validation par Entree.
+    if (line0 === this.lastNoteLine && state.doc.lines === this.lastNoteLines) return;
+    this.lastNoteLine = line0;
+    this.lastNoteLines = state.doc.lines;
+
+    const text = state.doc.toString();
+    const doc = parseNote(text, file.name);
+    const { key } = nodeAtLine(doc, line0);
+    this.doc = doc;
+    this.selectedKey = key;
+    this.noteCursors.set(key, { line: line0, ch: head - line.from });
+    renderer.setDoc(doc, file.path, serializeNote(doc) === text);
+    renderer.reveal(key);
+    renderer.select(key, false);
+    this.updateActiveRange();
+  }
+
+  // Grise les chapitres inactifs dans la note reliee, selon le noeud selectionne.
+  updateActiveRange() {
+    const cm = this.getNoteCm();
+    if (!cm) return;
+    const s = this.plugin.settings;
+    const range = s.contrastEnabled && this.selectedKey && this.doc ? activeLines(this.doc, this.selectedKey, s.includeSubtitles) : null;
+    if (!range) {
+      cm.dispatch({ effects: setActiveRange.of(null) });
+      return;
+    }
+    const d = cm.state.doc;
+    const from = d.line(Math.min(range.startLine, d.lines - 1) + 1).from;
+    const to = range.endLine >= d.lines ? d.length : d.line(range.endLine + 1).from;
+    cm.dispatch({ effects: setActiveRange.of({ from, to }) });
+  }
+
+  clearActive() {
+    const cm = this.getNoteCm();
+    if (cm) cm.dispatch({ effects: setActiveRange.of(null) });
+  }
+
+  // Deplacement d'un chapitre a l'autre depuis la note, avec les touches configurees.
+  async navigateFromNote(dir: `up` | `down` | `left` | `right`) {
+    const renderer = this.renderer;
+    if (!this.doc || !renderer) return;
+    const flat = flattenDoc(this.doc);
+    const current = this.selectedKey ?? `r`;
+    const index = flat.findIndex((e) => e.key === current);
+    let target: string | undefined;
+    if (dir === `up`) target = flat[index - 1]?.key;
+    else if (dir === `down`) target = flat[index + 1]?.key;
+    else if (dir === `left`) target = current.includes(`.`) ? current.slice(0, current.lastIndexOf(`.`)) : undefined;
+    else target = nodeByKey(this.doc, current)?.children.length ? `${current}.0` : undefined;
+    if (!target) return;
+    this.selectedKey = target;
+    renderer.reveal(target);
+    renderer.select(target, false);
+    await this.revealInNote(target, true);
   }
 
   // ---------------------------------------------------------------- note Obsidian en vis-a-vis
@@ -247,6 +340,7 @@ export class MindmapView extends ItemView {
       this.app.workspace.setActiveLeaf(leaf, { focus: true });
       editor.focus();
     }
+    this.updateActiveRange();
   }
 
   // ---------------------------------------------------------------- vue Paragraphe simple
