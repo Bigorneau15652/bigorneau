@@ -91,8 +91,12 @@ export class MapRenderer {
   private marquee: { sx: number; sy: number; moved: boolean } | null = null;
   private cleanups: (() => void)[] = [];
   // Saisie en cours du titre d'une case.
-  private renaming: { key: string; input: HTMLInputElement; original: string } | null = null;
+  private renaming: { key: string; input: HTMLInputElement; original: string; stop: () => void } | null = null;
   private suspendBlur = false;
+  // Detection du double clic : la carte peut etre redessinee entre les deux clics (ouverture de la note),
+  // l'evenement dblclick du navigateur n'est alors plus fiable.
+  private lastDown: { key: string; time: number } | null = null;
+  private dblKey: string | null = null;
 
   constructor(private container: HTMLElement, private getSettings: () => MmSettings, private callbacks: MapCallbacks) {
     this.mapEl = container;
@@ -546,10 +550,22 @@ export class MapRenderer {
     }
     const node = target.closest(`.mmw-node`) as HTMLElement | null;
     if (node) {
-      if (e.shiftKey) this.toggleSelect(node.dataset.key!);
-      else this.select(node.dataset.key!);
+      const key = node.dataset.key!;
+      if (e.shiftKey) this.toggleSelect(key);
+      else {
+        const now = Date.now();
+        if (this.lastDown && this.lastDown.key === key && now - this.lastDown.time < 450) {
+          this.dblKey = key;
+          this.lastDown = null;
+        } else {
+          this.lastDown = { key, time: now };
+          this.dblKey = null;
+        }
+        this.select(key);
+      }
       return;
     }
+    this.lastDown = null;
     if (e.shiftKey) {
       // Maj + glisser sur le fond : selection au rectangle.
       this.marquee = { sx: e.clientX, sy: e.clientY, moved: false };
@@ -576,6 +592,13 @@ export class MapRenderer {
   }
 
   private onPointerUp(e: PointerEvent): void {
+    if (this.dblKey) {
+      // Apres le relachement, pour que le focus donne par le navigateur ne retire pas la saisie.
+      const key = this.dblKey;
+      this.dblKey = null;
+      window.setTimeout(() => this.startRename(key), 0);
+      return;
+    }
     if (this.marquee) {
       this.marquee = null;
       this.marqueeEl.style.display = `none`;
@@ -728,6 +751,7 @@ export class MapRenderer {
       this.callbacks.onMessage?.(`Le titre de la racine est le nom du fichier : renommez la note pour le changer.`);
       return;
     }
+    if (this.renaming && this.renaming.key === key) return;
     this.commitRename(true, false);
     if (this.selected !== key) this.select(key);
     const input = document.createElement(`input`);
@@ -735,7 +759,14 @@ export class MapRenderer {
     input.className = `mmw-rename`;
     input.spellcheck = false;
     input.value = initial ?? n.node.title;
-    this.renaming = { key, input, original: n.node.title };
+    // La saisie se valide par Entree, Echap ou un clic ailleurs. Une perte de focus provoquee par
+    // Obsidian (ouverture de la note, changement de volet) ne la ferme pas : le focus est redonne.
+    const doc = this.mapEl.ownerDocument;
+    const outside = (ev: Event): void => {
+      if (!(ev.target as Element).closest(`.mmw-rename`)) this.commitRename(true, false);
+    };
+    doc.addEventListener(`pointerdown`, outside, true);
+    this.renaming = { key, input, original: n.node.title, stop: () => doc.removeEventListener(`pointerdown`, outside, true) };
     input.addEventListener(`keydown`, (e) => {
       e.stopPropagation();
       if (e.key === `Enter`) {
@@ -748,7 +779,10 @@ export class MapRenderer {
     });
     input.addEventListener(`input`, () => this.placeRename());
     input.addEventListener(`blur`, () => {
-      if (!this.suspendBlur) this.commitRename(true, false);
+      if (this.suspendBlur) return;
+      window.setTimeout(() => {
+        if (this.renaming && this.renaming.input === input && input.isConnected) input.focus();
+      }, 0);
     });
     this.worldEl.appendChild(input);
     this.placeRename();
@@ -782,6 +816,7 @@ export class MapRenderer {
     const r = this.renaming;
     if (!r) return;
     this.renaming = null;
+    r.stop();
     const value = r.input.value;
     r.input.remove();
     const el = this.els.get(r.key);
