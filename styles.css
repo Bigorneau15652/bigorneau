@@ -176,6 +176,12 @@
   gap: 8px;
   cursor: default;
   font-size: var(--font-ui-small);
+  pointer-events: none;
+}
+
+.mmw-controls > .mmw-dock,
+.mmw-controls > .mmw-popup {
+  pointer-events: auto;
 }
 
 .mmw-dock,
