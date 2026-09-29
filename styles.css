@@ -30,8 +30,6 @@
   left: 0;
   top: 0;
   transform-origin: 0 0;
-  font-size: calc(1em * var(--mmw-font-scale, 1));
-  font-family: var(--mmw-font, inherit);
 }
 
 .mmw-svg {
@@ -72,10 +70,12 @@
   box-sizing: border-box;
   width: max-content;
   max-width: var(--mmw-max-w, 240px);
-  padding: 6px 12px;
+  padding: calc(6px * var(--mmw-pad, 1)) calc(12px * var(--mmw-pad, 1));
   border-radius: 9px;
-  color: var(--mmw-stroke, var(--text-normal));
-  text-align: var(--mmw-align, center);
+  color: var(--mmw-node-color, var(--text-normal));
+  font-family: var(--mmw-node-font, inherit);
+  font-size: var(--mmw-node-size, 1em);
+  text-align: var(--mmw-node-align, center);
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
@@ -102,15 +102,13 @@
   max-width: none;
   white-space: nowrap;
   overflow: visible;
-  padding: 16px 44px;
-  font-size: 1.5em;
+  padding: calc(16px * var(--mmw-pad, 1)) calc(44px * var(--mmw-pad, 1));
   font-weight: 700;
   border-radius: 3px;
 }
 
 .mmw-depth-1 {
-  padding: 9px 18px;
-  font-size: 1.15em;
+  padding: calc(9px * var(--mmw-pad, 1)) calc(18px * var(--mmw-pad, 1));
   font-weight: 600;
 }
 
@@ -426,4 +424,49 @@
 .cm-line.mmw-inactive {
   opacity: var(--mmw-inactive-opacity, 0.45);
   transition: opacity 0.15s ease;
+}
+
+/* Etiquettes au survol des commandes */
+.mmw-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 260px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: var(--background-modifier-message, #222);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.3));
+  font-size: var(--font-ui-smaller);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Rectangle de selection (Maj + glisser) */
+.mmw-marquee {
+  position: absolute;
+  z-index: 4;
+  border: 1px solid var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  pointer-events: none;
+}
+
+/* Portee de la modification de style */
+.mmw-scope {
+  margin-bottom: 4px;
+  color: var(--text-normal);
+}
+
+.mmw-scope-label {
+  color: var(--text-muted);
+}
+
+.mmw-scope-hint {
+  margin-bottom: 12px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-style > .mmw-scope:last-of-type {
+  margin-bottom: 12px;
 }

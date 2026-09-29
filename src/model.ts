@@ -1,5 +1,6 @@
 // Modele de donnees de la note : analyse d'un fichier Markdown en arbre de noeuds
 // et reconstruction du fichier a partir de cet arbre, sans perte de contenu.
+import { formatMetaLine, isEmptyMeta, MmMeta, parseMetaLine } from "./style";
 
 export interface MmNode {
   // Niveau du titre Markdown (1 a 6). Le noeud racine sans titre general a le niveau 0.
@@ -15,6 +16,9 @@ export interface MmNode {
   // Pour le noeud racine sans titre general, `line` est la premiere ligne apres les proprietes.
   line?: number;
   endLine?: number;
+  // Commentaire de style place juste sous le titre, et numero de sa ligne dans le fichier.
+  meta?: MmMeta;
+  metaLine?: number;
 }
 
 export interface MmDoc {
@@ -48,7 +52,7 @@ interface InlineState {
   math: boolean;
 }
 
-function splitLines(text: string): string[] {
+export function splitLines(text: string): string[] {
   const lines: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -176,6 +180,7 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
   const nodes: MmNode[] = headingIdx.map((idx, n) => {
     const end = n + 1 < headingIdx.length ? headingIdx[n + 1] : lines.length;
     const m = matches[idx]!;
+    const found = idx + 1 < end ? parseMetaLine(lines[idx + 1]) : null;
     return {
       level: m[1].length,
       title: (m[2] ?? ``).trim(),
@@ -184,6 +189,7 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
       children: [],
       line: fmCount + idx,
       endLine: fmCount + end,
+      ...(found ? { meta: found, metaLine: fmCount + idx + 1 } : {}),
     };
   });
 
@@ -195,6 +201,7 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
     preamble = introText;
     rest = nodes.slice(1);
   } else {
+    const found = firstHeading > 0 ? parseMetaLine(lines[0]) : null;
     root = {
       level: 0,
       title: fileName.replace(/\.md$/i, ``),
@@ -203,6 +210,7 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
       children: [],
       line: fmCount,
       endLine: fmCount + firstHeading,
+      ...(found ? { meta: found, metaLine: fmCount } : {}),
     };
     rest = nodes;
   }
@@ -395,4 +403,47 @@ export function activeLines(doc: MmDoc, key: string, includeSubtitles: boolean):
   if (!node || node.line === undefined || node.endLine === undefined) return null;
   if (node === doc.root) return { startLine: 0, endLine: node.endLine };
   return { startLine: node.line, endLine: includeSubtitles ? branchEnd(node) : node.endLine };
+}
+
+// Modification d'une ligne du fichier : inserer, remplacer ou supprimer la ligne numero `line` (a partir de 0).
+export interface LineEdit {
+  kind: `insert` | `replace` | `delete`;
+  line: number;
+  text: string;
+}
+
+// Modification a faire pour donner a un noeud le commentaire de style voulu (null : le retirer).
+export function planMetaEdit(doc: MmDoc, key: string, meta: MmMeta | null): LineEdit | null {
+  const node = nodeByKey(doc, key);
+  if (!node || node.line === undefined) return null;
+  const has = node.metaLine !== undefined;
+  if (!meta || isEmptyMeta(meta)) return has ? { kind: `delete`, line: node.metaLine!, text: `` } : null;
+  const text = formatMetaLine(meta);
+  if (has) return { kind: `replace`, line: node.metaLine!, text };
+  // Le noeud racine sans titre n'a pas de ligne de titre : le commentaire va en tete du texte.
+  const at = node === doc.root && !doc.hasGeneralTitle ? node.line : node.line + 1;
+  return { kind: `insert`, line: at, text };
+}
+
+// Applique des modifications de ligne a un texte (les numeros de ligne sont ceux du texte d'origine).
+export function applyLineEdits(text: string, edits: LineEdit[], eol: string): string {
+  const lines = splitLines(text);
+  const sorted = [...edits].sort((a, b) => b.line - a.line);
+  for (const e of sorted) {
+    if (e.kind === `delete`) {
+      lines.splice(e.line, 1);
+    } else if (e.kind === `replace`) {
+      const old = lines[e.line] ?? ``;
+      const ending = /(\r\n|\n|\r)$/.exec(old)?.[0] ?? ``;
+      lines[e.line] = e.text + ending;
+    } else {
+      if (e.line >= lines.length) {
+        if (lines.length > 0 && !/[\r\n]$/.test(lines[lines.length - 1])) lines[lines.length - 1] += eol;
+        lines.push(e.text + eol);
+      } else {
+        lines.splice(e.line, 0, e.text + eol);
+      }
+    }
+  }
+  return lines.join(``);
 }
