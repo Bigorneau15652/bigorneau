@@ -1,9 +1,17 @@
 // Affichage de la carte : cases, branches, zoom, deplacement, pliage et selection.
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
 import { computeStats, MmDoc } from "./model";
-import { buildLayoutTree, Bounds, computeLayout, flatten, LNode, neighbor } from "./layout";
-import { childLink, framePath, trunkBranch, trunkLine, trunkRadius } from "./sketch";
+import { buildLayoutTree, Bounds, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
+import { framePath, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import type { MmSettings } from "./settings";
+
+export interface MapCallbacks {
+  onCompactChange: (v: number) => void;
+  // Appele quand l'utilisateur change de noeud selectionne (null : plus aucun noeud).
+  onSelect?: (key: string | null) => void;
+  // Appele quand l'utilisateur appuie sur Entree avec un noeud selectionne.
+  onEnter?: () => void;
+}
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
 const MIN_SCALE = 0.15;
@@ -36,7 +44,7 @@ export class MapRenderer {
   private drag: { sx: number; sy: number; tx0: number; ty0: number; moved: boolean } | null = null;
   private cleanups: (() => void)[] = [];
 
-  constructor(private container: HTMLElement, private getSettings: () => MmSettings, private onCompactChange: (v: number) => void) {
+  constructor(private container: HTMLElement, private getSettings: () => MmSettings, private callbacks: MapCallbacks) {
     this.mapEl = container;
     this.mapEl.classList.add(`mmw-map`);
     this.mapEl.tabIndex = 0;
@@ -79,7 +87,7 @@ export class MapRenderer {
     this.slider.step = `0.05`;
     this.slider.title = `Compacité de l'affichage`;
     this.slider.addEventListener(`input`, () => {
-      this.onCompactChange(Number(this.slider.value));
+      this.callbacks.onCompactChange(Number(this.slider.value));
       this.rebuild();
     });
     bar.appendChild(this.slider);
@@ -241,23 +249,32 @@ export class MapRenderer {
       }
     }
     const root = this.root;
+    const chain = (x: number, y1: number, y2: number, seed: string): void => {
+      if (y2 - y1 < 1) return;
+      this.path(trunkLine(s.branchStyle, x, y1, y2, seed) ?? `M ${x} ${y1} L ${x} ${y2}`, `mmw-line`);
+    };
+    // Lien entre la racine et le premier noeud de premier niveau.
     if (root.children.length > 0) {
-      const lx = root.x + root.w / 2;
-      const ly0 = root.y + root.h;
-      let trunkEnd = ly0;
-      for (const c of root.children) {
-        const cy = c.y + c.h / 2;
-        trunkEnd = Math.max(trunkEnd, cy - trunkRadius(ly0, cy, lx, c.x));
-        this.path(trunkBranch(s.branchStyle, lx, ly0, c.x, cy, `t${c.key}`), `mmw-line`);
-      }
-      const trunk = trunkLine(s.branchStyle, lx, ly0, trunkEnd, `trunk`);
-      if (trunk) this.path(trunk, `mmw-line`);
+      const first = root.children[0];
+      chain(trunkX(first), root.y + root.h, first.y, `root>${first.key}`);
     }
     for (const n of this.list) {
       if (n.depth === 0) continue;
+      const y0 = n.y + n.h;
+      const tx = trunkX(n);
+      let trunkEnd = y0;
       for (const c of n.children) {
-        this.path(childLink(s.branchStyle, n.x + n.w, n.y + n.h / 2, c.x, c.y + c.h / 2, `${n.key}>${c.key}`), `mmw-line`);
+        const cy = c.y + c.h / 2;
+        trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x));
+        this.path(trunkBranch(s.branchStyle, tx, y0, c.x, cy, `${n.key}>${c.key}`), `mmw-line`);
       }
+      // Les noeuds de premier niveau sont relies entre eux par la meme ligne verticale.
+      if (n.depth === 1 && n.parent) {
+        const siblings = n.parent.children;
+        const next = siblings[siblings.indexOf(n) + 1];
+        if (next) trunkEnd = Math.max(trunkEnd, next.y);
+      }
+      chain(tx, y0, trunkEnd, `trunk${n.key}`);
     }
   }
 
@@ -288,14 +305,35 @@ export class MapRenderer {
     this.rebuild();
   }
 
-  select(key: string | null): void {
-    if (this.selected) this.els.get(this.selected)?.classList.remove(`mmw-selected`);
+  // notify : faux quand la selection est modifiee par le programme et non par l'utilisateur.
+  select(key: string | null, notify = true): void {
+    const previous = this.selected;
+    if (previous) this.els.get(previous)?.classList.remove(`mmw-selected`);
     this.selected = key && this.els.has(key) ? key : null;
     if (this.selected) {
       this.els.get(this.selected)!.classList.add(`mmw-selected`);
       const n = this.list.find((x) => x.key === this.selected);
       if (n) this.ensureVisible(n);
     }
+    if (notify && this.selected !== previous) this.callbacks.onSelect?.(this.selected);
+  }
+
+  getSelectedKey(): string | null {
+    return this.selected;
+  }
+
+  focus(): void {
+    this.mapEl.focus();
+  }
+
+  // Deplie les branches qui cachent un noeud, pour qu'il soit visible.
+  reveal(key: string): void {
+    const parts = key.split(`.`);
+    let changed = false;
+    for (let i = 2; i < parts.length; i++) {
+      if (this.collapsed.delete(parts.slice(0, i).join(`.`))) changed = true;
+    }
+    if (changed) this.rebuild();
   }
 
   private ensureVisible(n: LNode): void {
@@ -327,7 +365,8 @@ export class MapRenderer {
     const vh = this.mapEl.clientHeight - 60;
     const w = b.maxX - b.minX;
     const h = b.maxY - b.minY;
-    const sc = Math.min(1, (vw - 80) / w, (vh - 60) / h);
+    // La carte est etroite et haute : on ajuste la largeur, sans reduire la hauteur sous 50 %.
+    const sc = Math.min(1, (vw - 80) / w, Math.max(0.5, (vh - 60) / h));
     this.scale = Math.max(MIN_SCALE, sc);
     this.tx = (vw - w * this.scale) / 2 - b.minX * this.scale;
     this.ty = Math.max(30, (vh - h * this.scale) / 2) - b.minY * this.scale;
@@ -410,11 +449,11 @@ export class MapRenderer {
     switch (e.key) {
       case `ArrowDown`:
         e.preventDefault();
-        go(cur ? neighbor(this.list, cur, `down`) : this.list[1] ?? this.list[0] ?? null);
+        go(cur ? sequential(this.list, cur, `down`) : this.list[0] ?? null);
         break;
       case `ArrowUp`:
         e.preventDefault();
-        if (cur) go(neighbor(this.list, cur, `up`));
+        if (cur) go(sequential(this.list, cur, `up`));
         break;
       case `ArrowLeft`:
         e.preventDefault();
@@ -427,6 +466,12 @@ export class MapRenderer {
         else if (cur.collapsed) {
           this.collapsed.delete(cur.key);
           this.rebuild();
+        }
+        break;
+      case `Enter`:
+        if (cur) {
+          e.preventDefault();
+          this.callbacks.onEnter?.();
         }
         break;
       case ` `:

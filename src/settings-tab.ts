@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type MindmapWritingPlugin from "./main";
-import type { BranchStyle, FrameStyle, LongTitles } from "./settings";
+import type { BranchStyle, CursorPosition, FrameStyle, LongTitles, PanePosition } from "./settings";
 
 export class MmSettingTab extends PluginSettingTab {
   private plugin: MindmapWritingPlugin;
@@ -83,6 +83,38 @@ export class MmSettingTab extends PluginSettingTab {
           s.showPrefix = v;
           await this.plugin.saveSettings();
         })
+      );
+
+    new Setting(containerEl).setName(`Vue Paragraphe`).setHeading();
+
+    new Setting(containerEl)
+      .setName(`Position de la vue Paragraphe`)
+      .setDesc(`Emplacement de la zone de rédaction par rapport à la carte. Sa taille se règle en faisant glisser la barre de séparation.`)
+      .addDropdown((d) =>
+        d
+          .addOption(`right`, `À droite de la carte`)
+          .addOption(`left`, `À gauche de la carte`)
+          .addOption(`top`, `Au-dessus de la carte`)
+          .addOption(`bottom`, `En dessous de la carte`)
+          .setValue(s.panePosition)
+          .onChange(async (v) => {
+            s.panePosition = v as PanePosition;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(`Position du curseur à l'ouverture d'un paragraphe`)
+      .addDropdown((d) =>
+        d
+          .addOption(`last`, `Là où la saisie s'était arrêtée`)
+          .addOption(`start`, `Au début du paragraphe`)
+          .addOption(`end`, `À la fin du paragraphe`)
+          .setValue(s.cursorPosition)
+          .onChange(async (v) => {
+            s.cursorPosition = v as CursorPosition;
+            await this.plugin.saveSettings();
+          })
       );
   }
 }

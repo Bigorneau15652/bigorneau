@@ -7,7 +7,7 @@ export interface Pt {
   y: number;
 }
 
-const WOBBLE = 1.2;
+const WOBBLE = 0.45;
 
 function hash(str: string): number {
   let h = 1779033703 ^ str.length;
@@ -130,7 +130,7 @@ export function childLink(style: BranchStyle, x1: number, y1: number, x2: number
   const pts = elbowPoints(x1, y1, x2, y2, sx, 12);
   if (style === `elbow`) return polyPath(pts);
   const rnd = rng(seed);
-  return smoothPath(wobble(resample(pts, 22, false), rnd, WOBBLE, false), false);
+  return smoothPath(wobble(resample(pts, 28, false), rnd, WOBBLE, false), false);
 }
 
 export function trunkRadius(ly0: number, y2: number, lx: number, x2: number): number {
@@ -141,7 +141,7 @@ export function trunkRadius(ly0: number, y2: number, lx: number, x2: number): nu
 export function trunkLine(style: BranchStyle, x: number, y1: number, y2: number, seed: string): string | null {
   if (style === `curve` || style === `straight`) return null;
   if (style === `elbow`) return `M ${f(x)} ${f(y1)} L ${f(x)} ${f(y2)}`;
-  const pts = resample([{ x, y: y1 }, { x, y: y2 }], 24, false);
+  const pts = resample([{ x, y: y1 }, { x, y: y2 }], 40, false);
   return smoothPath(wobble(pts, rng(seed), WOBBLE, false), false);
 }
 
@@ -161,7 +161,7 @@ export function trunkBranch(style: BranchStyle, lx: number, ly0: number, x2: num
   }
   pts.push({ x: x2, y: y2 });
   if (style === `elbow`) return polyPath(pts);
-  return smoothPath(wobble(resample(pts, 20, false), rng(seed), WOBBLE * 0.7, false), false);
+  return smoothPath(wobble(resample(pts, 26, false), rng(seed), WOBBLE * 0.7, false), false);
 }
 
 export type FrameShape = { kind: `path`; d: string } | { kind: `rect`; rx: number } | null;
@@ -170,7 +170,7 @@ export function framePath(style: FrameStyle, x: number, y: number, w: number, h:
   if (style === `none`) return null;
   if (style === `straight`) return { kind: `rect`, rx: 0 };
   if (style === `rounded`) return { kind: `rect`, rx: isRoot ? 4 : Math.min(10, h / 2) };
-  const r = isRoot ? 2 : Math.min(9, h / 2);
+  const r = Math.min(isRoot ? 9 : 8, h / 2);
   const pts: Pt[] = [];
   const corner = (cx: number, cy: number, a0: number): void => {
     for (let k = 0; k <= 4; k++) {
@@ -182,7 +182,7 @@ export function framePath(style: FrameStyle, x: number, y: number, w: number, h:
   corner(x + w - r, y + h - r, 0);
   corner(x + r, y + h - r, Math.PI / 2);
   corner(x + r, y + r, Math.PI);
-  const amp = isRoot ? 1.5 : 1.0;
-  const sampled = resample(pts, 18, true);
+  const amp = isRoot ? 0.45 : 0.3;
+  const sampled = resample(pts, 9, true);
   return { kind: `path`, d: smoothPath(wobble(sampled, rng(seed), amp, true), true) };
 }

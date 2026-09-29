@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNote } from "../src/model";
-import { buildLayoutTree, computeLayout, flatten, neighbor, LNode } from "../src/layout";
-import { childLink, elbowPoints, framePath, resample, rng, trunkBranch } from "../src/sketch";
+import { buildLayoutTree, computeLayout, flatten, sequential, trunkX, LNode } from "../src/layout";
+import { elbowPoints, framePath, resample, rng, trunkBranch, trunkLine } from "../src/sketch";
 
 const NOTE = `# Racine\n## A\n### A1\n### A2\n#### A2a\n## B\n## C\n### C1\n`;
 
@@ -17,20 +17,23 @@ function laidOut(collapsed: Set<string> = new Set()): LNode {
   return root;
 }
 
-test(`disposition : un noeud est centre sur ses enfants`, () => {
+test(`disposition : les enfants sont sous le parent, decales vers la droite`, () => {
   const root = laidOut();
   for (const n of flatten(root)) {
-    if (n.depth === 0 || n.children.length === 0) continue;
-    const first = n.children[0];
-    const last = n.children[n.children.length - 1];
-    const mid = (first.y + first.h / 2 + last.y + last.h / 2) / 2;
-    assert.ok(Math.abs(n.y + n.h / 2 - mid) < 0.001, `noeud ${n.key} mal centre`);
+    for (const child of n.children) {
+      assert.ok(child.y >= n.y + n.h, `${child.key} n est pas sous ${n.key}`);
+      if (n.depth > 0) assert.ok(child.x > trunkX(n), `${child.key} n est pas decale`);
+    }
   }
 });
 
-test(`disposition : aucun chevauchement entre noeuds de meme colonne`, () => {
+test(`disposition : les noeuds de premier niveau sont alignes avec la racine`, () => {
   const root = laidOut();
-  const all = flatten(root);
+  for (const child of root.children) assert.equal(child.x, root.x);
+});
+
+test(`disposition : aucun chevauchement entre noeuds`, () => {
+  const all = flatten(laidOut());
   for (const a of all) {
     for (const b of all) {
       if (a === b) continue;
@@ -41,14 +44,22 @@ test(`disposition : aucun chevauchement entre noeuds de meme colonne`, () => {
   }
 });
 
-test(`disposition : les enfants sont a droite du parent et dans l ordre de la note`, () => {
-  const root = laidOut();
+test(`disposition : l ordre de la note est respecte de haut en bas`, () => {
+  const all = flatten(laidOut());
+  for (let i = 1; i < all.length; i++) assert.ok(all[i].y > all[i - 1].y, `${all[i].key} mal place`);
+});
+
+test(`disposition : la largeur de la carte reste faible meme avec beaucoup de titres`, () => {
+  const lines = [`# R`];
+  for (let i = 0; i < 40; i++) lines.push(`## Titre ${i}`, `### Sous-titre ${i}`, `#### Detail ${i}`);
+  const doc = parseNote(lines.join(`\n`) + `\n`, `f.md`);
+  const root = buildLayoutTree(doc.root, `r`, 0, new Set());
   for (const n of flatten(root)) {
-    for (let i = 0; i < n.children.length; i++) {
-      assert.ok(n.children[i].x > n.x + (n.depth === 0 ? 0 : n.w));
-      if (i > 0) assert.ok(n.children[i].y > n.children[i - 1].y);
-    }
+    n.w = 120;
+    n.h = 30;
   }
+  const b = computeLayout(root, 1);
+  assert.ok(b.maxX - b.minX < 400, `carte trop large : ${b.maxX - b.minX}`);
 });
 
 test(`branche repliee : ses descendants disparaissent de la disposition`, () => {
@@ -59,25 +70,26 @@ test(`branche repliee : ses descendants disparaissent de la disposition`, () => 
   assert.ok(root.children[0].collapsed);
 });
 
-test(`navigation : voisin de meme niveau`, () => {
-  const root = laidOut();
-  const list = flatten(root);
+test(`navigation : noeud precedent et suivant dans l ordre d affichage`, () => {
+  const list = flatten(laidOut());
   const byKey = (k: string): LNode => list.find((n) => n.key === k)!;
-  assert.equal(neighbor(list, byKey(`r.0`), `down`)?.key, `r.1`);
-  assert.equal(neighbor(list, byKey(`r.1`), `up`)?.key, `r.0`);
-  assert.equal(neighbor(list, byKey(`r.2`), `down`), null);
-  assert.equal(neighbor(list, byKey(`r.0.1`), `up`)?.key, `r.0.0`);
+  assert.equal(sequential(list, byKey(`r`), `down`)?.key, `r.0`);
+  assert.equal(sequential(list, byKey(`r.0`), `down`)?.key, `r.0.0`);
+  assert.equal(sequential(list, byKey(`r.0.1`), `up`)?.key, `r.0.0`);
+  assert.equal(sequential(list, byKey(`r`), `up`), null);
+  assert.equal(sequential(list, list[list.length - 1], `down`), null);
 });
 
 test(`trait de crayon : stable d un affichage a l autre et extremites conservees`, () => {
-  const a = childLink(`sketch`, 0, 0, 100, 50, `graine`);
-  const b = childLink(`sketch`, 0, 0, 100, 50, `graine`);
-  const c = childLink(`sketch`, 0, 0, 100, 50, `autre`);
+  const a = trunkLine(`sketch`, 0, 0, 100, `graine`);
+  const b = trunkLine(`sketch`, 0, 0, 100, `graine`);
+  const c = trunkLine(`sketch`, 0, 0, 100, `autre`);
   assert.equal(a, b);
   assert.notEqual(a, c);
-  assert.ok(a.startsWith(`M 0.0 0.0`));
-  assert.ok(a.endsWith(`100.0 50.0`));
+  assert.ok(a!.startsWith(`M 0.0 0.0`));
+  assert.ok(a!.endsWith(`0.0 100.0`));
   assert.ok(trunkBranch(`sketch`, 10, 0, 90, 80, `t`).endsWith(`90.0 80.0`));
+  assert.equal(trunkLine(`curve`, 0, 0, 100, `x`), null);
 });
 
 test(`outils de trace : nombres valides et formes attendues`, () => {

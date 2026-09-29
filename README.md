@@ -2,7 +2,7 @@
 
 Plugin Obsidian d'ecriture en branche : une note est representee sous forme de carte mentale dont chaque noeud porte un veritable paragraphe.
 
-Etat : phase 2 (vue Carte en lecture seule : zoom, deplacement, pliage, selection).
+Etat : phase 3 (vue Carte verticale et vue Paragraphe synchronisee avec le fichier).
 
 ## Installation avec BRAT
 

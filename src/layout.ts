@@ -60,64 +60,41 @@ export function flatten(root: LNode): LNode[] {
   return out;
 }
 
-function shift(n: LNode, dy: number): void {
-  n.y += dy;
-  n.children.forEach((c) => shift(c, dy));
+// Abscisse de la ligne verticale d'ou partent les enfants d'un noeud.
+export function trunkX(n: LNode): number {
+  return n.x + Math.min(n.w / 2, 60);
 }
 
-// Les tailles (w, h) doivent etre renseignees avant l'appel. La racine est placee en (0, 0),
-// une ligne verticale part de son centre et les noeuds de premier niveau sont empiles dessous.
-// Les enfants d'un noeud sont places a sa droite, le noeud etant centre sur ses enfants.
+// Les tailles (w, h) doivent etre renseignees avant l'appel. La racine est placee en (0, 0).
+// Les noeuds de premier niveau sont empiles sous la racine, alignes a gauche. Les enfants d'un
+// noeud sont empiles sous lui, decales vers la droite, ce qui garde la carte etroite.
 export function computeLayout(root: LNode, compact: number): Bounds {
   const c = compact;
-  const hGap = 48 * c;
-  const vGap = 14 * c;
-  const vGapTop = 34 * c;
-  const rootGap = 56 * c;
-  const branchOffset = 90 * c;
+  const vGap = 16 * c;
+  const vGapTop = 26 * c;
+  const rootGap = 30 * c;
+  const indent = 36 * c;
 
-  const place = (n: LNode, x: number, top: number): { top: number; bottom: number } => {
+  // Place le sous-arbre et renvoie l'ordonnee de son bord inferieur.
+  const place = (n: LNode, x: number, y: number): number => {
     n.x = x;
-    if (n.children.length === 0) {
-      n.y = top;
-      return { top, bottom: top + n.h };
-    }
-    const gap = n.depth === 0 ? vGapTop : vGap;
-    let cursor = top;
-    for (const child of n.children) {
-      const r = place(child, x + n.w + hGap, cursor);
-      if (r.top < cursor) {
-        const d = cursor - r.top;
-        shift(child, d);
-        r.top += d;
-        r.bottom += d;
+    n.y = y;
+    let bottom = y + n.h;
+    if (n.children.length > 0) {
+      const childX = n.depth === 0 ? x : trunkX(n) + indent;
+      const gap = n.depth === 0 ? vGapTop : vGap;
+      let cursor = bottom + (n.depth === 0 ? rootGap : vGap);
+      for (const child of n.children) {
+        bottom = place(child, childX, cursor);
+        cursor = bottom + gap;
       }
-      cursor = r.bottom + gap;
     }
-    const first = n.children[0];
-    const last = n.children[n.children.length - 1];
-    const center = (first.y + first.h / 2 + last.y + last.h / 2) / 2;
-    n.y = center - n.h / 2;
-    return { top: Math.min(top, n.y), bottom: Math.max(cursor - gap, n.y + n.h) };
+    return bottom;
   };
+  place(root, 0, 0);
 
-  root.x = 0;
-  root.y = 0;
-  const lineX = root.w / 2;
-  let cursor = root.h + rootGap;
-  for (const child of root.children) {
-    const r = place(child, lineX + branchOffset, cursor);
-    if (r.top < cursor) {
-      const d = cursor - r.top;
-      shift(child, d);
-      r.bottom += d;
-    }
-    cursor = r.bottom + vGapTop;
-  }
-
-  const all = flatten(root);
   const b: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-  for (const n of all) {
+  for (const n of flatten(root)) {
     b.minX = Math.min(b.minX, n.x);
     b.minY = Math.min(b.minY, n.y);
     b.maxX = Math.max(b.maxX, n.x + n.w);
@@ -126,11 +103,8 @@ export function computeLayout(root: LNode, compact: number): Bounds {
   return b;
 }
 
-// Noeud voisin de meme niveau, dans l'ordre d'affichage.
-export function neighbor(list: LNode[], cur: LNode, dir: `up` | `down`): LNode | null {
-  const step = dir === `up` ? -1 : 1;
-  for (let j = list.indexOf(cur) + step; j >= 0 && j < list.length; j += step) {
-    if (list[j].depth === cur.depth) return list[j];
-  }
-  return null;
+// Noeud precedent ou suivant dans l'ordre d'affichage (racine comprise).
+export function sequential(list: LNode[], cur: LNode, dir: `up` | `down`): LNode | null {
+  const i = list.indexOf(cur) + (dir === `up` ? -1 : 1);
+  return i >= 0 && i < list.length ? list[i] : null;
 }
