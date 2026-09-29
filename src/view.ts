@@ -1,4 +1,5 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { EditorView } from "@codemirror/view";
+import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import type MindmapWritingPlugin from "./main";
 import { flattenDoc, joinBody, locateInSections, MmDoc, nodeByKey, parseNote, pathTitles, serializeNote, splitBody } from "./model";
 import { ParagraphPane } from "./paragraph";
@@ -24,6 +25,8 @@ export class MindmapView extends ItemView {
   private expectedTitle = ``;
   private pendingTimer: number | null = null;
   private cursors = new Map<string, number>();
+  private noteLeaf: WorkspaceLeaf | null = null;
+  private noteCursors = new Map<string, { line: number; ch: number }>();
 
   constructor(leaf: WorkspaceLeaf, plugin: MindmapWritingPlugin) {
     super(leaf);
@@ -56,11 +59,11 @@ export class MindmapView extends ItemView {
         void this.plugin.saveSettings(false);
       },
       onSelect: (key) => void this.onSelect(key),
-      onEnter: () => this.pane?.focus(),
+      onEnter: () => this.focusNote(),
     });
     this.pane = new ParagraphPane(this.paneHost, {
       onChange: () => this.schedulePaneWrite(),
-      onEscape: () => this.renderer?.focus(),
+      onEscape: () => this.focusMap(),
     });
     this.setupSplitter();
     this.applyLayout();
@@ -81,6 +84,7 @@ export class MindmapView extends ItemView {
     const s = this.plugin.settings;
     for (const pos of [`right`, `left`, `top`, `bottom`]) this.splitEl.removeClass(`mmw-pos-${pos}`);
     this.splitEl.addClass(`mmw-pos-${s.panePosition}`);
+    this.splitEl.toggleClass(`mmw-native`, s.paragraphMode === `native`);
     this.paneHost.style.flex = `0 0 ${s.paneSize}px`;
   }
 
@@ -130,23 +134,135 @@ export class MindmapView extends ItemView {
       renderer.setDoc(null, ``, true);
       return;
     }
-    const text = await this.app.vault.cachedRead(file);
+    const text = this.plugin.getOpenText(file) ?? (await this.app.vault.cachedRead(file));
     if (token !== this.renderToken || this.renderer !== renderer) return;
     const doc = parseNote(text, file.name);
     this.doc = doc;
     renderer.setDoc(doc, file.path, serializeNote(doc) === text);
-    this.syncPane();
+    if (!this.isNative()) this.syncPane();
   }
 
   // Redessine la carte apres un changement de reglage, sans relire le fichier.
   redraw() {
     this.applyLayout();
     this.renderer?.rebuild();
+    if (this.selectedKey) {
+      if (this.isNative()) void this.revealInNote(this.selectedKey, false);
+      else this.loadPane();
+    }
   }
 
-  // ---------------------------------------------------------------- vue Paragraphe
+  private isNative(): boolean {
+    return this.plugin.settings.paragraphMode === `native`;
+  }
+
+  // ---------------------------------------------------------------- note Obsidian en vis-a-vis
+
+  focusMap() {
+    this.app.workspace.setActiveLeaf(this.leaf, { focus: true });
+    this.renderer?.focus();
+  }
+
+  // Passe en saisie du paragraphe : dans l'editeur d'Obsidian ou dans l'editeur simple.
+  focusNote() {
+    if (!this.renderer) return;
+    const key = this.renderer.getSelectedKey();
+    if (!key) return;
+    this.selectedKey = key;
+    if (this.isNative()) void this.revealInNote(key, true);
+    else this.pane?.focus();
+  }
+
+  private async ensureNoteLeaf(file: TFile): Promise<WorkspaceLeaf> {
+    const ws = this.app.workspace;
+    let leaf = this.noteLeaf;
+    if (leaf && !ws.getLeavesOfType(`markdown`).includes(leaf)) leaf = null;
+    if (!leaf) {
+      const pos = this.plugin.settings.panePosition;
+      const direction = pos === `right` || pos === `left` ? `vertical` : `horizontal`;
+      leaf = ws.createLeafBySplit(this.leaf, direction, pos === `left` || pos === `top`);
+    }
+    this.noteLeaf = leaf;
+    const v = leaf.view;
+    if (!(v instanceof MarkdownView) || !v.file || v.file.path !== file.path) {
+      await leaf.openFile(file, { active: false });
+    }
+    return leaf;
+  }
+
+  // Memorise la position du curseur dans la note si elle se trouve dans le texte du noeud quitte.
+  private rememberNoteCursor(key: string | null) {
+    if (!key || !this.doc || !this.noteLeaf) return;
+    const view = this.noteLeaf.view;
+    const node = nodeByKey(this.doc, key);
+    if (!(view instanceof MarkdownView) || !node || node.line === undefined || node.endLine === undefined) return;
+    const cursor = view.editor.getCursor();
+    if (cursor.line > node.line && cursor.line < node.endLine) this.noteCursors.set(key, { line: cursor.line, ch: cursor.ch });
+  }
+
+  // Affiche le titre du noeud dans la note. Avec focus, place aussi le curseur dans le texte du noeud.
+  private async revealInNote(key: string, focus: boolean) {
+    const file = this.plugin.lastFile;
+    const node = this.doc ? nodeByKey(this.doc, key) : null;
+    if (!file || !node) return;
+    const leaf = await this.ensureNoteLeaf(file);
+    const view = leaf.view;
+    if (!(view instanceof MarkdownView)) return;
+    const editor = view.editor;
+    const last = editor.lastLine();
+    const line = Math.min(node.line ?? 0, last);
+
+    if (view.getMode() === `source`) {
+      this.scrollToLine(view, line);
+    } else {
+      leaf.setEphemeralState({ line });
+    }
+
+    if (focus) {
+      if (view.getMode() !== `source`) {
+        await view.setState({ ...view.getState(), mode: `source` }, { history: false });
+      }
+      this.app.workspace.setActiveLeaf(leaf, { focus: true });
+      const first = Math.min(line + 1, last);
+      let end = Math.min((node.endLine ?? first + 1) - 1, last);
+      while (end > first && editor.getLine(end).trim() === ``) end--;
+      end = Math.max(end, first);
+      const remembered = this.noteCursors.get(key);
+      const mode = this.plugin.settings.cursorPosition;
+      let target = { line: end, ch: editor.getLine(end).length };
+      if (mode === `start`) target = { line: first, ch: 0 };
+      else if (mode === `last` && remembered && remembered.line >= first && remembered.line <= end) target = remembered;
+      editor.setCursor(target);
+      editor.focus();
+    } else if (node.line !== undefined) {
+      editor.setCursor({ line, ch: 0 });
+    }
+  }
+
+  private scrollToLine(view: MarkdownView, line: number) {
+    const editor = view.editor;
+    try {
+      const cm = (editor as unknown as { cm?: EditorView }).cm;
+      if (cm) {
+        const pos = cm.state.doc.line(Math.min(line + 1, cm.state.doc.lines)).from;
+        cm.dispatch({ effects: EditorView.scrollIntoView(pos, { y: `start`, yMargin: 12 }) });
+        return;
+      }
+    } catch {
+      // repli ci-dessous
+    }
+    editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
+  }
+
+  // ---------------------------------------------------------------- vue Paragraphe simple
 
   private async onSelect(key: string | null) {
+    if (this.isNative()) {
+      this.rememberNoteCursor(this.selectedKey);
+      this.selectedKey = key;
+      if (key) await this.revealInNote(key, false);
+      return;
+    }
     await this.flushPane();
     if (this.selectedKey && this.pane) this.cursors.set(this.selectedKey, this.pane.getCursor());
     this.selectedKey = key;

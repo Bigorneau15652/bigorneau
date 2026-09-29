@@ -130,7 +130,7 @@ export function childLink(style: BranchStyle, x1: number, y1: number, x2: number
   const pts = elbowPoints(x1, y1, x2, y2, sx, 12);
   if (style === `elbow`) return polyPath(pts);
   const rnd = rng(seed);
-  return smoothPath(wobble(resample(pts, 28, false), rnd, WOBBLE, false), false);
+  return smoothPath(wobble(resample(pts, 10, false), rnd, WOBBLE * 0.7, false), false);
 }
 
 export function trunkRadius(ly0: number, y2: number, lx: number, x2: number): number {
@@ -161,7 +161,7 @@ export function trunkBranch(style: BranchStyle, lx: number, ly0: number, x2: num
   }
   pts.push({ x: x2, y: y2 });
   if (style === `elbow`) return polyPath(pts);
-  return smoothPath(wobble(resample(pts, 26, false), rng(seed), WOBBLE * 0.7, false), false);
+  return smoothPath(wobble(resample(pts, 8, false), rng(seed), WOBBLE * 0.6, false), false);
 }
 
 export type FrameShape = { kind: `path`; d: string } | { kind: `rect`; rx: number } | null;

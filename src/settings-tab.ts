@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type MindmapWritingPlugin from "./main";
-import type { BranchStyle, CursorPosition, FrameStyle, LongTitles, PanePosition } from "./settings";
+import type { BranchStyle, CursorPosition, FrameStyle, LongTitles, PanePosition, ParagraphMode } from "./settings";
 
 export class MmSettingTab extends PluginSettingTab {
   private plugin: MindmapWritingPlugin;
@@ -85,11 +85,25 @@ export class MmSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl).setName(`Vue Paragraphe`).setHeading();
+    new Setting(containerEl).setName(`Rédaction`).setHeading();
 
     new Setting(containerEl)
-      .setName(`Position de la vue Paragraphe`)
-      .setDesc(`Emplacement de la zone de rédaction par rapport à la carte. Sa taille se règle en faisant glisser la barre de séparation.`)
+      .setName(`Mode de rédaction`)
+      .setDesc(`Note Obsidian en vis-à-vis : la carte pilote l'éditeur réel d'Obsidian, ouvert à côté (aperçu en direct, images, tableaux, callouts, Excalidraw, Dataview). Éditeur intégré simple : zone de texte limitée à un seul nœud, sans aperçu en direct.`)
+      .addDropdown((d) =>
+        d
+          .addOption(`native`, `Note Obsidian en vis-à-vis (recommandé)`)
+          .addOption(`simple`, `Éditeur intégré simple (limité)`)
+          .setValue(s.paragraphMode)
+          .onChange(async (v) => {
+            s.paragraphMode = v as ParagraphMode;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(`Position de la zone de rédaction`)
+      .setDesc(`Emplacement par rapport à la carte. Avec l'éditeur intégré simple, la taille se règle en faisant glisser la barre de séparation.`)
       .addDropdown((d) =>
         d
           .addOption(`right`, `À droite de la carte`)
@@ -105,6 +119,7 @@ export class MmSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(`Position du curseur à l'ouverture d'un paragraphe`)
+      .setDesc(`S'applique quand vous appuyez sur Entrée sur un titre sélectionné de la carte.`)
       .addDropdown((d) =>
         d
           .addOption(`last`, `Là où la saisie s'était arrêtée`)

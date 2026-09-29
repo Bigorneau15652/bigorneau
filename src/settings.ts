@@ -5,6 +5,7 @@ export type FrameStyle = `sketch` | `rounded` | `straight` | `none`;
 export type BranchStyle = `sketch` | `curve` | `elbow` | `straight`;
 export type PanePosition = `right` | `left` | `top` | `bottom`;
 export type CursorPosition = `last` | `start` | `end`;
+export type ParagraphMode = `native` | `simple`;
 
 export interface MmSettings {
   longTitles: LongTitles;
@@ -16,6 +17,7 @@ export interface MmSettings {
   panePosition: PanePosition;
   paneSize: number;
   cursorPosition: CursorPosition;
+  paragraphMode: ParagraphMode;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -28,4 +30,5 @@ export const DEFAULT_SETTINGS: MmSettings = {
   panePosition: `right`,
   paneSize: 380,
   cursorPosition: `last`,
+  paragraphMode: `native`,
 };

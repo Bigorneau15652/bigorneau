@@ -345,3 +345,9 @@
   color: var(--text-accent);
   font-weight: 600;
 }
+
+/* Mode note Obsidian en vis-a-vis : la carte occupe toute la vue */
+.mmw-split.mmw-native .mmw-splitter,
+.mmw-split.mmw-native .mmw-pane-host {
+  display: none;
+}
