@@ -3,7 +3,7 @@ import { debounce, MarkdownView, Platform, Plugin, TFile, WorkspaceLeaf } from "
 import { noteExtension } from "./active-chapter";
 import { comboMatches } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
-import { DEFAULT_SETTINGS, MmSettings } from "./settings";
+import { DEFAULT_SETTINGS, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
 
 export default class MindmapWritingPlugin extends Plugin {
@@ -14,7 +14,7 @@ export default class MindmapWritingPlugin extends Plugin {
   editorViews = new Set<EditorView>();
 
   async onload() {
-    this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadData()) };
+    this.settings = migrateSettings(await this.loadData());
     this.addSettingTab(new MmSettingTab(this.app, this));
     this.applyBodySettings();
 
@@ -113,6 +113,7 @@ export default class MindmapWritingPlugin extends Plugin {
   }
 
   onunload() {
+    void this.saveData(this.settings);
     this.forEachView((v) => v.clearActive());
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MINDMAP);
     document.body.style.removeProperty(`--mmw-inactive-opacity`);
@@ -142,12 +143,29 @@ export default class MindmapWritingPlugin extends Plugin {
     document.body.style.setProperty(`--mmw-inactive-opacity`, String(this.settings.inactiveOpacity));
   }
 
+  // Ecriture differee : evite d'enregistrer a chaque cran d'une reglette.
+  private persistLater = debounce(() => void this.saveData(this.settings), 400, true);
+
   // Enregistre les reglages et, si demande, redessine les cartes ouvertes.
   async saveSettings(redraw = true) {
-    await this.saveData(this.settings);
     this.applyBodySettings();
+    this.persistLater();
     if (!redraw) return;
     this.forEachView((v) => v.redraw());
+  }
+
+  // Applique des reglages modifies depuis la carte.
+  async updateSettings(patch: Partial<MmSettings>) {
+    Object.assign(this.settings, patch);
+    await this.saveSettings();
+  }
+
+  // Ouvre la page de reglages du plugin dans les parametres d'Obsidian.
+  openSettings() {
+    const setting = (this.app as unknown as { setting?: { open: () => void; openTabById: (id: string) => void } }).setting;
+    if (!setting) return;
+    setting.open();
+    setting.openTabById(this.manifest.id);
   }
 
   private rememberFile(file: TFile | null): boolean {

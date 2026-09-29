@@ -3,10 +3,15 @@
 import { computeStats, MmDoc } from "./model";
 import { buildLayoutTree, Bounds, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
 import { framePath, trunkBranch, trunkLine, trunkRadius } from "./sketch";
+import { MapControls } from "./controls";
 import type { MmSettings } from "./settings";
 
 export interface MapCallbacks {
-  onCompactChange: (v: number) => void;
+  // Applique et enregistre des reglages modifies depuis les commandes de la carte.
+  onChange: (patch: Partial<MmSettings>) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onOpenSettings: () => void;
   // Appele quand l'utilisateur change de noeud selectionne (null : plus aucun noeud).
   onSelect?: (key: string | null) => void;
   // Appele quand l'utilisateur appuie sur Entree avec un noeud selectionne.
@@ -23,8 +28,7 @@ export class MapRenderer {
   private svgEl: SVGSVGElement;
   private messageEl: HTMLElement;
   private statusEl: HTMLElement;
-  private zoomLabel: HTMLElement;
-  private slider: HTMLInputElement;
+  private controls: MapControls;
 
   private doc: MmDoc | null = null;
   private identical = true;
@@ -57,41 +61,17 @@ export class MapRenderer {
     this.messageEl.className = `mmw-message`;
     this.mapEl.append(this.worldEl, this.messageEl);
 
-    const bar = document.createElement(`div`);
-    bar.className = `mmw-toolbar`;
-    const button = (label: string, title: string, fn: () => void): HTMLButtonElement => {
-      const b = document.createElement(`button`);
-      b.textContent = label;
-      b.title = title;
-      b.setAttribute(`aria-label`, title);
-      b.addEventListener(`click`, fn);
-      bar.appendChild(b);
-      return b;
-    };
-    button(`−`, `Dézoomer`, () => this.zoomBy(1 / 1.2));
-    this.zoomLabel = document.createElement(`span`);
-    this.zoomLabel.className = `mmw-zoom-label`;
-    bar.appendChild(this.zoomLabel);
-    button(`+`, `Zoomer`, () => this.zoomBy(1.2));
-    button(`Recentrer`, `Recentrer la carte`, () => this.fit());
-    button(`Replier`, `Replier toutes les branches`, () => this.collapseAll());
-    button(`Déplier`, `Déplier toutes les branches`, () => this.expandAll());
-    const compactLabel = document.createElement(`span`);
-    compactLabel.textContent = `Compacité`;
-    compactLabel.className = `mmw-compact-label`;
-    bar.appendChild(compactLabel);
-    this.slider = document.createElement(`input`);
-    this.slider.type = `range`;
-    this.slider.min = `0.5`;
-    this.slider.max = `1.6`;
-    this.slider.step = `0.05`;
-    this.slider.title = `Compacité de l'affichage`;
-    this.slider.addEventListener(`input`, () => {
-      this.callbacks.onCompactChange(Number(this.slider.value));
-      this.rebuild();
+    this.controls = new MapControls(this.mapEl, this.getSettings, {
+      zoomIn: () => this.zoomBy(1.2),
+      zoomOut: () => this.zoomBy(1 / 1.2),
+      recenter: () => this.fit(),
+      expandAll: () => this.expandAll(),
+      collapseAll: () => this.collapseAll(),
+      undo: () => this.callbacks.onUndo(),
+      redo: () => this.callbacks.onRedo(),
+      openSettings: () => this.callbacks.onOpenSettings(),
+      change: (patch) => this.callbacks.onChange(patch),
     });
-    bar.appendChild(this.slider);
-    this.mapEl.appendChild(bar);
 
     this.statusEl = document.createElement(`div`);
     this.statusEl.className = `mmw-status`;
@@ -115,6 +95,7 @@ export class MapRenderer {
   destroy(): void {
     this.cleanups.forEach((fn) => fn());
     this.cleanups = [];
+    this.controls.destroy();
     this.mapEl.replaceChildren();
     this.mapEl.classList.remove(`mmw-map`);
   }
@@ -140,9 +121,8 @@ export class MapRenderer {
 
   rebuild(): void {
     const s = this.getSettings();
-    this.slider.value = String(s.compactness);
-    this.mapEl.style.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
-    this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
+    this.applyAppearance(s);
+    this.controls.refresh();
 
     if (!this.doc) {
       this.worldEl.replaceChildren();
@@ -196,6 +176,23 @@ export class MapRenderer {
     else this.applyTransform();
   }
 
+  // Traduit les reglages d'apparence en variables CSS de la carte.
+  private applyAppearance(s: MmSettings): void {
+    const st = this.mapEl.style;
+    st.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
+    st.setProperty(`--mmw-stroke`, s.strokeColor || `var(--text-normal)`);
+    st.setProperty(`--mmw-fill`, s.fillColor || `transparent`);
+    st.setProperty(`--mmw-stroke-w`, `${s.strokeWidth}px`);
+    st.setProperty(`--mmw-dash`, s.strokeDash === `dashed` ? `9 6` : s.strokeDash === `dotted` ? `0.1 6` : `none`);
+    st.setProperty(
+      `--mmw-font`,
+      s.fontFamily === `handwritten` ? `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` : s.fontFamily === `mono` ? `var(--font-monospace, monospace)` : `inherit`
+    );
+    st.setProperty(`--mmw-font-scale`, String(s.fontScale));
+    st.setProperty(`--mmw-align`, s.textAlign);
+    this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
+  }
+
   private createNodeEl(n: LNode, s: MmSettings): HTMLElement {
     const el = document.createElement(`div`);
     el.className = `mmw-node mmw-depth-${Math.min(n.depth, 3)}`;
@@ -233,11 +230,11 @@ export class MapRenderer {
   private draw(s: MmSettings): void {
     this.svgEl.replaceChildren();
     if (!this.root) return;
-    for (const n of this.list) {
-      const shape = framePath(s.frameStyle, n.x, n.y, n.w, n.h, n.key, n.depth === 0);
+    for (const n of s.showFrames ? this.list : []) {
+      const shape = framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, s.corners, s.roughness);
       const cls = n.depth === 0 ? `mmw-frame mmw-frame-root` : `mmw-frame`;
-      if (shape && shape.kind === `path`) this.path(shape.d, cls);
-      else if (shape && shape.kind === `rect`) {
+      if (shape.kind === `path`) this.path(shape.d, cls);
+      else {
         const r = document.createElementNS(SVG_NS, `rect`);
         r.setAttribute(`x`, String(n.x));
         r.setAttribute(`y`, String(n.y));
@@ -251,7 +248,7 @@ export class MapRenderer {
     const root = this.root;
     const chain = (x: number, y1: number, y2: number, seed: string): void => {
       if (y2 - y1 < 1) return;
-      this.path(trunkLine(s.branchStyle, x, y1, y2, seed) ?? `M ${x} ${y1} L ${x} ${y2}`, `mmw-line`);
+      this.path(trunkLine(s.branchStyle, x, y1, y2, seed, s.roughness) ?? `M ${x} ${y1} L ${x} ${y2}`, `mmw-line`);
     };
     // Lien entre la racine et le premier noeud de premier niveau.
     if (root.children.length > 0) {
@@ -265,8 +262,8 @@ export class MapRenderer {
       let trunkEnd = y0;
       for (const c of n.children) {
         const cy = c.y + c.h / 2;
-        trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x));
-        this.path(trunkBranch(s.branchStyle, tx, y0, c.x, cy, `${n.key}>${c.key}`), `mmw-line`);
+        trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x, s.corners));
+        this.path(trunkBranch(s.branchStyle, tx, y0, c.x, cy, `${n.key}>${c.key}`, s.corners, s.roughness), `mmw-line`);
       }
       // Les noeuds de premier niveau sont relies entre eux par la meme ligne verticale.
       if (n.depth === 1 && n.parent) {
@@ -355,7 +352,7 @@ export class MapRenderer {
 
   private applyTransform(): void {
     this.worldEl.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
-    this.zoomLabel.textContent = `${Math.round(this.scale * 100)} %`;
+    this.controls.setZoom(this.scale);
   }
 
   fit(): void {
@@ -388,6 +385,7 @@ export class MapRenderer {
   }
 
   private onWheel(e: WheelEvent): void {
+    if (this.controls.contains(e.target)) return;
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
       this.zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
@@ -402,7 +400,8 @@ export class MapRenderer {
   private onPointerDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest(`.mmw-toolbar`)) return;
+    if (this.controls.contains(target)) return;
+    this.controls.closePopup();
     this.mapEl.focus();
     const fold = target.closest(`.mmw-fold`) as HTMLElement | null;
     if (fold) {
@@ -479,7 +478,8 @@ export class MapRenderer {
         if (cur && cur.hasChildren && cur.depth >= 1) this.toggleFold(cur.key);
         break;
       case `Escape`:
-        this.select(null);
+        if (this.controls.isOpen()) this.controls.closePopup();
+        else this.select(null);
         break;
       case `+`:
       case `=`:
