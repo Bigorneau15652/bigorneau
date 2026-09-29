@@ -370,3 +370,29 @@ export function locateInSections(text: string, cursor: number): { count: number;
   const offset = Math.max(0, cursor - starts[index] - (sec.heading?.length ?? 0) - lead);
   return { count: sections.length, index, offset };
 }
+
+// Noeud dont le texte contient une ligne du fichier (numero a partir de 0), avec sa cle.
+export function nodeAtLine(doc: MmDoc, line: number): { key: string; node: MmNode } {
+  const flat = flattenDoc(doc);
+  for (const entry of flat) {
+    const n = entry.node;
+    if (n.line !== undefined && n.endLine !== undefined && line >= n.line && line < n.endLine) return entry;
+  }
+  return line < (doc.root.line ?? 0) ? flat[0] : flat[flat.length - 1];
+}
+
+// Derniere ligne (exclue) du noeud et de toute sa descendance.
+export function branchEnd(node: MmNode): number {
+  let n = node;
+  while (n.children.length > 0) n = n.children[n.children.length - 1];
+  return n.endLine ?? node.endLine ?? 0;
+}
+
+// Lignes du chapitre actif : le noeud et ses sous-titres. Le noeud racine fait exception : seule son
+// introduction est active, les proprietes du debut de la note y sont comprises.
+export function activeLines(doc: MmDoc, key: string, includeSubtitles: boolean): { startLine: number; endLine: number } | null {
+  const node = nodeByKey(doc, key);
+  if (!node || node.line === undefined || node.endLine === undefined) return null;
+  if (node === doc.root) return { startLine: 0, endLine: node.endLine };
+  return { startLine: node.line, endLine: includeSubtitles ? branchEnd(node) : node.endLine };
+}

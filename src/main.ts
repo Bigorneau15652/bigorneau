@@ -1,4 +1,7 @@
-import { debounce, MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import type { EditorView } from "@codemirror/view";
+import { debounce, MarkdownView, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { noteExtension } from "./active-chapter";
+import { comboMatches } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { DEFAULT_SETTINGS, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
@@ -7,10 +10,43 @@ export default class MindmapWritingPlugin extends Plugin {
   // Derniere note Markdown consultee : la vue Carte s'y rattache.
   lastFile: TFile | null = null;
   settings: MmSettings = { ...DEFAULT_SETTINGS };
+  // Editeurs de note ouverts (tous les editeurs Markdown), pour retrouver celui qui est relie a la carte.
+  editorViews = new Set<EditorView>();
 
   async onload() {
     this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadData()) };
     this.addSettingTab(new MmSettingTab(this.app, this));
+    this.applyBodySettings();
+
+    // Extension d'editeur : grisage des chapitres inactifs, suivi du curseur, touches de navigation.
+    const notifyMoved = debounce(
+      (cm: EditorView) => {
+        this.forEachView((v) => {
+          if (v.ownsEditor(cm)) v.onNoteMoved(cm);
+        });
+      },
+      30,
+      true
+    );
+    this.registerEditorExtension(
+      noteExtension({
+        attach: (cm) => this.editorViews.add(cm),
+        detach: (cm) => this.editorViews.delete(cm),
+        changed: (cm) => {
+          if (this.isLinkedEditor(cm)) notifyMoved(cm);
+        },
+        key: (event, cm) => {
+          if (!this.isLinkedEditor(cm)) return false;
+          const dir = this.navigationFor(event);
+          if (!dir) return false;
+          event.preventDefault();
+          this.forEachView((v) => {
+            if (v.ownsEditor(cm)) void v.navigateFromNote(dir);
+          });
+          return true;
+        },
+      })
+    );
 
     this.registerView(VIEW_TYPE_MINDMAP, (leaf) => new MindmapView(leaf, this));
 
@@ -41,6 +77,20 @@ export default class MindmapWritingPlugin extends Plugin {
       void this.activateView();
     });
 
+    const navCommands: { id: string; name: string; dir: `up` | `down` | `left` | `right` }[] = [
+      { id: `chapter-previous`, name: `Chapitre précédent`, dir: `up` },
+      { id: `chapter-next`, name: `Chapitre suivant`, dir: `down` },
+      { id: `chapter-parent`, name: `Chapitre parent`, dir: `left` },
+      { id: `chapter-first-child`, name: `Premier sous-titre du chapitre`, dir: `right` },
+    ];
+    for (const c of navCommands) {
+      this.addCommand({
+        id: c.id,
+        name: c.name,
+        callback: () => this.forEachView((v) => void v.navigateFromNote(c.dir)),
+      });
+    }
+
     this.addCommand({
       id: `focus-note-paragraph`,
       name: `Aller à la rédaction du titre sélectionné`,
@@ -63,12 +113,39 @@ export default class MindmapWritingPlugin extends Plugin {
   }
 
   onunload() {
+    this.forEachView((v) => v.clearActive());
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MINDMAP);
+    document.body.style.removeProperty(`--mmw-inactive-opacity`);
+  }
+
+  // Un editeur est relie a la carte s'il se trouve dans le volet de note ouvert par une carte.
+  isLinkedEditor(cm: EditorView): boolean {
+    let linked = false;
+    this.forEachView((v) => {
+      if (v.ownsEditor(cm)) linked = true;
+    });
+    return linked;
+  }
+
+  // Direction de navigation correspondant a une touche pressee, selon les reglages.
+  private navigationFor(event: KeyboardEvent): `up` | `down` | `left` | `right` | null {
+    const s = this.settings;
+    const mac = Platform.isMacOS;
+    if (comboMatches(event, s.keyPrev, mac)) return `up`;
+    if (comboMatches(event, s.keyNext, mac)) return `down`;
+    if (comboMatches(event, s.keyParent, mac)) return `left`;
+    if (comboMatches(event, s.keyChild, mac)) return `right`;
+    return null;
+  }
+
+  private applyBodySettings() {
+    document.body.style.setProperty(`--mmw-inactive-opacity`, String(this.settings.inactiveOpacity));
   }
 
   // Enregistre les reglages et, si demande, redessine les cartes ouvertes.
   async saveSettings(redraw = true) {
     await this.saveData(this.settings);
+    this.applyBodySettings();
     if (!redraw) return;
     this.forEachView((v) => v.redraw());
   }

@@ -253,3 +253,40 @@ test(`positions des noeuds dans le fichier : lignes du titre et de fin`, () => {
   assert.equal(plain.root.children[0].line, 2);
   assert.equal(plain.root.children[1].line, 3);
 });
+
+import { nodeAtLine, branchEnd, activeLines } from "../src/model";
+
+// Lignes : 0 intro, 1 vide, 2 # A, 3 texte A, 4 ## A1, 5 texte A1, 6 ### A1a, 7 texte A1a, 8 ## A2, 9 texte A2, 10 # B, 11 texte B
+const CHAPTERS = `intro\n\n# A\ntexte A\n## A1\ntexte A1\n### A1a\ntexte A1a\n## A2\ntexte A2\n# B\ntexte B\n`;
+
+test(`chapitre contenant une ligne du fichier`, () => {
+  const doc = parseNote(CHAPTERS, `f.md`);
+  assert.equal(nodeAtLine(doc, 0).key, `r`);
+  assert.equal(nodeAtLine(doc, 2).key, `r.0`);
+  assert.equal(nodeAtLine(doc, 3).key, `r.0`);
+  assert.equal(nodeAtLine(doc, 5).key, `r.0.0`);
+  assert.equal(nodeAtLine(doc, 7).key, `r.0.0.0`);
+  assert.equal(nodeAtLine(doc, 9).key, `r.0.1`);
+  assert.equal(nodeAtLine(doc, 11).key, `r.1`);
+  assert.equal(nodeAtLine(doc, 40).key, `r.1`);
+});
+
+test(`chapitre actif : le noeud avec ses sous-titres`, () => {
+  const doc = parseNote(CHAPTERS, `f.md`);
+  assert.equal(branchEnd(doc.root.children[0]), 10);
+  assert.deepEqual(activeLines(doc, `r.0`, true), { startLine: 2, endLine: 10 });
+  assert.deepEqual(activeLines(doc, `r.0`, false), { startLine: 2, endLine: 4 });
+  assert.deepEqual(activeLines(doc, `r.0.0`, true), { startLine: 4, endLine: 8 });
+  assert.deepEqual(activeLines(doc, `r.0.1`, true), { startLine: 8, endLine: 10 });
+  assert.deepEqual(activeLines(doc, `r.1`, true), { startLine: 10, endLine: 12 });
+  assert.equal(activeLines(doc, `r.9`, true), null);
+});
+
+test(`chapitre actif : la racine se limite a son introduction`, () => {
+  const doc = parseNote(CHAPTERS, `f.md`);
+  assert.deepEqual(activeLines(doc, `r`, true), { startLine: 0, endLine: 2 });
+  const withTitle = parseNote(`---\na: b\n---\navant\n# Titre\nintro\n## S\nx\n`, `f.md`);
+  assert.equal(withTitle.hasGeneralTitle, true);
+  assert.deepEqual(activeLines(withTitle, `r`, true), { startLine: 0, endLine: 6 });
+  assert.equal(nodeAtLine(withTitle, 1).key, `r`);
+});

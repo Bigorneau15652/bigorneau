@@ -19,6 +19,13 @@ export interface MmSettings {
   cursorPosition: CursorPosition;
   paragraphMode: ParagraphMode;
   focusNoteOnSelect: boolean;
+  contrastEnabled: boolean;
+  inactiveOpacity: number;
+  includeSubtitles: boolean;
+  keyPrev: string;
+  keyNext: string;
+  keyParent: string;
+  keyChild: string;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -33,4 +40,11 @@ export const DEFAULT_SETTINGS: MmSettings = {
   cursorPosition: `last`,
   paragraphMode: `native`,
   focusNoteOnSelect: false,
+  contrastEnabled: true,
+  inactiveOpacity: 0.45,
+  includeSubtitles: true,
+  keyPrev: `Mod-ArrowUp`,
+  keyNext: `Mod-ArrowDown`,
+  keyParent: `Mod-ArrowLeft`,
+  keyChild: `Mod-ArrowRight`,
 };
