@@ -1,11 +1,17 @@
 import { debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
+import { DEFAULT_SETTINGS, MmSettings } from "./settings";
+import { MmSettingTab } from "./settings-tab";
 
 export default class MindmapWritingPlugin extends Plugin {
   // Derniere note Markdown consultee : la vue Carte s'y rattache.
   lastFile: TFile | null = null;
+  settings: MmSettings = { ...DEFAULT_SETTINGS };
 
   async onload() {
+    this.settings = { ...DEFAULT_SETTINGS, ...(await this.loadData()) };
+    this.addSettingTab(new MmSettingTab(this.app, this));
+
     this.registerView(VIEW_TYPE_MINDMAP, (leaf) => new MindmapView(leaf, this));
 
     this.app.workspace.onLayoutReady(() => {
@@ -40,6 +46,15 @@ export default class MindmapWritingPlugin extends Plugin {
 
   onunload() {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MINDMAP);
+  }
+
+  // Enregistre les reglages et, si demande, redessine les cartes ouvertes.
+  async saveSettings(redraw = true) {
+    await this.saveData(this.settings);
+    if (!redraw) return;
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MINDMAP)) {
+      if (leaf.view instanceof MindmapView) leaf.view.redraw();
+    }
   }
 
   private rememberFile(file: TFile | null): boolean {
