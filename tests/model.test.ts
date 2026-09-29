@@ -239,3 +239,17 @@ test(`curseur apres un titre tape : la section suivante est reperee`, () => {
   assert.deepEqual(locateInSections(text, 3), { count: 2, index: 0, offset: 3 });
   assert.equal(locateInSections(`texte simple`, 4).count, 1);
 });
+
+test(`positions des noeuds dans le fichier : lignes du titre et de fin`, () => {
+  const doc = parseNote(`---\na: b\n---\n# T\ntexte\n## S\nx\ny\n`, `f.md`);
+  assert.equal(doc.root.line, 3);
+  assert.equal(doc.root.endLine, 5);
+  const s = doc.root.children[0];
+  assert.equal(s.line, 5);
+  assert.equal(s.endLine, 8);
+  const plain = parseNote(`intro\n\n# A\n# B\n`, `f.md`);
+  assert.equal(plain.root.line, 0);
+  assert.equal(plain.root.endLine, 2);
+  assert.equal(plain.root.children[0].line, 2);
+  assert.equal(plain.root.children[1].line, 3);
+});

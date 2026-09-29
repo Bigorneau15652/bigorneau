@@ -1,4 +1,4 @@
-import { debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { debounce, MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { DEFAULT_SETTINGS, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
@@ -30,9 +30,27 @@ export default class MindmapWritingPlugin extends Plugin {
         if (this.lastFile && file.path === this.lastFile.path) refreshLater();
       })
     );
+    // La carte suit la frappe dans l'editeur d'Obsidian sans attendre l'enregistrement du fichier.
+    this.registerEvent(
+      this.app.workspace.on(`editor-change`, (_editor, info) => {
+        if (this.lastFile && info.file && info.file.path === this.lastFile.path) refreshLater();
+      })
+    );
 
     this.addRibbonIcon(`network`, `Ouvrir Mindmap Note Writing`, () => {
       void this.activateView();
+    });
+
+    this.addCommand({
+      id: `focus-note-paragraph`,
+      name: `Aller à la rédaction du titre sélectionné`,
+      callback: () => this.forEachView((v) => v.focusNote()),
+    });
+
+    this.addCommand({
+      id: `focus-map`,
+      name: `Revenir à la carte`,
+      callback: () => this.forEachView((v) => v.focusMap()),
     });
 
     this.addCommand({
@@ -52,9 +70,7 @@ export default class MindmapWritingPlugin extends Plugin {
   async saveSettings(redraw = true) {
     await this.saveData(this.settings);
     if (!redraw) return;
-    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MINDMAP)) {
-      if (leaf.view instanceof MindmapView) leaf.view.redraw();
-    }
+    this.forEachView((v) => v.redraw());
   }
 
   private rememberFile(file: TFile | null): boolean {
@@ -65,11 +81,24 @@ export default class MindmapWritingPlugin extends Plugin {
     return false;
   }
 
-  private refreshViews() {
+  private forEachView(fn: (view: MindmapView) => void) {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_MINDMAP)) {
-      const view = leaf.view;
-      if (view instanceof MindmapView) void view.refresh();
+      if (leaf.view instanceof MindmapView) fn(leaf.view);
     }
+  }
+
+  private refreshViews() {
+    this.forEachView((view) => void view.refresh());
+  }
+
+  // Texte actuel d'une note ouverte dans un editeur (y compris les modifications pas encore enregistrees).
+  getOpenText(file: TFile): string | null {
+    let text: string | null = null;
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const v = leaf.view;
+      if (text === null && v instanceof MarkdownView && v.file && v.file.path === file.path) text = v.getViewData();
+    });
+    return text;
   }
 
   async activateView() {

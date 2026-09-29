@@ -11,6 +11,10 @@ export interface MmNode {
   // Texte situe sous le titre, tel qu'il figure dans le fichier.
   body: string;
   children: MmNode[];
+  // Position dans le fichier (numeros de ligne a partir de 0) : ligne du titre et ligne qui suit la fin du texte.
+  // Pour le noeud racine sans titre general, `line` est la premiere ligne apres les proprietes.
+  line?: number;
+  endLine?: number;
 }
 
 export interface MmDoc {
@@ -178,6 +182,8 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
       heading: lines[idx],
       body: lines.slice(idx + 1, end).join(``),
       children: [],
+      line: fmCount + idx,
+      endLine: fmCount + end,
     };
   });
 
@@ -195,6 +201,8 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
       heading: null,
       body: introText,
       children: [],
+      line: fmCount,
+      endLine: fmCount + firstHeading,
     };
     rest = nodes;
   }
