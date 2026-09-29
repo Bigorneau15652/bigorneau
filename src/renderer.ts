@@ -7,6 +7,14 @@ import { MapControls } from "./controls";
 import type { MmSettings } from "./settings";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
+// Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
+export interface MapEdit {
+  kind: `child` | `sibling` | `rename` | `delete`;
+  key: string;
+  keys: string[];
+  title?: string;
+}
+
 export interface MapCallbacks {
   // Applique et enregistre des reglages qui ne sont pas des styles de case.
   onChange: (patch: Partial<MmSettings>) => void;
@@ -22,6 +30,8 @@ export interface MapCallbacks {
   onSelectionChange?: (keys: string[]) => void;
   // Appele quand l'utilisateur appuie sur Entree avec un noeud selectionne.
   onEnter?: () => void;
+  onEdit?: (edit: MapEdit) => void;
+  onMessage?: (text: string) => void;
 }
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
@@ -80,6 +90,9 @@ export class MapRenderer {
   private drag: { sx: number; sy: number; tx0: number; ty0: number; moved: boolean } | null = null;
   private marquee: { sx: number; sy: number; moved: boolean } | null = null;
   private cleanups: (() => void)[] = [];
+  // Saisie en cours du titre d'une case.
+  private renaming: { key: string; input: HTMLInputElement; original: string } | null = null;
+  private suspendBlur = false;
 
   constructor(private container: HTMLElement, private getSettings: () => MmSettings, private callbacks: MapCallbacks) {
     this.mapEl = container;
@@ -122,6 +135,10 @@ export class MapRenderer {
     this.on(this.mapEl, `pointerup`, (e) => this.onPointerUp(e as PointerEvent));
     this.on(this.mapEl, `wheel`, (e) => this.onWheel(e as WheelEvent), { passive: false });
     this.on(this.mapEl, `keydown`, (e) => this.onKey(e as KeyboardEvent));
+    this.on(this.mapEl, `dblclick`, (e) => {
+      const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
+      if (node) this.startRename(node.dataset.key!);
+    });
 
     const ro = new ResizeObserver(() => {
       if (this.mapEl.clientWidth === 0) return;
@@ -207,6 +224,10 @@ export class MapRenderer {
     }
     this.needsRebuild = false;
 
+    // La saisie en cours survit a la reconstruction (la note peut etre relue pendant la frappe).
+    const typing = this.renaming;
+    const typingFocused = !!typing && typing.input.ownerDocument.activeElement === typing.input;
+    this.suspendBlur = true;
     this.worldEl.replaceChildren(this.svgEl);
     this.root = buildLayoutTree(this.doc.root, `r`, 0, this.collapsed);
     this.list = flatten(this.root);
@@ -229,6 +250,14 @@ export class MapRenderer {
       if (n.hasChildren && n.depth >= 1) this.worldEl.appendChild(this.createFold(n));
     }
     this.draw(s);
+    if (typing) {
+      if (this.els.has(typing.key)) {
+        this.worldEl.appendChild(typing.input);
+        this.placeRename();
+        if (typingFocused) typing.input.focus();
+      } else this.renaming = null;
+    }
+    this.suspendBlur = false;
 
     // Les noeuds qui n'existent plus sont retires de la selection.
     const valid = new Set(flattenDoc(this.doc).map((e) => e.key));
@@ -507,6 +536,7 @@ export class MapRenderer {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (this.controls.contains(target)) return;
+    if (target.closest(`.mmw-rename`)) return;
     this.controls.closePopup();
     this.mapEl.focus();
     const fold = target.closest(`.mmw-fold`) as HTMLElement | null;
@@ -593,6 +623,13 @@ export class MapRenderer {
       this.selectAll();
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === `Enter`) {
+      if (this.selected) {
+        e.preventDefault();
+        this.callbacks.onEnter?.();
+      }
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const cur = this.selected ? this.list.find((n) => n.key === this.selected) ?? null : null;
     const go = (n: LNode | null): void => {
@@ -623,7 +660,26 @@ export class MapRenderer {
       case `Enter`:
         if (cur) {
           e.preventDefault();
-          this.callbacks.onEnter?.();
+          this.emitEdit(`sibling`, cur.key);
+        }
+        break;
+      case `Tab`:
+        if (cur && !e.shiftKey) {
+          e.preventDefault();
+          this.emitEdit(`child`, cur.key);
+        }
+        break;
+      case `F2`:
+        if (cur) {
+          e.preventDefault();
+          this.startRename(cur.key);
+        }
+        break;
+      case `Delete`:
+      case `Backspace`:
+        if (cur) {
+          e.preventDefault();
+          this.emitEdit(`delete`, cur.key);
         }
         break;
       case ` `:
@@ -648,7 +704,90 @@ export class MapRenderer {
         this.fit();
         break;
       default:
+        // Une lettre tapee sur une case selectionnee ouvre la saisie du titre avec cette lettre.
+        if (cur && e.key.length === 1) {
+          e.preventDefault();
+          this.startRename(cur.key, e.key);
+        }
     }
+  }
+
+  // ---------------------------------------------------------------- modification depuis la carte
+
+  private emitEdit(kind: MapEdit[`kind`], key: string): void {
+    const keys = this.getSelection();
+    this.callbacks.onEdit?.({ kind, key, keys: keys.includes(key) ? keys : [key] });
+  }
+
+  // Ouvre la saisie du titre sur la case. `initial` remplace le titre actuel (lettre tapee sur la case).
+  startRename(key: string, initial?: string): void {
+    if (!this.doc) return;
+    const n = this.list.find((x) => x.key === key);
+    if (!n) return;
+    if (n.node.level === 0) {
+      this.callbacks.onMessage?.(`Le titre de la racine est le nom du fichier : renommez la note pour le changer.`);
+      return;
+    }
+    this.commitRename(true, false);
+    if (this.selected !== key) this.select(key);
+    const input = document.createElement(`input`);
+    input.type = `text`;
+    input.className = `mmw-rename`;
+    input.spellcheck = false;
+    input.value = initial ?? n.node.title;
+    this.renaming = { key, input, original: n.node.title };
+    input.addEventListener(`keydown`, (e) => {
+      e.stopPropagation();
+      if (e.key === `Enter`) {
+        e.preventDefault();
+        this.commitRename(true, true);
+      } else if (e.key === `Escape`) {
+        e.preventDefault();
+        this.commitRename(false, true);
+      }
+    });
+    input.addEventListener(`input`, () => this.placeRename());
+    input.addEventListener(`blur`, () => {
+      if (!this.suspendBlur) this.commitRename(true, false);
+    });
+    this.worldEl.appendChild(input);
+    this.placeRename();
+    input.focus();
+    if (initial === undefined) input.select();
+  }
+
+  // Place la saisie sur la case, avec la meme police, et l'elargit si le titre est long.
+  private placeRename(): void {
+    const r = this.renaming;
+    if (!r) return;
+    const n = this.list.find((x) => x.key === r.key);
+    const el = this.els.get(r.key);
+    if (!n || !el) return;
+    const cs = getComputedStyle(el);
+    const st = r.input.style;
+    st.left = `${n.x}px`;
+    st.top = `${n.y}px`;
+    st.height = `${n.h}px`;
+    st.minWidth = `${n.w}px`;
+    st.width = `calc(${Math.max(4, r.input.value.length + 2)}ch + 24px)`;
+    st.fontFamily = cs.fontFamily;
+    st.fontSize = cs.fontSize;
+    st.fontWeight = cs.fontWeight;
+    st.textAlign = cs.textAlign;
+    el.style.visibility = `hidden`;
+  }
+
+  // Termine la saisie : valide (Entree, clic ailleurs) ou annule (Echap).
+  private commitRename(save: boolean, refocus: boolean): void {
+    const r = this.renaming;
+    if (!r) return;
+    this.renaming = null;
+    const value = r.input.value;
+    r.input.remove();
+    const el = this.els.get(r.key);
+    if (el) el.style.visibility = ``;
+    if (refocus) this.mapEl.focus();
+    if (save && value.trim() !== r.original) this.callbacks.onEdit?.({ kind: `rename`, key: r.key, keys: [r.key], title: value });
   }
 }
 

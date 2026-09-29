@@ -476,3 +476,21 @@
 .mmw-style > .mmw-scope:last-of-type {
   margin-bottom: 12px;
 }
+
+/* Saisie du titre d'une case */
+.mmw-rename {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 2px solid var(--interactive-accent);
+  border-radius: 9px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.25));
+  line-height: 1.35;
+}
+
+.mmw-rename:focus {
+  outline: none;
+}

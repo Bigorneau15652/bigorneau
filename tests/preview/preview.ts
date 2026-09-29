@@ -1,5 +1,6 @@
 import { applyLineEdits, parseNote } from "../../src/model";
-import { MapRenderer } from "../../src/renderer";
+import { MapEdit, MapRenderer } from "../../src/renderer";
+import { addNode, deleteNodes, EditResult, renameTitle } from "../../src/edit";
 import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings } from "../../src/settings";
 import { metaEditsFor, planReset, planStyle } from "../../src/style-edit";
 
@@ -62,6 +63,23 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
   onOpenSettings: () => calls.push(`settings`),
   onSelect: (key) => calls.push(`select:${key}`),
   onEnter: () => calls.push(`enter`),
+  onMessage: (m) => calls.push(`message:${m}`),
+  // Reproduit la vue : le nouveau texte est calcule, la note relue, la case creee passe en saisie.
+  onEdit: (edit: MapEdit) => {
+    calls.push(`edit:${edit.kind}:${edit.key}`);
+    let r: EditResult | null;
+    if (edit.kind === `delete`) r = deleteNodes(text, `Nom de la note.md`, edit.keys);
+    else if (edit.kind === `rename`) r = renameTitle(text, `Nom de la note.md`, edit.key, edit.title ?? ``);
+    else r = addNode(text, `Nom de la note.md`, edit.key, edit.kind);
+    if (!r) return;
+    text = r.text;
+    renderer.setDoc(parseNote(text, `Nom de la note.md`), `sample.md`, true);
+    if (edit.kind !== `rename` && r.key) {
+      renderer.reveal(r.key);
+      renderer.select(r.key, false);
+      if (edit.kind !== `delete`) renderer.startRename(r.key);
+    }
+  },
 });
 renderer.setDoc(parseNote(text, `Nom de la note.md`), `sample.md`, true);
 if (params.get(`collapse`) === `1`) renderer.collapseAll();

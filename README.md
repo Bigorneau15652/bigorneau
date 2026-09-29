@@ -2,7 +2,7 @@
 
 Plugin Obsidian d'ecriture en branche : une note est representee sous forme de carte mentale dont chaque noeud porte un veritable paragraphe.
 
-Etat : phase 4 (styles par niveau et par case, selection multiple, etiquettes, compacite sans contour).
+Etat : phase 6 (creation, renommage et suppression de titres depuis la carte). Tab cree un sous-titre, Entree un titre de meme niveau, F2 ou double-clic renomme, Suppr supprime avec confirmation, Cmd ou Ctrl + Entree passe a la redaction.
 
 ## Installation avec BRAT
 
