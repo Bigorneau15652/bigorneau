@@ -144,10 +144,15 @@ export function renderHeading(level: number, title: string, eol: string): string
   return (title ? `${hashes} ${title}` : hashes) + eol;
 }
 
-export function parseNote(text: string, fileName: string): MmDoc {
+export interface ParseOptions {
+  // Faux pour analyser un simple morceau de texte, sans chercher de proprietes YAML au debut.
+  frontmatter?: boolean;
+}
+
+export function parseNote(text: string, fileName: string, opts: ParseOptions = {}): MmDoc {
   const eol = text.includes(`\r\n`) ? `\r\n` : `\n`;
   const allLines = splitLines(text);
-  const fmCount = extractFrontmatter(allLines);
+  const fmCount = opts.frontmatter === false ? 0 : extractFrontmatter(allLines);
   const frontmatter = allLines.slice(0, fmCount).join(``);
   const lines = allLines.slice(fmCount);
   const matches = findHeadings(lines);
@@ -250,4 +255,110 @@ export function computeStats(doc: MmDoc): MmStats {
   };
   walk(doc.root, 0);
   return stats;
+}
+
+// Section d'un texte : un titre (absent pour le texte place avant le premier titre) et le texte qui le suit.
+export interface Section {
+  heading: string | null;
+  level: number;
+  title: string;
+  body: string;
+}
+
+// Decoupe un texte en sections, dans l'ordre du document, avec les memes regles de detection des titres.
+export function splitSections(text: string): Section[] {
+  const lines = splitLines(text);
+  const matches = findHeadings(lines);
+  const out: Section[] = [];
+  let cur: Section = { heading: null, level: 0, title: ``, body: `` };
+  let buf: string[] = [];
+  lines.forEach((line, i) => {
+    const m = matches[i];
+    if (m) {
+      cur.body = buf.join(``);
+      out.push(cur);
+      cur = { heading: line, level: m[1].length, title: (m[2] ?? ``).trim(), body: `` };
+      buf = [];
+    } else {
+      buf.push(line);
+    }
+  });
+  cur.body = buf.join(``);
+  out.push(cur);
+  return out;
+}
+
+// Retrouve un noeud a partir de sa cle : `r` pour la racine, `r.2.0` pour le premier enfant du troisieme noeud.
+export function nodeByKey(doc: MmDoc, key: string): MmNode | null {
+  const parts = key.split(`.`);
+  if (parts[0] !== `r`) return null;
+  let node: MmNode = doc.root;
+  for (let i = 1; i < parts.length; i++) {
+    const child = node.children[Number(parts[i])];
+    if (!child) return null;
+    node = child;
+  }
+  return node;
+}
+
+// Tous les noeuds dans l'ordre du document (racine comprise), avec leur cle.
+export function flattenDoc(doc: MmDoc): { key: string; node: MmNode }[] {
+  const out: { key: string; node: MmNode }[] = [];
+  const walk = (node: MmNode, key: string): void => {
+    out.push({ key, node });
+    node.children.forEach((c, i) => walk(c, `${key}.${i}`));
+  };
+  walk(doc.root, `r`);
+  return out;
+}
+
+// Titres de la racine jusqu'au noeud, pour afficher le chemin.
+export function pathTitles(doc: MmDoc, key: string): string[] {
+  const parts = key.split(`.`);
+  const titles: string[] = [];
+  let node: MmNode | undefined = doc.root;
+  titles.push(node.title);
+  for (let i = 1; i < parts.length && node; i++) {
+    node = node.children[Number(parts[i])];
+    if (node) titles.push(node.title === `` ? `(sans titre)` : node.title);
+  }
+  return titles;
+}
+
+// Le texte d'un noeud est affiche sans les lignes vides qui l'entourent, qui sont conservees a part.
+export interface BodyParts {
+  lead: string;
+  core: string;
+  trail: string;
+}
+
+export function splitBody(body: string): BodyParts {
+  const lead = /^(?:[ \t]*\r?\n)*/.exec(body)![0];
+  const rest = body.slice(lead.length);
+  const trail = /(?:\r?\n[ \t]*)*$/.exec(rest)![0];
+  return { lead, core: rest.slice(0, rest.length - trail.length), trail };
+}
+
+export function joinBody(parts: BodyParts, core: string): string {
+  return parts.lead + core + parts.trail;
+}
+
+// Position du curseur dans un texte contenant des titres : numero de la section qui le contient
+// (0 pour le texte avant le premier titre) et position dans le texte affiche de cette section.
+export function locateInSections(text: string, cursor: number): { count: number; index: number; offset: number } {
+  const sections = splitSections(text);
+  const starts: number[] = [];
+  let acc = 0;
+  for (const sec of sections) {
+    starts.push(acc);
+    acc += (sec.heading?.length ?? 0) + sec.body.length;
+  }
+  let index = 0;
+  starts.forEach((start, i) => {
+    if (cursor >= start) index = i;
+  });
+  const sec = sections[index];
+  const lead = splitBody(sec.body).lead.length;
+  const offset = Math.max(0, cursor - starts[index] - (sec.heading?.length ?? 0) - lead);
+  return { count: sections.length, index, offset };
 }

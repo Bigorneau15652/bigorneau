@@ -183,3 +183,59 @@ test(`reconstruction identique sur 3000 notes tirees au hasard`, () => {
     check(doc.root);
   }
 });
+
+import { splitSections, nodeByKey, flattenDoc, pathTitles, splitBody, joinBody } from "../src/model";
+
+test(`sections : texte avant le premier titre puis un element par titre`, () => {
+  const s = splitSections(`intro\n# A\ntexte\n## B\n`);
+  assert.equal(s.length, 3);
+  assert.equal(s[0].heading, null);
+  assert.equal(s[0].body, `intro\n`);
+  assert.equal(s[1].title, `A`);
+  assert.equal(s[2].level, 2);
+  assert.equal(s.map((x) => (x.heading ?? ``) + x.body).join(``), `intro\n# A\ntexte\n## B\n`);
+});
+
+test(`sections : un titre dans un bloc de code n est pas une section`, () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  assert.equal(splitSections(`${fence}\n# x\n${fence}\n`).length, 1);
+});
+
+test(`recherche d un noeud par sa cle, chemin et ordre du document`, () => {
+  const doc = parseNote(`# A\n## B\n### C\n## D\n`, `f.md`);
+  assert.equal(nodeByKey(doc, `r`)?.title, `A`);
+  assert.equal(nodeByKey(doc, `r.0.0`)?.title, `C`);
+  assert.equal(nodeByKey(doc, `r.1`)?.title, `D`);
+  assert.equal(nodeByKey(doc, `r.5`), null);
+  assert.equal(nodeByKey(doc, `x`), null);
+  assert.deepEqual(flattenDoc(doc).map((e) => e.node.title), [`A`, `B`, `C`, `D`]);
+  assert.deepEqual(pathTitles(doc, `r.0.0`), [`A`, `B`, `C`]);
+});
+
+test(`texte d un noeud : les lignes vides autour sont conservees`, () => {
+  assert.deepEqual(splitBody(`\nBonjour\nmonde\n\n`), { lead: `\n`, core: `Bonjour\nmonde`, trail: `\n\n` });
+  assert.deepEqual(splitBody(``), { lead: ``, core: ``, trail: `` });
+  assert.deepEqual(splitBody(`seul`), { lead: ``, core: `seul`, trail: `` });
+  assert.deepEqual(splitBody(`\n\n`), { lead: `\n\n`, core: ``, trail: `` });
+  for (const body of [`\nA\n\n`, `A`, `A  \nB\n`, `\r\nA\r\n`, ``, `\n`]) {
+    assert.equal(joinBody(splitBody(body), splitBody(body).core), body);
+  }
+});
+
+test(`modifier le texte d un noeud laisse le reste de la note intact`, () => {
+  const original = `# A\n\nun\n\n## B\n\ndeux\n\n## C\ntrois\n`;
+  const doc = parseNote(original, `f.md`);
+  const b = doc.root.children[0];
+  const parts = splitBody(b.body);
+  b.body = joinBody(parts, `deux modifie\nsur deux lignes`);
+  assert.equal(serializeNote(doc), `# A\n\nun\n\n## B\n\ndeux modifie\nsur deux lignes\n\n## C\ntrois\n`);
+});
+
+import { locateInSections } from "../src/model";
+
+test(`curseur apres un titre tape : la section suivante est reperee`, () => {
+  const text = `avant\n## Nouveau\n\nsuite du texte`;
+  assert.deepEqual(locateInSections(text, text.length), { count: 2, index: 1, offset: `suite du texte`.length });
+  assert.deepEqual(locateInSections(text, 3), { count: 2, index: 0, offset: 3 });
+  assert.equal(locateInSections(`texte simple`, 4).count, 1);
+});

@@ -3,6 +3,8 @@
 export type LongTitles = `ellipsis` | `wrap`;
 export type FrameStyle = `sketch` | `rounded` | `straight` | `none`;
 export type BranchStyle = `sketch` | `curve` | `elbow` | `straight`;
+export type PanePosition = `right` | `left` | `top` | `bottom`;
+export type CursorPosition = `last` | `start` | `end`;
 
 export interface MmSettings {
   longTitles: LongTitles;
@@ -11,6 +13,9 @@ export interface MmSettings {
   branchStyle: BranchStyle;
   showPrefix: boolean;
   compactness: number;
+  panePosition: PanePosition;
+  paneSize: number;
+  cursorPosition: CursorPosition;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -20,4 +25,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   branchStyle: `sketch`,
   showPrefix: false,
   compactness: 1,
+  panePosition: `right`,
+  paneSize: 380,
+  cursorPosition: `last`,
 };
