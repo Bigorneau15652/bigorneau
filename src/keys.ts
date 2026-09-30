@@ -22,6 +22,11 @@ export function eventToCombo(e: KeyLike, isMac: boolean): string {
   return parts.join(`-`);
 }
 
+// Cmd ou Ctrl + Entree, sans autre modificateur : passe de la carte a la note, et de la note a la carte.
+export function isModEnter(e: KeyLike): boolean {
+  return e.key === `Enter` && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+}
+
 export function comboMatches(e: KeyLike, combo: string, isMac: boolean): boolean {
   return combo !== `` && eventToCombo(e, isMac) === combo;
 }

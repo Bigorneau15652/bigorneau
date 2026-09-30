@@ -1,7 +1,7 @@
 import type { EditorView } from "@codemirror/view";
 import { debounce, Editor, MarkdownView, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
-import { comboMatches } from "./keys";
+import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { DEFAULT_SETTINGS, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
@@ -43,6 +43,14 @@ export default class MindmapWritingPlugin extends Plugin {
         },
         key: (event, cm) => {
           if (!this.isLinkedEditor(cm)) return false;
+          // Cmd ou Ctrl + Entree dans la note reliee : retour a la carte (meme raccourci que pour aller dans la note).
+          if (isModEnter(event)) {
+            event.preventDefault();
+            this.forEachView((v) => {
+              if (v.ownsEditor(cm)) v.focusMap();
+            });
+            return true;
+          }
           const dir = this.navigationFor(event);
           if (!dir) return false;
           event.preventDefault();
