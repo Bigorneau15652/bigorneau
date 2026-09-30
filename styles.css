@@ -811,3 +811,74 @@
 .mmw-map.mmw-dragging .mmw-eye {
   display: none;
 }
+
+/* Liens entre titres : fleches en pointille, de la couleur du texte du theme. */
+.mmw-link {
+  fill: none;
+  stroke: var(--mmw-link, var(--text-normal));
+  stroke-width: 1.6px;
+  stroke-dasharray: 6 5;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+
+.mmw-link-on {
+  stroke: var(--interactive-accent);
+  stroke-width: 2.6px;
+  opacity: 1;
+}
+
+.mmw-link-head {
+  fill: var(--mmw-link, var(--text-normal));
+}
+
+.mmw-link-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.mmw-link-temp {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.mmw-map.mmw-linking,
+.mmw-map.mmw-linking .mmw-node {
+  cursor: crosshair;
+}
+
+.mmw-link-hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  box-shadow: var(--shadow-s);
+}
+
+.mmw-link-other {
+  cursor: pointer;
+}
+
+.mmw-link-mark {
+  display: inline-flex;
+  flex: none;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.mmw-link-mark:hover {
+  opacity: 1;
+}

@@ -15,6 +15,7 @@ const layout = document.getElementById(`layout`)!;
 const app = new App(layout);
 const file = new TFile(`Note.md`);
 app.files.set(file.path, params.get(`text`) ?? ``);
+if (params.get(`other`) !== null) app.files.set(`Autre.md`, params.get(`other`) ?? ``);
 
 const plugin = {
   settings: { ...DEFAULT_SETTINGS },
@@ -34,7 +35,7 @@ const plugin = {
   },
 };
 for (const [k, v] of params) {
-  if (k === `text`) continue;
+  if (k === `text` || k === `other`) continue;
   const cur = (plugin.settings as unknown as Record<string, unknown>)[k];
   (plugin.settings as unknown as Record<string, unknown>)[k] = typeof cur === `boolean` ? v === `1` : typeof cur === `number` ? Number(v) : v;
 }
