@@ -111,6 +111,13 @@ export interface MmSettings {
   linkColored: boolean;
   // Note : masque les chapitres inactifs au lieu de les griser (seul le chapitre actif reste visible).
   hideInactive: boolean;
+  // Elements visibles sur la carte (menu de l'oeil) et vue en noir et blanc.
+  showTags: boolean;
+  showComments: boolean;
+  showWebLinks: boolean;
+  showExternalLinks: boolean;
+  showInternalLinks: boolean;
+  blackWhite: boolean;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -145,6 +152,12 @@ export const DEFAULT_SETTINGS: MmSettings = {
   hideMetaLines: true,
   linkColored: false,
   hideInactive: false,
+  showTags: true,
+  showComments: true,
+  showWebLinks: true,
+  showExternalLinks: true,
+  showInternalLinks: true,
+  blackWhite: false,
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).

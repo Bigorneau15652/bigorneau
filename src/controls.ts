@@ -26,7 +26,7 @@ export interface ControlActions {
   back: () => void;
 }
 
-type PopupKind = `menu` | `style` | `tags` | null;
+type PopupKind = `menu` | `style` | `view` | `tags` | null;
 
 const svg = (inner: string, size = 18, extra = ``): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${inner}</svg>`;
@@ -51,6 +51,7 @@ const ICONS: Record<string, string> = {
   tag: svg(`<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V4h9l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="8.5" r="1.2"/>`),
   link: svg(`<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>`),
   back: svg(`<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>`),
+  eye: svg(`<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`),
   trash: svg(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`, 16),
 };
 
@@ -128,6 +129,7 @@ export class MapControls {
   private tipEl: HTMLElement;
   private menuBtn: HTMLButtonElement;
   private styleBtn: HTMLButtonElement;
+  private viewBtn: HTMLButtonElement;
   private linkBtn: HTMLButtonElement;
   private backBtn: HTMLButtonElement;
   private zoomLabel: HTMLElement;
@@ -154,7 +156,8 @@ export class MapControls {
     this.linkBtn = iconButton(ICONS.link, `Relier deux titres par un lien`, () => this.actions.toggleLink());
     this.backBtn = iconButton(ICONS.back, `Revenir à la carte précédente`, () => this.actions.back());
     this.backBtn.style.display = `none`;
-    dock.append(this.menuBtn, this.styleBtn, this.linkBtn, this.backBtn);
+    this.viewBtn = iconButton(ICONS.eye, `Affichage : éléments visibles et vue`, () => this.toggle(`view`));
+    dock.append(this.menuBtn, this.styleBtn, this.viewBtn, this.linkBtn, this.backBtn);
 
     const zoom = h(`div`, `mmw-dock mmw-zoom`);
     this.zoomLabel = h(`span`, `mmw-zoom-label`, `100 %`);
@@ -312,6 +315,7 @@ export class MapControls {
     this.slider.value = String(this.getSettings().compactness);
     this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu` || this.open === `tags`);
     this.styleBtn.classList.toggle(`mmw-active`, this.open === `style`);
+    this.viewBtn.classList.toggle(`mmw-active`, this.open === `view`);
     this.scopeEl = null;
     if (this.open === null) {
       this.popup.style.display = `none`;
@@ -320,7 +324,7 @@ export class MapControls {
     }
     const scroll = this.popup.scrollTop;
     this.popup.classList.toggle(`mmw-popup-wide`, this.open === `tags`);
-    this.popup.replaceChildren(this.open === `menu` ? this.buildMenu() : this.open === `tags` ? this.buildTagsPanel() : this.buildStylePanel());
+    this.popup.replaceChildren(this.open === `menu` ? this.buildMenu() : this.open === `tags` ? this.buildTagsPanel() : this.open === `view` ? this.buildViewMenu() : this.buildStylePanel());
     this.popup.style.display = ``;
     this.popup.scrollTop = scroll;
     if (this.focusTagIndex !== null) {
@@ -406,54 +410,40 @@ export class MapControls {
 
   // ---------------------------------------------------------------- menu
 
+  // Elements de menu communs au menu burger et au menu de l'oeil.
+  private menuItem(icon: string, label: string, fn: () => void): HTMLElement {
+    const b = h(`button`, `mmw-menu-item`);
+    b.type = `button`;
+    const i = h(`span`, `mmw-menu-icon`);
+    i.innerHTML = icon;
+    b.append(i, h(`span`, `mmw-menu-label`, label));
+    b.addEventListener(`click`, fn);
+    return b;
+  }
+
+  private menuToggle(label: string, value: boolean, fn: (v: boolean) => void): HTMLElement {
+    const b = h(`button`, `mmw-menu-item`);
+    b.type = `button`;
+    const box = h(`span`, `mmw-check` + (value ? ` mmw-checked` : ``));
+    box.innerHTML = value ? ICONS.check : ``;
+    b.append(box, h(`span`, `mmw-menu-label`, label));
+    b.addEventListener(`click`, () => fn(!value));
+    return b;
+  }
+
+  // Menu burger : deplacements dans la carte, titres et position de la note.
   private buildMenu(): HTMLElement {
     const s = this.getSettings();
     const a = this.actions;
     const menu = h(`div`, `mmw-menu`);
-
-    const item = (icon: string, label: string, fn: () => void): HTMLElement => {
-      const b = h(`button`, `mmw-menu-item`);
-      b.type = `button`;
-      const i = h(`span`, `mmw-menu-icon`);
-      i.innerHTML = icon;
-      b.append(i, h(`span`, `mmw-menu-label`, label));
-      b.addEventListener(`click`, fn);
-      return b;
-    };
-    const toggle = (label: string, value: boolean, fn: (v: boolean) => void): HTMLElement => {
-      const b = h(`button`, `mmw-menu-item`);
-      b.type = `button`;
-      const box = h(`span`, `mmw-check` + (value ? ` mmw-checked` : ``));
-      box.innerHTML = value ? ICONS.check : ``;
-      b.append(box, h(`span`, `mmw-menu-label`, label));
-      b.addEventListener(`click`, () => fn(!value));
-      return b;
-    };
-
     menu.append(
-      item(ICONS.locate, `Recentrer la carte`, () => a.recenter()),
-      item(ICONS.collapse, `Tout replier`, () => a.collapseAll()),
-      item(ICONS.expand, `Tout déplier`, () => a.expandAll()),
+      this.menuItem(ICONS.locate, `Recentrer la carte`, () => a.recenter()),
+      this.menuItem(ICONS.collapse, `Tout replier`, () => a.collapseAll()),
+      this.menuItem(ICONS.expand, `Tout déplier`, () => a.expandAll()),
       h(`div`, `mmw-menu-sep`),
-      toggle(`Afficher le préfixe Markdown (#)`, s.showPrefix, (v) => a.change({ showPrefix: v })),
-      toggle(`Titres longs : passer à la ligne`, s.longTitles === `wrap`, (v) => a.change({ longTitles: v ? `wrap` : `ellipsis` })),
-      toggle(`Griser les chapitres inactifs`, s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
-      toggle(`Masquer les chapitres inactifs dans la note`, s.hideInactive, (v) => a.change({ hideInactive: v })),
-      toggle(`Inclure les sous-titres dans le chapitre actif`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v })),
-      toggle(`Flèches de lien toujours en bleu`, s.linkColored, (v) => a.change({ linkColored: v }))
+      this.menuToggle(`Afficher le préfixe (#)`, s.showPrefix, (v) => a.change({ showPrefix: v })),
+      this.menuToggle(`Titres longs à la ligne`, s.longTitles === `wrap`, (v) => a.change({ longTitles: v ? `wrap` : `ellipsis` }))
     );
-
-    const contrast = h(`div`, `mmw-menu-row`);
-    contrast.append(h(`div`, `mmw-menu-title`, `Contraste des chapitres inactifs`));
-    const range = h(`input`, `mmw-range`);
-    range.type = `range`;
-    range.min = `15`;
-    range.max = `90`;
-    range.step = `5`;
-    range.value = String(Math.round(s.inactiveOpacity * 100));
-    range.addEventListener(`change`, () => a.change({ inactiveOpacity: Number(range.value) / 100 }));
-    contrast.append(range);
-    menu.append(contrast);
 
     const positions: { value: PanePosition; label: string }[] = [
       { value: `right`, label: `Droite` },
@@ -468,13 +458,51 @@ export class MapControls {
 
     menu.append(
       h(`div`, `mmw-menu-sep`),
-      item(ICONS.tag, `Étiquettes…`, () => {
+      this.menuItem(ICONS.tag, `Étiquettes…`, () => {
         this.open = `tags`;
         this.refresh();
       }),
-      item(ICONS.settings, `Tous les paramètres`, () => a.openSettings()),
-      h(`div`, `mmw-menu-help`, `Flèches : se déplacer. Entrée : nouveau titre. Tab : sous-titre. F2 ou double clic : modifier le titre, l'étiquette et le commentaire. Cmd ou Ctrl + Maj + Entrée : passer dans la note et revenir. Espace : plier ou déplier. Cmd ou Ctrl + A : tout sélectionner. Maj + clic ou Maj + glisser : sélection multiple. Molette avec Cmd ou Ctrl : zoomer.`)
+      this.menuItem(ICONS.settings, `Tous les paramètres`, () => a.openSettings())
     );
+    return menu;
+  }
+
+  // Menu de l'oeil : ce qui est visible sur la carte, la vue en noir et blanc, et l'affichage de la note.
+  private buildViewMenu(): HTMLElement {
+    const s = this.getSettings();
+    const a = this.actions;
+    const menu = h(`div`, `mmw-menu`);
+    const heading = (text: string): HTMLElement => h(`div`, `mmw-menu-title mmw-menu-heading`, text);
+
+    menu.append(
+      heading(`Visible sur la carte`),
+      this.menuToggle(`Étiquettes`, s.showTags, (v) => a.change({ showTags: v })),
+      this.menuToggle(`Bulles de commentaire`, s.showComments, (v) => a.change({ showComments: v })),
+      this.menuToggle(`Liens web (mappemonde)`, s.showWebLinks, (v) => a.change({ showWebLinks: v })),
+      this.menuToggle(`Liens vers d'autres notes`, s.showExternalLinks, (v) => a.change({ showExternalLinks: v })),
+      this.menuToggle(`Liens dans la note (flèches)`, s.showInternalLinks, (v) => a.change({ showInternalLinks: v })),
+      h(`div`, `mmw-menu-sep`),
+      heading(`Couleurs`),
+      this.menuToggle(`Vue noir et blanc`, s.blackWhite, (v) => a.change({ blackWhite: v })),
+      this.menuToggle(`Flèches toujours en bleu`, s.linkColored, (v) => a.change({ linkColored: v })),
+      h(`div`, `mmw-menu-sep`),
+      heading(`Dans la note`),
+      this.menuToggle(`Griser les chapitres inactifs`, s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
+      this.menuToggle(`Masquer les chapitres inactifs`, s.hideInactive, (v) => a.change({ hideInactive: v })),
+      this.menuToggle(`Inclure les sous-titres`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
+    );
+
+    const contrast = h(`div`, `mmw-menu-row`);
+    contrast.append(h(`div`, `mmw-menu-title`, `Contraste des chapitres grisés`));
+    const range = h(`input`, `mmw-range`);
+    range.type = `range`;
+    range.min = `15`;
+    range.max = `90`;
+    range.step = `5`;
+    range.value = String(Math.round(s.inactiveOpacity * 100));
+    range.addEventListener(`change`, () => a.change({ inactiveOpacity: Number(range.value) / 100 }));
+    contrast.append(range);
+    menu.append(contrast);
     return menu;
   }
 

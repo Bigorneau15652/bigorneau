@@ -64,6 +64,8 @@ export interface MapCallbacks {
   // Suppression d'un lien selectionne, et clic sur le repere d'un titre qui a des liens vers d'autres notes.
   onLinkDelete?: (link: MapLink) => void;
   onLinkOpen?: (links: MapLink[], event: PointerEvent) => void;
+  // Clic sur le repere d'un titre dont les fleches internes sont repliees : aller au titre vise (liste s'il y en a plusieurs).
+  onInternalLinks?: (links: MapLink[], event: PointerEvent) => void;
   // Le bouton Retour de la carte.
   onBack?: () => void;
 }
@@ -77,6 +79,10 @@ const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none
 
 // Symbole d'ouverture d'un lien vers une autre note (fleche qui sort d'un cadre).
 const OPEN_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h4v4M13 3 7.5 8.5M11 9.5V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.5"/></svg>`;
+
+// Reperes affiches sur un titre dont les liens sont replies : chaine (vers d'autres notes) et fleche (dans la note).
+const LINK_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-.7.7"/><path d="M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l.7-.7"/></svg>`;
+const INT_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5a3 3 0 0 0 3 3h7"/><path d="m10 8 3 3-3 3"/></svg>`;
 
 // Mappemonde affichee sur un titre qui contient des liens web ou des videos integrees.
 const WEB_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2.2 2.2 9.8 0 12M8 2c-2.2 2.2-2.2 9.8 0 12"/></svg>`;
@@ -348,6 +354,11 @@ export class MapRenderer {
     const s = this.getSettings();
     this.mapEl.style.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
     this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
+    // Menu de l'oeil : elements masques et vue en noir et blanc.
+    this.mapEl.classList.toggle(`mmw-hide-tags`, !s.showTags);
+    this.mapEl.classList.toggle(`mmw-hide-comments`, !s.showComments);
+    this.mapEl.classList.toggle(`mmw-hide-web`, !s.showWebLinks);
+    this.mapEl.classList.toggle(`mmw-bw`, s.blackWhite);
     // Contraste de la case selectionnee : 0 (discret) a 100 (tres marque).
     const c = Math.max(0, Math.min(100, s.selectionContrast ?? 50));
     this.mapEl.style.setProperty(`--mmw-sel-bg`, `${Math.round(8 + c * 0.42)}%`);
@@ -384,6 +395,7 @@ export class MapRenderer {
       this.pendingLink = null;
     }
     if (this.selectedLink && this.selectedLink !== this.pendingLink && !this.links.some((l) => this.linkId(l) === this.selectedLink)) this.selectedLink = null;
+    if (this.selectedLink && this.links.some((l) => this.linkId(l) === this.selectedLink && (l.external ? !s.showExternalLinks : !s.showInternalLinks))) this.selectedLink = null;
     this.webByKey.clear();
     for (const n of this.list) {
       if (n.depth < 1) continue;
@@ -483,6 +495,28 @@ export class MapRenderer {
       mark.innerHTML = WEB_ICON;
       mark.title = web.map((w) => `${w.label} (${w.url})`).join(`\n`);
       el.appendChild(mark);
+    }
+
+    // Liens replies (menu de l'oeil) : un repere colore par sorte de lien, a la place des cases et des fleches.
+    if (!s.showExternalLinks) {
+      const ext = this.links.filter((l) => l.from === n.key && l.external);
+      if (ext.length > 0) {
+        const mark = document.createElement(`span`);
+        mark.className = `mmw-link-mark`;
+        mark.innerHTML = LINK_ICON;
+        mark.title = ext.map((l) => (l.heading ? `${l.note} › ${l.heading}` : l.note)).join(`\n`);
+        el.appendChild(mark);
+      }
+    }
+    if (!s.showInternalLinks) {
+      const inner = this.links.filter((l) => l.from === n.key && !l.external && l.to);
+      if (inner.length > 0) {
+        const mark = document.createElement(`span`);
+        mark.className = `mmw-int-mark`;
+        mark.innerHTML = INT_ICON;
+        mark.title = inner.map((l) => `Aller à : ${l.heading ?? ``}`).join(`\n`);
+        el.appendChild(mark);
+      }
     }
 
     // Etiquettes : en petit, a droite du titre, en ecriture normale. Une etiquette supprimee des reglages n'est pas affichee.
@@ -641,8 +675,9 @@ export class MapRenderer {
     this.extBoxes = [];
     if (!this.bounds) return;
     const made: { link: MapLink; el: HTMLElement }[] = [];
+    const showExternal = this.getSettings().showExternalLinks;
     for (const l of this.links) {
-      if (!l.external || !this.els.has(l.from)) continue;
+      if (!showExternal || !l.external || !this.els.has(l.from)) continue;
       const el = document.createElement(`div`);
       el.className = `mmw-ext-box`;
       el.dataset.ext = this.linkId(l);
@@ -712,7 +747,7 @@ export class MapRenderer {
     // Le rond de repli, a droite d'un titre qui a des sous-titres, reste degage.
     const rightX = (n: LNode): number => n.x + n.w + (n.hasChildren && n.depth >= 1 ? 26 : 3);
     for (const l of this.links) {
-      if (l.external || !l.to) continue;
+      if (l.external || !l.to || !s.showInternalLinks) continue;
       const a = this.visibleNode(l.from);
       const b = this.visibleNode(l.to);
       if (!a || !b || a === b) continue;
@@ -1091,6 +1126,16 @@ export class MapRenderer {
     if (target.closest(`.mmw-link-hint, .mmw-picker`)) return;
     this.controls.closePopup();
     this.mapEl.focus();
+    const linkMark = target.closest(`.mmw-link-mark, .mmw-int-mark`) as HTMLElement | null;
+    if (linkMark && !this.linking) {
+      e.preventDefault();
+      const key = (linkMark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
+      const inner = linkMark.classList.contains(`mmw-int-mark`);
+      const mine = this.links.filter((l) => l.from === key && (inner ? !l.external && !!l.to : l.external));
+      if (inner) this.callbacks.onInternalLinks?.(mine, e);
+      else this.callbacks.onLinkOpen?.(mine, e);
+      return;
+    }
     const webMark = target.closest(`.mmw-web-mark`) as HTMLElement | null;
     if (webMark && !this.linking) {
       e.preventDefault();

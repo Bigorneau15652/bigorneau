@@ -307,6 +307,7 @@
 .mmw-popup {
   width: 256px;
   max-height: min(70vh, 600px);
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 12px;
   color: var(--text-normal);
@@ -435,15 +436,26 @@
 
 .mmw-menu-icon {
   display: inline-flex;
+  flex: none;
   width: 18px;
   color: var(--text-muted);
 }
 
 .mmw-menu-label {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.93em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mmw-menu-heading {
+  margin: 4px 8px 2px;
 }
 
 .mmw-check {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1070,4 +1082,29 @@
 
 .mmw-picker-empty {
   padding: 6px 8px;
+}
+
+/* Elements masques depuis le menu de l'oeil, et vue en noir et blanc. */
+.mmw-map.mmw-hide-tags .mmw-tags,
+.mmw-map.mmw-hide-comments .mmw-comment-mark,
+.mmw-map.mmw-hide-web .mmw-web-mark {
+  display: none;
+}
+
+.mmw-map.mmw-bw .mmw-world {
+  filter: grayscale(1);
+}
+
+/* Liens replies : un repere colore sur le titre remplace les cases et les fleches. */
+.mmw-link-mark,
+.mmw-int-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--link-color, #4a8bfc);
+  cursor: pointer;
+}
+
+.mmw-link-mark:hover,
+.mmw-int-mark:hover {
+  filter: brightness(1.25);
 }
