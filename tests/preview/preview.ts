@@ -34,6 +34,23 @@ const params = new URLSearchParams(location.search);
 if (params.get(`doc`) === `cascade`) {
   text = [`# Titre niveau 1`, `## Titre niveau 2`, `### Titre niveau 3`, `#### Titre niveau 4`, `##### Titre niveau 5`, ``].join(`\n`);
 }
+if (params.get(`doc`) === `web`) {
+  text = [
+    `Intro`,
+    ``,
+    `## Un lien`,
+    `Voir [le site](https://exemple.org/page).`,
+    `## Deux liens`,
+    `![](https://www.youtube.com/watch?v=abc123)`,
+    `et https://autre.fr/x`,
+    `## Avec etiquette`,
+    `%% mmw {"tags":["dmg"]} %%`,
+    `https://b.test`,
+    `## Sans lien`,
+    `texte`,
+    ``,
+  ].join(`\n`);
+}
 const settings: MmSettings = { ...DEFAULT_SETTINGS };
 for (const [k, v] of params) {
   if (k === `select` || k === `collapse` || k === `doc`) continue;
@@ -93,7 +110,17 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
     if (next) text = next;
     renderer.setDoc(parseNote(text, name), `sample.md`, true);
   },
-  onLinkExternal: (from) => calls.push(`external:${from}`),
+  getVaultFiles: () => [`Accueil.md`, `Projets/Alpha.md`, `Projets/Beta.md`, `Projets/Archives/Ancien.md`, `Reunions/2024-01.md`],
+  getHeadings: async (path) => (path.endsWith(`Alpha.md`) ? [{ title: `Budget`, level: 1 }, { title: `Risques`, level: 2 }] : []),
+  onLinkExternal: (from, path, heading) => {
+    calls.push(`external:${from}:${path}:${heading}`);
+    const name = `Nom de la note.md`;
+    const doc = parseNote(text, name);
+    const next = insertLink(text, doc, from, path.replace(/\.md$/i, ``), heading);
+    if (next) text = next;
+    renderer.setDoc(parseNote(text, name), `sample.md`, true);
+  },
+  onWebOpen: (links) => calls.push(`web:${links.map((l) => l.url).join(`,`)}`),
   onLinkOpen: (links) => calls.push(`open:${links.map((l) => l.note + `#` + l.heading).join(`,`)}`),
   onLinkDelete: (link) => {
     calls.push(`unlink:${link.from}:${link.line}`);

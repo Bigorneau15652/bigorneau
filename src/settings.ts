@@ -107,6 +107,8 @@ export interface MmSettings {
   selectionContrast: number;
   // Masque dans la note les lignes de commentaire du plugin (%% mmw ... %%) : etiquettes, styles, titre court.
   hideMetaLines: boolean;
+  // Fleches de lien toujours en bleu (couleur des liens du theme) ; sinon neutres, et bleues quand on les selectionne.
+  linkColored: boolean;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -139,6 +141,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   tags: [],
   selectionContrast: 50,
   hideMetaLines: true,
+  linkColored: false,
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).

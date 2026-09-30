@@ -7,8 +7,9 @@ import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sket
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
 import { makeTag, MmSettings } from "./settings";
-import { linkPath } from "./link-geom";
-import { MapLink, parseLinks } from "./links";
+import { linkPath, loopPath, sidePath } from "./link-geom";
+import { MapLink, parseLinks, WebLink, webLinks } from "./links";
+import { HeadingItem, VaultPicker } from "./vault-picker";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
@@ -50,7 +51,12 @@ export interface MapCallbacks {
   getFileName?: () => string;
   // Un lien vient d'etre trace d'un titre a un autre de la carte ; ou vers un titre d'une autre note (a choisir).
   onLinkCreate?: (from: string, to: string) => void;
-  onLinkExternal?: (from: string) => void;
+  onLinkExternal?: (from: string, path: string, heading: string | null) => void;
+  // Notes du coffre proposees pour un lien (chemins) et titres d'une note.
+  getVaultFiles?: () => string[];
+  getHeadings?: (path: string) => Promise<HeadingItem[]>;
+  // Clic sur la mappemonde d'un titre qui contient des liens web ou des videos integrees.
+  onWebOpen?: (links: WebLink[], event: PointerEvent) => void;
   // Suppression d'un lien selectionne, et clic sur le repere d'un titre qui a des liens vers d'autres notes.
   onLinkDelete?: (link: MapLink) => void;
   onLinkOpen?: (links: MapLink[], event: PointerEvent) => void;
@@ -65,8 +71,8 @@ const COMMENT_ICON = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none
 const EYE_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>`;
 const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5l11-11"/></svg>`;
 
-// Repere affiche sur un titre qui a des liens vers d'autres notes.
-const LINK_ICON = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-.7.7"/><path d="M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l.7-.7"/></svg>`;
+// Mappemonde affichee sur un titre qui contient des liens web ou des videos integrees.
+const WEB_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2.2 2.2 9.8 0 12M8 2c-2.2 2.2-2.2 9.8 0 12"/></svg>`;
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
 const MIN_SCALE = 0.15;
@@ -133,7 +139,10 @@ export class MapRenderer {
   private links: MapLink[] = [];
   private selectedLink: string | null = null;
   // Creation d'un lien : titre de depart (null tant qu'il n'est pas choisi) et position de la souris.
-  private linking: { from: string | null; pressed: boolean } | null = null;
+  private linking: { from: string | null; pressed: boolean; pending: { path: string; heading: string | null } | null } | null = null;
+  private picker: VaultPicker | null = null;
+  private webByKey = new Map<string, WebLink[]>();
+  private extBoxes: { link: MapLink; el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
   private linkHint: HTMLElement | null = null;
   private eyeHover: string | null = null;
   // Detection du double clic : la carte peut etre redessinee entre les deux clics (ouverture de la note),
@@ -349,6 +358,12 @@ export class MapRenderer {
     this.list = flatten(this.root);
     this.links = parseLinks(this.previewDoc ?? this.doc!, this.callbacks.getFileName?.() ?? `Note.md`);
     if (this.selectedLink && !this.links.some((l) => this.linkId(l) === this.selectedLink)) this.selectedLink = null;
+    this.webByKey.clear();
+    for (const n of this.list) {
+      if (n.depth < 1) continue;
+      const w = webLinks(this.previewDoc ?? this.doc!, n.key);
+      if (w.length > 0) this.webByKey.set(n.key, w);
+    }
     this.els.clear();
     this.eyes.clear();
     for (const n of this.list) {
@@ -374,6 +389,7 @@ export class MapRenderer {
       }
     }
     if (this.eyeHover) this.eyes.get(this.eyeHover)?.classList.add(`mmw-eye-show`);
+    this.layoutExternals();
     this.draw(s);
     if (typing) {
       if (this.els.has(typing.key)) {
@@ -433,6 +449,16 @@ export class MapRenderer {
     }
     el.appendChild(label);
 
+    // Mappemonde bleue si le paragraphe du titre contient des liens web ou des videos integrees (avant les etiquettes).
+    const web = this.webByKey.get(n.key);
+    if (web) {
+      const mark = document.createElement(`span`);
+      mark.className = `mmw-web-mark`;
+      mark.innerHTML = WEB_ICON;
+      mark.title = web.map((w) => `${w.label} (${w.url})`).join(`\n`);
+      el.appendChild(mark);
+    }
+
     // Etiquettes : en petit, a droite du titre, en ecriture normale. Une etiquette supprimee des reglages n'est pas affichee.
     const defs = new Map(s.tags.map((t) => [t.id, t]));
     const tags = (meta?.tags ?? []).flatMap((id) => (defs.has(id) ? [defs.get(id)!] : []));
@@ -448,15 +474,6 @@ export class MapRenderer {
         box.appendChild(chip);
       }
       el.appendChild(box);
-    }
-
-    const externals = this.links.filter((l) => l.from === n.key && l.external);
-    if (externals.length > 0) {
-      const mark = document.createElement(`span`);
-      mark.className = `mmw-link-mark`;
-      mark.innerHTML = LINK_ICON;
-      mark.title = externals.map((l) => `${l.note} › ${l.heading}`).join(`\n`);
-      el.appendChild(mark);
     }
 
     const tip: string[] = [];
@@ -592,33 +609,89 @@ export class MapRenderer {
     return null;
   }
 
-  // Fleches en pointille entre les titres relies. Le trait est de la couleur du texte du theme.
+  // Cases des notes exterieures, a gauche de la carte : une par lien, a la hauteur du titre de depart.
+  private layoutExternals(): void {
+    for (const b of this.extBoxes) b.el.remove();
+    this.extBoxes = [];
+    if (!this.bounds) return;
+    const made: { link: MapLink; el: HTMLElement }[] = [];
+    for (const l of this.links) {
+      if (!l.external || !this.els.has(l.from)) continue;
+      const el = document.createElement(`div`);
+      el.className = `mmw-ext-box`;
+      el.dataset.ext = this.linkId(l);
+      const name = l.note.replace(/^.*\//, ``);
+      el.textContent = l.heading ? `${name} › ${l.heading}` : name;
+      el.title = `Ouvrir la carte de « ${l.note} »`;
+      this.worldEl.appendChild(el);
+      made.push({ link: l, el });
+    }
+    const right = this.bounds.minX - 44;
+    const rows = new Map<string, number>();
+    let minX = this.bounds.minX;
+    for (const { link, el } of made) {
+      const src = this.list.find((n) => n.key === link.from);
+      if (!src) continue;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const i = rows.get(link.from) ?? 0;
+      rows.set(link.from, i + 1);
+      const x = right - w;
+      const y = src.y + src.h / 2 - h / 2 + i * (h + 8);
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      this.extBoxes.push({ link, el, x, y, w, h });
+      minX = Math.min(minX, x - 8);
+    }
+    this.bounds.minX = minX;
+  }
+
+  // Fleches en pointille entre les titres relies, du bord droit au bord droit ; vers une note exterieure, du bord gauche
+  // a sa case. Elles sont neutres, ou bleues (couleur des liens du theme) selon le reglage ; toujours bleues quand elles
+  // sont selectionnees, et pour les notes exterieures.
   private drawLinks(s: MmSettings): void {
     const defs = document.createElementNS(SVG_NS, `defs`);
-    defs.innerHTML = `<marker id="mmw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" class="mmw-link-head"/></marker>`;
+    const marker = (id: string, cls: string): string =>
+      `<marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" class="${cls}"/></marker>`;
+    defs.innerHTML = marker(`mmw-arrow`, `mmw-link-head`) + marker(`mmw-arrow-blue`, `mmw-link-head mmw-link-head-blue`);
     this.svgEl.appendChild(defs);
-    for (const l of this.links) {
-      if (l.external || !l.to) continue;
-      const a = this.visibleNode(l.from);
-      const b = this.visibleNode(l.to);
-      if (!a || !b || a === b) continue;
-      const d = linkPath(a, b, s.branchStyle === `curve`);
+    const curved = s.branchStyle === `curve`;
+    const add = (l: MapLink, d: string, blue: boolean): void => {
       const id = this.linkId(l);
       const on = id === this.selectedLink;
       const path = document.createElementNS(SVG_NS, `path`);
       path.setAttribute(`d`, d);
-      path.setAttribute(`class`, `mmw-link` + (on ? ` mmw-link-on` : ``));
-      path.setAttribute(`marker-end`, `url(#mmw-arrow)`);
+      path.setAttribute(`class`, `mmw-link` + (blue ? ` mmw-link-blue` : ``) + (on ? ` mmw-link-on` : ``));
+      path.setAttribute(`marker-end`, `url(#${blue || on ? `mmw-arrow-blue` : `mmw-arrow`})`);
       path.setAttribute(`data-linkpath`, id);
+      if (blue) path.setAttribute(`data-blue`, `1`);
       this.svgEl.appendChild(path);
       const hit = document.createElementNS(SVG_NS, `path`);
       hit.setAttribute(`d`, d);
       hit.setAttribute(`class`, `mmw-link-hit`);
       hit.setAttribute(`data-link`, id);
       const tip = document.createElementNS(SVG_NS, `title`);
-      tip.textContent = `Lien vers ${l.heading} (cliquer puis Suppr pour le retirer)`;
+      tip.textContent = `Lien vers ${l.heading ?? l.note} (cliquer puis Suppr pour le retirer)`;
       hit.appendChild(tip);
       this.svgEl.appendChild(hit);
+    };
+    // Le rond de repli, a droite d'un titre qui a des sous-titres, reste degage.
+    const rightX = (n: LNode): number => n.x + n.w + (n.hasChildren && n.depth >= 1 ? 26 : 3);
+    for (const l of this.links) {
+      if (l.external || !l.to) continue;
+      const a = this.visibleNode(l.from);
+      const b = this.visibleNode(l.to);
+      if (!a || !b || a === b) continue;
+      // Le trait passe a droite des cases situees entre les deux titres.
+      const top = Math.min(a.y, b.y);
+      const bottom = Math.max(a.y + a.h, b.y + b.h);
+      const clear = Math.max(0, ...this.list.filter((n) => n.y + n.h >= top && n.y <= bottom).map((n) => rightX(n)));
+      add(l, loopPath(rightX(a), a.y + a.h / 2, rightX(b), b.y + b.h / 2, curved, clear), s.linkColored);
+    }
+    for (const box of this.extBoxes) {
+      const a = this.list.find((n) => n.key === box.link.from);
+      if (!a) continue;
+      add(box.link, sidePath(a.x - 3, a.y + a.h / 2, box.x + box.w + 3, box.y + box.h / 2, curved), true);
     }
     this.updateLinkPreview(null);
   }
@@ -626,7 +699,11 @@ export class MapRenderer {
   // Met la fleche en evidence sans refaire le dessin (l'element clique doit rester en place pour garder le focus).
   private selectLink(id: string | null): void {
     this.selectedLink = id;
-    for (const p of Array.from(this.svgEl.querySelectorAll(`[data-linkpath]`))) p.classList.toggle(`mmw-link-on`, p.getAttribute(`data-linkpath`) === id);
+    for (const p of Array.from(this.svgEl.querySelectorAll(`[data-linkpath]`))) {
+      const on = p.getAttribute(`data-linkpath`) === id;
+      p.classList.toggle(`mmw-link-on`, on);
+      p.setAttribute(`marker-end`, `url(#${on || p.hasAttribute(`data-blue`) ? `mmw-arrow-blue` : `mmw-arrow`})`);
+    }
   }
 
   // ---------------------------------------------------------------- creation d'un lien
@@ -635,15 +712,19 @@ export class MapRenderer {
     if (!this.doc || this.linking) return;
     this.commitRename(true, false);
     this.closeDialog(true);
-    this.linking = { from: null, pressed: false };
+    // Un titre deja selectionne sert de depart.
+    this.linking = { from: this.selected && this.selected !== `r` ? this.selected : null, pressed: false, pending: null };
     this.mapEl.classList.add(`mmw-linking`);
     this.controls.setLinking(true);
     this.showLinkHint();
+    this.openPicker();
   }
 
   stopLinking(): void {
     if (!this.linking) return;
     this.linking = null;
+    this.picker?.close();
+    this.picker = null;
     this.mapEl.classList.remove(`mmw-linking`);
     this.controls.setLinking(false);
     this.linkHint?.remove();
@@ -659,23 +740,41 @@ export class MapRenderer {
       this.linkHint.className = `mmw-link-hint`;
       this.mapEl.appendChild(this.linkHint);
     }
-    const hint = this.linkHint;
-    hint.replaceChildren();
-    const text = document.createElement(`span`);
-    text.textContent = L.from === null ? `Lien : cliquez sur le titre de départ. Échap pour annuler.` : `Cliquez sur le titre d'arrivée, ou`;
-    hint.appendChild(text);
+    const from = L.from !== null ? this.list.find((n) => n.key === L.from) : null;
+    let text: string;
+    if (L.pending) text = `Note choisie : ${L.pending.path.replace(/^.*\//, ``).replace(/\.md$/i, ``)}. Cliquez sur le titre de départ. Échap pour annuler.`;
+    else if (from) text = `Départ : « ${from.node.title || `sans titre`} ». Cliquez sur le titre d'arrivée, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
+    else text = `Lien : cliquez sur le titre de départ, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
+    this.linkHint.textContent = text;
+  }
+
+  // Fenetre de choix d'une note du coffre, au-dessus des menus. Elle ne prend pas le focus : on peut tracer une fleche sur
+  // la carte ; Tab ou un clic dans la fenetre permet de chercher ou de parcourir le coffre.
+  private openPicker(): void {
+    if (!this.callbacks.getVaultFiles) return;
+    this.picker?.close();
+    this.picker = new VaultPicker(this.mapEl, {
+      files: this.callbacks.getVaultFiles(),
+      headings: (path) => this.callbacks.getHeadings?.(path) ?? Promise.resolve([]),
+      onPick: (path, heading) => this.pickExternal(path, heading),
+      onClose: () => this.stopLinking(),
+    });
+  }
+
+  private pickExternal(path: string, heading: string | null): void {
+    const L = this.linking;
+    this.picker = null;
+    if (!L) return;
     if (L.from !== null) {
       const from = L.from;
-      const other = document.createElement(`button`);
-      other.type = `button`;
-      other.className = `mmw-link-other`;
-      other.textContent = `Autre note…`;
-      other.addEventListener(`click`, () => {
-        this.stopLinking();
-        this.callbacks.onLinkExternal?.(from);
-      });
-      hint.appendChild(other);
+      this.stopLinking();
+      this.callbacks.onLinkExternal?.(from, path, heading);
+      return;
     }
+    // Le titre de depart reste a choisir : on garde la note choisie.
+    L.pending = { path, heading };
+    this.showLinkHint();
+    this.mapEl.focus();
   }
 
   // Trait qui suit la souris entre le titre de depart et le pointeur.
@@ -710,6 +809,12 @@ export class MapRenderer {
     if (L.from === null) {
       if (key === `r`) {
         this.callbacks.onMessage?.(`Le nom de la note ne peut pas être le départ d'un lien.`);
+        return;
+      }
+      if (L.pending) {
+        const p = L.pending;
+        this.stopLinking();
+        this.callbacks.onLinkExternal?.(key, p.path, p.heading);
         return;
       }
       L.from = key;
@@ -910,14 +1015,21 @@ export class MapRenderer {
     const target = e.target as HTMLElement;
     if (this.controls.contains(target)) return;
     if (target.closest(`.mmw-rename, .mmw-dialog`)) return;
-    if (target.closest(`.mmw-link-hint`)) return;
+    if (target.closest(`.mmw-link-hint, .mmw-picker`)) return;
     this.controls.closePopup();
     this.mapEl.focus();
-    const mark = target.closest(`.mmw-link-mark`) as HTMLElement | null;
-    if (mark && !this.linking) {
+    const webMark = target.closest(`.mmw-web-mark`) as HTMLElement | null;
+    if (webMark && !this.linking) {
       e.preventDefault();
-      const key = (mark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
-      this.callbacks.onLinkOpen?.(this.links.filter((l) => l.from === key && l.external), e);
+      const key = (webMark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
+      this.callbacks.onWebOpen?.(this.webByKey.get(key) ?? [], e);
+      return;
+    }
+    const extBox = target.closest(`.mmw-ext-box`) as HTMLElement | null;
+    if (extBox && !this.linking) {
+      e.preventDefault();
+      const link = this.links.find((l) => this.linkId(l) === extBox.dataset.ext);
+      if (link) this.callbacks.onLinkOpen?.([link], e);
       return;
     }
     const hit = target.closest(`[data-link]`) as Element | null;
@@ -1072,6 +1184,11 @@ export class MapRenderer {
     if (t && (t.tagName === `INPUT` || t.tagName === `TEXTAREA`)) return;
     // Une touche entre deux clics : ce n'est pas un double clic.
     this.lastDown = null;
+    if (e.key === `Tab` && this.linking && this.picker?.isOpen()) {
+      e.preventDefault();
+      this.picker.focus();
+      return;
+    }
     if (e.key === `Escape` && this.linking) {
       e.preventDefault();
       this.stopLinking();
