@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { debounce, Editor, MarkdownView, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { debounce, Editor, MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
@@ -122,6 +122,16 @@ export default class MindmapWritingPlugin extends Plugin {
       id: `duplicate-selection`,
       name: `Dupliquer le titre sélectionné`,
       callback: () => this.forEachView((v) => v.duplicateSelection()),
+    });
+
+    this.addCommand({
+      id: `toggle-hide-inactive`,
+      name: `Basculer l'affichage du seul chapitre actif dans la note`,
+      callback: async () => {
+        this.settings.hideInactive = !this.settings.hideInactive;
+        await this.saveSettings();
+        new Notice(this.settings.hideInactive ? `La note ne montre que le chapitre actif.` : `La note montre tous les chapitres.`);
+      },
     });
 
     this.addCommand({

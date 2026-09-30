@@ -147,6 +147,16 @@ export class MmSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(`Masquer les chapitres inactifs dans la note`)
+      .setDesc(`Activé : la note ne montre que le chapitre actif (son titre, son texte, et ses sous-titres si l'option ci-dessous est cochée). Les autres chapitres restent dans le fichier ; ils réapparaissent en sélectionnant leur titre dans la carte. Désactivé : ils sont seulement grisés. Une commande d'Obsidian permet aussi de basculer ce mode avec un raccourci.`)
+      .addToggle((t) =>
+        t.setValue(s.hideInactive).onChange(async (v) => {
+          s.hideInactive = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
       .setName(`Contraste des chapitres inactifs`)
       .setDesc(`Plus la valeur est basse, plus le texte inactif est clair.`)
       .addSlider((sl) =>

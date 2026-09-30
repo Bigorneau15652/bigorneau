@@ -2,6 +2,7 @@
 // sans etre retirees du fichier. Utilise uniquement CodeMirror, pour pouvoir etre verifie hors d'Obsidian.
 import { EditorState, Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView } from "@codemirror/view";
+import { activeRangeField, setActiveRange } from "./active-range";
 import { hiddenLineRanges, metaLineNumbers, parseNote } from "./model";
 
 // Active ou coupe le masquage dans un editeur (seule la note reliee a la carte est concernee).
@@ -10,29 +11,45 @@ export const setHideEnabled = StateEffect.define<boolean>();
 // Masque aussi les lignes de commentaire du plugin (styles, etiquettes, titre court, commentaire) dans la note.
 export const setHideMeta = StateEffect.define<boolean>();
 
+// Masque tout ce qui n'est pas le chapitre actif (au lieu de le griser).
+export const setHideInactive = StateEffect.define<boolean>();
+
 interface HideState {
   enabled: boolean;
   meta: boolean;
+  inactive: boolean;
   deco: DecorationSet;
 }
 
 const hiddenBlock = Decoration.replace({ block: true });
 
-function compute(state: EditorState, meta: boolean): DecorationSet {
+function compute(state: EditorState, meta: boolean, inactive: boolean): DecorationSet {
   const doc = state.doc;
   const text = doc.toString();
-  if (!text.includes(`%% mmw`)) return Decoration.none;
-  const parsed = parseNote(text, `note.md`);
-  const ranges = hiddenLineRanges(parsed).map((r) => ({ start: r.start, end: Math.max(r.start, r.end) }));
-  if (meta) {
-    // Chaque ligne de commentaire est masquee, sauf celles deja comprises dans un titre masque.
-    for (const line of metaLineNumbers(parsed)) {
-      if (!ranges.some((r) => line >= r.start && line <= r.end)) ranges.push({ start: line, end: line });
-    }
+  const active = inactive ? state.field(activeRangeField, false) ?? null : null;
+  if (!active && !text.includes(`%% mmw`)) return Decoration.none;
+  const ranges: { start: number; end: number }[] = [];
+  if (text.includes(`%% mmw`)) {
+    const parsed = parseNote(text, `note.md`);
+    for (const r of hiddenLineRanges(parsed)) ranges.push({ start: r.start, end: Math.max(r.start, r.end) });
+    if (meta) for (const line of metaLineNumbers(parsed)) ranges.push({ start: line, end: line });
   }
-  ranges.sort((a, b) => a.start - b.start);
-  const builder = new RangeSetBuilder<Decoration>();
+  // Seul le chapitre actif reste visible : tout ce qui le precede et tout ce qui le suit est masque.
+  if (active) {
+    const first = doc.lineAt(Math.min(active.from, doc.length)).number - 1;
+    if (first > 0) ranges.push({ start: 0, end: first - 1 });
+    if (active.to < doc.length) ranges.push({ start: doc.lineAt(active.to).number - 1, end: doc.lines - 1 });
+  }
+  // Les plages qui se recouvrent ou se touchent n'en forment qu'une.
+  ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: { start: number; end: number }[] = [];
   for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end + 1) last.end = Math.max(last.end, r.end);
+    else merged.push({ ...r });
+  }
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const r of merged) {
     if (r.start >= doc.lines) continue;
     builder.add(doc.line(r.start + 1).from, doc.line(Math.min(r.end + 1, doc.lines)).to, hiddenBlock);
   }
@@ -40,9 +57,9 @@ function compute(state: EditorState, meta: boolean): DecorationSet {
 }
 
 export const hideField = StateField.define<HideState>({
-  create: () => ({ enabled: false, meta: false, deco: Decoration.none }),
+  create: () => ({ enabled: false, meta: false, inactive: false, deco: Decoration.none }),
   update(value, tr) {
-    let { enabled, meta } = value;
+    let { enabled, meta, inactive } = value;
     let changed = tr.docChanged;
     for (const e of tr.effects) {
       if (e.is(setHideEnabled)) {
@@ -51,11 +68,14 @@ export const hideField = StateField.define<HideState>({
       } else if (e.is(setHideMeta)) {
         meta = e.value;
         changed = true;
-      }
+      } else if (e.is(setHideInactive)) {
+        inactive = e.value;
+        changed = true;
+      } else if (e.is(setActiveRange)) changed = true;
     }
     if (!changed) return value;
-    if (!enabled) return { enabled, meta, deco: Decoration.none };
-    return { enabled, meta, deco: compute(tr.state, meta) };
+    if (!enabled) return { enabled, meta, inactive, deco: Decoration.none };
+    return { enabled, meta, inactive, deco: compute(tr.state, meta, inactive) };
   },
   provide: (f) => [EditorView.decorations.from(f, (v) => v.deco), EditorView.atomicRanges.of((view) => view.state.field(f).deco)],
 });

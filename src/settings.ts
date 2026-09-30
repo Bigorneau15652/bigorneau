@@ -109,6 +109,8 @@ export interface MmSettings {
   hideMetaLines: boolean;
   // Fleches de lien toujours en bleu (couleur des liens du theme) ; sinon neutres, et bleues quand on les selectionne.
   linkColored: boolean;
+  // Note : masque les chapitres inactifs au lieu de les griser (seul le chapitre actif reste visible).
+  hideInactive: boolean;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -142,6 +144,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   selectionContrast: 50,
   hideMetaLines: true,
   linkColored: false,
+  hideInactive: false,
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).
