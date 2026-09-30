@@ -23,6 +23,18 @@ export const activeRangeField = StateField.define<ActiveRange | null>({
   },
 });
 
+// Position (debut de ligne) de la ligne vierge que le plugin a ajoutee sous un titre vide pour y ecrire. null : aucune.
+export const setTempLine = StateEffect.define<number | null>();
+
+export const tempLineField = StateField.define<number | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setTempLine)) return e.value;
+    if (value !== null && tr.docChanged) return tr.changes.mapPos(value, -1);
+    return value;
+  },
+});
+
 const inactiveLine = Decoration.line({ class: `mmw-inactive` });
 
 export interface NoteHooks {
@@ -74,5 +86,5 @@ export function noteExtension(hooks: NoteHooks): Extension[] {
       keydown: (event, view) => hooks.key(event, view),
     })
   );
-  return [activeRangeField, plugin, keys];
+  return [activeRangeField, tempLineField, plugin, keys];
 }

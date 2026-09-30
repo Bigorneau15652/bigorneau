@@ -1,5 +1,6 @@
 import { EditorView } from "@codemirror/view";
-import { setActiveRange } from "./active-chapter";
+import { setActiveRange, tempLineField } from "./active-chapter";
+import { openBlankLine, releaseTempLine } from "./temp-line";
 import { revealRange } from "./reveal";
 import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { addNode, arrowTarget, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
@@ -85,6 +86,8 @@ export class MindmapView extends ItemView {
     this.contentEl.empty();
     this.contentEl.addClass(`mmw-view`);
     this.mapHost = this.contentEl.createDiv({ cls: `mmw-map-host` });
+    // Revenir a la carte retire la ligne vierge ajoutee sous un titre si on n'y a rien ecrit.
+    this.registerDomEvent(this.mapHost, `focusin`, () => this.releaseTemp());
 
     this.renderer = new MapRenderer(this.mapHost, () => this.plugin.settings, {
       onChange: (patch) => void this.plugin.updateSettings(patch),
@@ -453,6 +456,15 @@ export class MindmapView extends ItemView {
     if (!file || !renderer) return;
     const state = cm.state;
     const head = state.selection.main.head;
+    // Le curseur a quitte la ligne vierge ajoutee : elle est retiree si rien n'y a ete ecrit.
+    const temp = state.field(tempLineField, false);
+    if (temp !== undefined && temp !== null) {
+      const tempLine = state.doc.lineAt(Math.min(temp, state.doc.length));
+      if (head < tempLine.from || head > tempLine.to) {
+        releaseTempLine(cm);
+        return;
+      }
+    }
     const line = state.doc.lineAt(head);
     const line0 = line.number - 1;
     // Une frappe dans la meme ligne ne change pas de chapitre : le changement se fait a la validation par Entree.
@@ -489,8 +501,15 @@ export class MindmapView extends ItemView {
   }
 
   clearActive() {
+    this.releaseTemp();
     const cm = this.getNoteCm();
     if (cm) cm.dispatch({ effects: setActiveRange.of(null) });
+  }
+
+  // Retire la ligne vierge temporaire de la note reliee, si elle est encore vide.
+  private releaseTemp() {
+    const cm = this.getNoteCm();
+    if (cm) releaseTempLine(cm);
   }
 
   // Deplacement d'un chapitre a l'autre depuis la note, avec les touches configurees.
@@ -577,28 +596,18 @@ export class MindmapView extends ItemView {
   // Avec focus, le clavier passe aussi dans la note.
   private async revealInNote(key: string, focus: boolean) {
     const file = this.plugin.lastFile;
-    const node = this.doc ? nodeByKey(this.doc, key) : null;
-    if (!file || !node) return;
+    if (!file || !this.doc || !nodeByKey(this.doc, key)) return;
     const leaf = await this.ensureNoteLeaf(file);
     const view = leaf.view;
     if (!(view instanceof MarkdownView)) return;
     const editor = view.editor;
+
+    // Une ligne vierge ajoutee pour un titre precedent est retiree avant de relire la note.
+    this.releaseTemp();
+    const live = parseNote(editor.getValue(), file.name);
+    const node = nodeByKey(live, key) ?? nodeByKey(this.doc, key)!;
     const last = editor.lastLine();
     const headLine = Math.min(node.line ?? 0, last);
-
-    // Premiere et derniere lignes du texte du noeud (sans les lignes vides finales).
-    const first = Math.min((node.metaLine ?? headLine) + 1, last);
-    let end = Math.min((node.endLine ?? first + 1) - 1, last);
-    while (end > first && editor.getLine(end).trim() === ``) end--;
-    end = Math.max(end, headLine);
-    const hasText = end >= first && editor.getLine(end).trim() !== ``;
-    const endLine = hasText ? end : headLine;
-
-    const remembered = this.noteCursors.get(key);
-    const mode = this.plugin.settings.cursorPosition;
-    let cursor = { line: endLine, ch: editor.getLine(endLine).length };
-    if (mode === `start`) cursor = { line: hasText ? first : headLine, ch: 0 };
-    else if (mode === `last` && remembered && remembered.line >= first && remembered.line <= endLine) cursor = remembered;
 
     if (view.getMode() !== `source`) {
       if (focus) await view.setState({ ...view.getState(), mode: `source` }, { history: false });
@@ -608,7 +617,31 @@ export class MindmapView extends ItemView {
       }
     }
 
-    const cm = (editor as unknown as { cm?: EditorView }).cm;
+    // Premiere et derniere lignes du texte du noeud (sans les lignes vides finales).
+    const first = Math.min((node.metaLine ?? headLine) + 1, last);
+    let end = Math.min((node.endLine ?? first + 1) - 1, last);
+    while (end > first && editor.getLine(end).trim() === ``) end--;
+    end = Math.max(end, headLine);
+    const hasText = end >= first && editor.getLine(end).trim() !== ``;
+    let endLine = hasText ? end : headLine;
+
+    const remembered = this.noteCursors.get(key);
+    const mode = this.plugin.settings.cursorPosition;
+    let cursor = { line: endLine, ch: editor.getLine(endLine).length };
+    if (mode === `start`) cursor = { line: hasText ? first : headLine, ch: 0 };
+    else if (mode === `last` && remembered && remembered.line >= first && remembered.line <= endLine) cursor = remembered;
+
+    // Paragraphe vide et passage dans la note : une ligne vierge est ouverte sous le titre pour y ecrire.
+    // Elle disparait si on la quitte sans rien ecrire.
+    const noteCm = (editor as unknown as { cm?: EditorView }).cm;
+    const target = (node.metaLine ?? node.line ?? 0) + 1;
+    if (focus && !hasText && node !== live.root && noteCm) {
+      openBlankLine(noteCm, target);
+      cursor = { line: target, ch: 0 };
+      endLine = target;
+    }
+
+    const cm = noteCm;
     if (cm) {
       revealRange(cm, { headLine, endLine, cursorLine: cursor.line, cursorCh: cursor.ch });
     } else {
@@ -619,6 +652,8 @@ export class MindmapView extends ItemView {
       this.app.workspace.setActiveLeaf(leaf, { focus: true });
       editor.focus();
     }
+    // La note a pu changer (ligne vierge ajoutee ou retiree) : le chapitre actif est recalcule sur le texte actuel.
+    this.doc = parseNote(editor.getValue(), file.name);
     this.updateActiveRange();
   }
 }
