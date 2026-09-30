@@ -88,6 +88,14 @@ export class MindmapView extends ItemView {
     this.mapHost = this.contentEl.createDiv({ cls: `mmw-map-host` });
     // Revenir a la carte retire la ligne vierge ajoutee sous un titre si on n'y a rien ecrit.
     this.registerDomEvent(this.mapHost, `focusin`, () => this.releaseTemp());
+    // Cmd ou Ctrl + D : enregistre aupres d'Obsidian pour cette vue, car un raccourci general peut l'intercepter
+    // avant la carte. Il n'agit que si la carte a le focus.
+    this.scope?.register([`Mod`], `d`, () => {
+      const active = this.mapHost.ownerDocument.activeElement;
+      if (!active || !this.mapHost.contains(active)) return true;
+      this.duplicateSelection();
+      return false;
+    });
 
     this.renderer = new MapRenderer(this.mapHost, () => this.plugin.settings, {
       onChange: (patch) => void this.plugin.updateSettings(patch),
@@ -504,6 +512,18 @@ export class MindmapView extends ItemView {
     this.releaseTemp();
     const cm = this.getNoteCm();
     if (cm) cm.dispatch({ effects: setActiveRange.of(null) });
+  }
+
+  // Duplique les titres selectionnes (raccourci de la carte et commande d'Obsidian).
+  duplicateSelection() {
+    const renderer = this.renderer;
+    const key = renderer?.getSelectedKey();
+    if (!renderer || !key) {
+      new Notice(`Sélectionnez d'abord un titre dans la carte.`);
+      return;
+    }
+    const keys = renderer.getSelection();
+    this.onEdit({ kind: `duplicate`, key, keys: keys.includes(key) ? keys : [key] });
   }
 
   // Retire la ligne vierge temporaire de la note reliee, si elle est encore vide.
