@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EditorState } from "@codemirror/state";
 import { applyLineEdits, hiddenLineRanges, isHiddenKey, metaLineNumbers, nodeByKey, parseNote, serializeNote } from "../src/model";
-import { hideExtension, hideField, setHideEnabled, setHideMeta } from "../src/note-hide";
+import { setActiveRange } from "../src/active-range";
+import { activeRangeField } from "../src/active-range";
+import { hideExtension, hideField, setHideEnabled, setHideInactive, setHideMeta } from "../src/note-hide";
 import { makeTag, migrateSettings, newTagId, nextTagColors, sanitizeTags, SETTINGS_VERSION, TAG_DEFAULT_COLORS, TAG_PALETTE } from "../src/settings";
 import { detailsOnly, formatMetaLine, isEmptyMeta, parseMetaLine, sanitizeMeta } from "../src/style";
 import { metaEditsFor, planReset, planStyle } from "../src/style-edit";
@@ -152,4 +154,29 @@ test(`lignes de commentaire du plugin : masquees dans la note selon le reglage`,
   assert.equal(refused.doc.toString(), text);
   const allowed = st.update({ changes: { from: head.from, to: st.doc.line(3).to + 1 }, userEvent: `delete.selection` }).state;
   assert.equal(allowed.doc.toString().includes(meta), false);
+});
+
+test(`masquer les chapitres inactifs : seul le chapitre actif reste visible`, () => {
+  const text = [`Intro`, `## A`, `texte a`, `## B`, `%% mmw {"tags":["x"]} %%`, `texte b`, `### B1`, `texte b1`, `## C`, `texte c`, ``].join(`\n`);
+  const build = (range: { from: number; to: number } | null, inactive = true): number[][] => {
+    let st = EditorState.create({ doc: text, extensions: [activeRangeField, hideExtension] });
+    st = st.update({ effects: [setHideEnabled.of(true), setHideMeta.of(true), setHideInactive.of(inactive), setActiveRange.of(range)] }).state;
+    const out: number[][] = [];
+    st.field(hideField).deco.between(0, text.length, (from, to) => void out.push([st.doc.lineAt(from).number, st.doc.lineAt(to).number]));
+    return out;
+  };
+  const doc = EditorState.create({ doc: text }).doc;
+  const at = (line: number): number => doc.line(line).from;
+  // Chapitre B (lignes 4 a 6, sans sous-titres) : tout le reste disparait, sa ligne de commentaire aussi.
+  assert.deepEqual(build({ from: at(4), to: at(7) }), [[1, 3], [5, 5], [7, 11]]);
+  // Chapitre A : il reste seul en haut, la ligne de commentaire de B est comprise dans ce qui suit.
+  assert.deepEqual(build({ from: at(2), to: at(4) }), [[1, 1], [4, 11]]);
+  // Sans le mode, seule la ligne de commentaire est masquee.
+  assert.deepEqual(build({ from: at(4), to: at(7) }, false), [[5, 5]]);
+  // Une suppression qui fusionnerait le chapitre actif avec une partie masquee est refusee.
+  let st = EditorState.create({ doc: text, extensions: [activeRangeField, hideExtension] });
+  st = st.update({ effects: [setHideEnabled.of(true), setHideInactive.of(true), setActiveRange.of({ from: at(2), to: at(4) })] }).state;
+  const end = doc.line(3).to;
+  assert.equal(st.update({ changes: { from: end, to: end + 1 }, userEvent: `delete.forward` }).state.doc.toString(), text);
+  assert.equal(st.update({ changes: { from: at(2) - 1, to: at(2) }, userEvent: `delete.backward` }).state.doc.toString(), text);
 });

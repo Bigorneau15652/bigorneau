@@ -3,26 +3,11 @@
 // Utilise uniquement CodeMirror, pour pouvoir etre verifiee hors d'Obsidian.
 import { Extension, Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
+import { activeRangeField, ActiveRange, setActiveRange } from "./active-range";
 import { hideExtension } from "./note-hide";
 
-export interface ActiveRange {
-  from: number;
-  to: number;
-}
-
-// Definit la plage du chapitre actif (positions dans le document). null : aucun grisage.
-export const setActiveRange = StateEffect.define<ActiveRange | null>();
-
-export const activeRangeField = StateField.define<ActiveRange | null>({
-  create: () => null,
-  update(value, tr) {
-    for (const e of tr.effects) if (e.is(setActiveRange)) return e.value;
-    if (value && tr.docChanged) {
-      return { from: tr.changes.mapPos(value.from, -1), to: tr.changes.mapPos(value.to, 1) };
-    }
-    return value;
-  },
-});
+export { activeRangeField, setActiveRange };
+export type { ActiveRange };
 
 // Position (debut de ligne) de la ligne vierge que le plugin a ajoutee sous un titre vide pour y ecrire. null : aucune.
 export const setTempLine = StateEffect.define<number | null>();
