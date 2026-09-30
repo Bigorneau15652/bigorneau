@@ -69,7 +69,6 @@
   position: absolute;
   box-sizing: border-box;
   width: max-content;
-  max-width: var(--mmw-max-w, 240px);
   padding: calc(6px * var(--mmw-pad, 1)) calc(12px * var(--mmw-pad, 1));
   border-radius: 9px;
   color: var(--mmw-node-color, var(--text-normal));
@@ -79,14 +78,57 @@
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
+  /* Le titre, puis les etiquettes et le repere de commentaire a sa droite. */
+  display: flex;
+  align-items: center;
+  justify-content: var(--mmw-node-justify, center);
+  gap: 0.5em;
+}
+
+.mmw-title {
+  min-width: 0;
+  max-width: calc(var(--mmw-max-w, 240px) - 24px * var(--mmw-pad, 1));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: inherit;
 }
 
 .mmw-wrap .mmw-node {
   white-space: normal;
   overflow-wrap: anywhere;
   overflow: visible;
+}
+
+.mmw-wrap .mmw-title {
+  overflow-wrap: break-word;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Etiquettes : en petit, en ecriture normale (pas en trait de crayon), a droite du titre. */
+.mmw-tags {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3em;
+  font-family: var(--font-interface, sans-serif);
+  font-size: 0.68em;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.mmw-tag {
+  display: inline-block;
+  padding: 0.28em 0.6em;
+  border-radius: 0.35em;
+  white-space: nowrap;
+}
+
+.mmw-comment-mark {
+  display: inline-flex;
+  flex: none;
+  opacity: 0.55;
 }
 
 .mmw-node:hover {
@@ -98,8 +140,11 @@
   color: var(--text-on-accent);
 }
 
-.mmw-node.mmw-depth-0 {
+.mmw-node.mmw-depth-0 .mmw-title {
   max-width: none;
+}
+
+.mmw-node.mmw-depth-0 {
   white-space: nowrap;
   overflow: visible;
   padding: calc(16px * var(--mmw-pad, 1)) calc(44px * var(--mmw-pad, 1));
@@ -518,4 +563,177 @@
 .mmw-node.mmw-drop-target {
   outline: 2px dashed var(--interactive-accent);
   outline-offset: 3px;
+}
+
+/* Fenetre du double clic : titre, titre court, commentaire et etiquettes */
+.mmw-dialog {
+  position: absolute;
+  z-index: 8;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 330px;
+  max-width: calc(100% - 16px);
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.3));
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  cursor: default;
+}
+
+.mmw-dlg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mmw-dlg-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-dlg-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mmw-dlg-comment {
+  min-height: 4.6em;
+  resize: vertical;
+  font-family: inherit;
+}
+
+/* Zone des etiquettes : sa hauteur suit le nombre et la taille des etiquettes, jusqu'a une limite. */
+.mmw-dlg-tagbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+}
+
+.mmw-dlg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mmw-dlg-chip {
+  height: auto;
+  padding: 3px 9px;
+  border: none;
+  border-radius: 5px;
+  box-shadow: none;
+  font-family: var(--font-interface, sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  opacity: 0.4;
+  cursor: pointer;
+}
+
+.mmw-dlg-chip:hover {
+  opacity: 0.75;
+}
+
+.mmw-dlg-chip.mmw-on {
+  opacity: 1;
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.mmw-dlg-empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-dlg-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Panneau des etiquettes du menu de la carte */
+.mmw-popup.mmw-popup-wide {
+  width: 320px;
+}
+
+.mmw-tagpanel .mmw-back {
+  margin-bottom: 6px;
+}
+
+.mmw-taglist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.mmw-tagrow {
+  display: grid;
+  grid-template-columns: 62px 1fr 30px 30px 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.mmw-tag-legend {
+  display: grid;
+  grid-template-columns: 62px 1fr 30px 30px 28px;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-tag-legend span:nth-child(1) {
+  grid-column: 2;
+}
+
+.mmw-tag-legend span:nth-child(2),
+.mmw-tag-legend span:nth-child(3) {
+  text-align: center;
+}
+
+.mmw-tag-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-interface, sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  padding: 3px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.mmw-tag-name {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.mmw-tagcolor {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.mmw-btn-small {
+  width: 28px;
+  height: 28px;
 }

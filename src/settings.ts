@@ -12,7 +12,46 @@ export type TextAlign = `left` | `center` | `right`;
 export type Roughness = 0 | 1 | 2;
 
 // Numero de la version du format des reglages enregistres.
-export const SETTINGS_VERSION = 3;
+export const SETTINGS_VERSION = 4;
+
+// Etiquette affichee en petit a cote du titre, sur la carte seulement. `id` est stable : la note memorise l'identifiant.
+export interface TagDef {
+  id: string;
+  name: string;
+  bg: string;
+  fg: string;
+}
+
+const TAG_HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const TAG_ID_RE = /^[A-Za-z0-9_-]{1,24}$/;
+
+// Ne garde que des etiquettes valides : les reglages enregistres peuvent avoir ete modifies a la main.
+export function sanitizeTags(raw: unknown): TagDef[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: TagDef[] = [];
+  for (const t of raw) {
+    if (!t || typeof t !== `object`) continue;
+    const r = t as Record<string, unknown>;
+    if (typeof r.id !== `string` || !TAG_ID_RE.test(r.id) || seen.has(r.id)) continue;
+    const name = typeof r.name === `string` ? r.name.replace(/[\r\n]+/g, ` `).trim().slice(0, 40) : ``;
+    const bg = typeof r.bg === `string` && TAG_HEX.test(r.bg) ? r.bg : `#ffe8cc`;
+    const fg = typeof r.fg === `string` && TAG_HEX.test(r.fg) ? r.fg : `#7c3a00`;
+    seen.add(r.id);
+    out.push({ id: r.id, name, bg, fg });
+  }
+  return out.slice(0, 100);
+}
+
+// Nouvel identifiant d'etiquette, distinct de ceux qui existent.
+export function newTagId(existing: TagDef[]): string {
+  const used = new Set(existing.map((t) => t.id));
+  for (let i = 0; i < 1000; i++) {
+    const id = `t${Math.random().toString(36).slice(2, 6)}`;
+    if (!used.has(id)) return id;
+  }
+  return `t${Date.now().toString(36)}`;
+}
 
 export interface MmSettings {
   settingsVersion: number;
@@ -42,6 +81,8 @@ export interface MmSettings {
   fontFamily: FontFamily;
   fontScale: number;
   textAlign: TextAlign;
+  // Liste des etiquettes disponibles (menu de la carte).
+  tags: TagDef[];
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -71,6 +112,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   fontFamily: `default`,
   fontScale: 1,
   textAlign: `center`,
+  tags: [],
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).
@@ -114,6 +156,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   delete data.paneSize;
 
   const merged = { ...DEFAULT_SETTINGS, ...data } as MmSettings;
+  merged.tags = sanitizeTags(data.tags);
   merged.settingsVersion = SETTINGS_VERSION;
   return merged;
 }

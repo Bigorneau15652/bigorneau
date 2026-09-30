@@ -1,7 +1,7 @@
 // Commandes de la carte, inspirees d'Excalidraw : en bas a gauche, le menu burger (reglages), la palette
 // (apparence de la carte, des niveaux de titre ou d'une case), puis le zoom, l'annulation et la compacite.
 // N'utilise que le DOM standard.
-import type { MmSettings, PanePosition } from "./settings";
+import { MmSettings, newTagId, PanePosition, TagDef } from "./settings";
 import type { NodeStyle, StylePatch } from "./style";
 
 export interface ControlActions {
@@ -23,7 +23,7 @@ export interface ControlActions {
   scopeLabel: (individual: boolean) => string;
 }
 
-type PopupKind = `menu` | `style` | null;
+type PopupKind = `menu` | `style` | `tags` | null;
 
 const svg = (inner: string, size = 18, extra = ``): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${inner}</svg>`;
@@ -45,6 +45,8 @@ const ICONS: Record<string, string> = {
   ),
   compact: svg(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/>`),
   check: svg(`<path d="m5 12 5 5 9-10"/>`, 14),
+  tag: svg(`<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V4h9l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="8.5" r="1.2"/>`),
+  trash: svg(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`, 16),
 };
 
 // Icones des options du panneau d'apparence.
@@ -125,6 +127,8 @@ export class MapControls {
   private slider: HTMLInputElement;
   private scopeEl: HTMLElement | null = null;
   private open: PopupKind = null;
+  // Champ du nom a activer apres l'ajout d'une etiquette.
+  private focusTagIndex: number | null = null;
   private tipTimer: number | null = null;
   // Vrai quand Cmd (ou Ctrl) est maintenu : la modification ne concerne que la case selectionnee.
   private mod = false;
@@ -285,7 +289,7 @@ export class MapControls {
   // Met a jour l'affichage des commandes et du panneau ouvert d'apres les reglages.
   refresh(): void {
     this.slider.value = String(this.getSettings().compactness);
-    this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu`);
+    this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu` || this.open === `tags`);
     this.styleBtn.classList.toggle(`mmw-active`, this.open === `style`);
     this.scopeEl = null;
     if (this.open === null) {
@@ -294,9 +298,89 @@ export class MapControls {
       return;
     }
     const scroll = this.popup.scrollTop;
-    this.popup.replaceChildren(this.open === `menu` ? this.buildMenu() : this.buildStylePanel());
+    this.popup.classList.toggle(`mmw-popup-wide`, this.open === `tags`);
+    this.popup.replaceChildren(this.open === `menu` ? this.buildMenu() : this.open === `tags` ? this.buildTagsPanel() : this.buildStylePanel());
     this.popup.style.display = ``;
     this.popup.scrollTop = scroll;
+    if (this.focusTagIndex !== null) {
+      (this.popup.querySelectorAll(`.mmw-tag-name`)[this.focusTagIndex] as HTMLInputElement | undefined)?.focus();
+      this.focusTagIndex = null;
+    }
+  }
+
+  // ---------------------------------------------------------------- etiquettes
+
+  // Liste des etiquettes : nom, couleur de fond et couleur du texte. Les etiquettes se donnent aux titres par la
+  // fenetre du double clic.
+  private buildTagsPanel(): HTMLElement {
+    const a = this.actions;
+    const tags = this.getSettings().tags;
+    const panel = h(`div`, `mmw-tagpanel`);
+
+    const back = h(`button`, `mmw-menu-item mmw-back`);
+    back.type = `button`;
+    back.append(h(`span`, `mmw-menu-label`, `Retour au menu`));
+    back.addEventListener(`click`, () => {
+      this.open = `menu`;
+      this.refresh();
+    });
+    panel.append(back);
+    panel.append(h(`div`, `mmw-menu-title`, `Étiquettes de la carte`));
+    panel.append(h(`div`, `mmw-scope-hint`, `Une étiquette a un nom, une couleur de fond et une couleur de texte. Elle apparaît en petit à côté du titre, sur la carte seulement. Pour la donner à un titre, faites un double clic sur ce titre.`));
+
+    const save = (next: TagDef[]): void => a.change({ tags: next });
+    const patched = (i: number, patch: Partial<TagDef>): TagDef[] => tags.map((t, j) => (j === i ? { ...t, ...patch } : t));
+
+    const list = h(`div`, `mmw-taglist`);
+    if (tags.length === 0) list.append(h(`div`, `mmw-menu-help`, `Aucune étiquette pour l'instant.`));
+    tags.forEach((t, i) => {
+      const row = h(`div`, `mmw-tagrow`);
+      const preview = h(`span`, `mmw-tag mmw-tag-preview`, t.name === `` ? `?` : t.name);
+      preview.style.background = t.bg;
+      preview.style.color = t.fg;
+
+      const name = h(`input`, `mmw-tag-name`);
+      name.type = `text`;
+      name.value = t.name;
+      name.placeholder = `Nom`;
+      name.maxLength = 40;
+      name.addEventListener(`input`, () => {
+        preview.textContent = name.value === `` ? `?` : name.value;
+      });
+      name.addEventListener(`change`, () => save(patched(i, { name: name.value.trim() })));
+      name.addEventListener(`keydown`, (e) => {
+        if (e.key === `Enter`) name.blur();
+      });
+
+      const color = (value: string, label: string, apply: (v: string) => void, live: (v: string) => void): HTMLInputElement => {
+        const input = h(`input`, `mmw-tagcolor`);
+        input.type = `color`;
+        input.value = /^#[0-9a-fA-F]{6}$/.test(value) ? value : `#ffffff`;
+        tip(input, label);
+        input.addEventListener(`input`, () => live(input.value));
+        input.addEventListener(`change`, () => apply(input.value));
+        return input;
+      };
+      const bg = color(t.bg, `Couleur de fond`, (v) => save(patched(i, { bg: v })), (v) => (preview.style.background = v));
+      const fg = color(t.fg, `Couleur du texte`, (v) => save(patched(i, { fg: v })), (v) => (preview.style.color = v));
+      const del = iconButton(ICONS.trash, `Supprimer cette étiquette`, () => save(tags.filter((_, j) => j !== i)), `mmw-btn mmw-btn-small`);
+      row.append(preview, name, bg, fg, del);
+      list.append(row);
+    });
+    panel.append(list);
+
+    const legend = h(`div`, `mmw-tag-legend`);
+    legend.append(h(`span`, ``, `Nom`), h(`span`, ``, `Fond`), h(`span`, ``, `Texte`));
+    if (tags.length > 0) panel.insertBefore(legend, list);
+
+    const add = h(`button`, `mmw-option mmw-reset`, `Ajouter une étiquette`);
+    add.type = `button`;
+    add.addEventListener(`click`, () => {
+      this.focusTagIndex = tags.length;
+      save([...tags, { id: newTagId(tags), name: ``, bg: `#ffe8cc`, fg: `#7c3a00` }]);
+    });
+    panel.append(add);
+    return panel;
   }
 
   // ---------------------------------------------------------------- menu
@@ -361,8 +445,12 @@ export class MapControls {
 
     menu.append(
       h(`div`, `mmw-menu-sep`),
+      item(ICONS.tag, `Étiquettes…`, () => {
+        this.open = `tags`;
+        this.refresh();
+      }),
       item(ICONS.settings, `Tous les paramètres`, () => a.openSettings()),
-      h(`div`, `mmw-menu-help`, `Flèches : se déplacer. Entrée : rédiger. Espace : plier ou déplier. Cmd ou Ctrl + A : tout sélectionner. Maj + clic ou Maj + glisser : sélection multiple. Molette avec Cmd ou Ctrl : zoomer.`)
+      h(`div`, `mmw-menu-help`, `Flèches : se déplacer. Entrée : nouveau titre. Tab : sous-titre. F2 ou double clic : modifier le titre, l'étiquette et le commentaire. Cmd ou Ctrl + Maj + Entrée : passer dans la note et revenir. Espace : plier ou déplier. Cmd ou Ctrl + A : tout sélectionner. Maj + clic ou Maj + glisser : sélection multiple. Molette avec Cmd ou Ctrl : zoomer.`)
     );
     return menu;
   }

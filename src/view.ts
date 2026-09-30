@@ -3,12 +3,13 @@ import { setActiveRange, tempLineField } from "./active-chapter";
 import { openBlankLine, releaseTempLine } from "./temp-line";
 import { revealRange } from "./reveal";
 import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
-import { addNode, arrowTarget, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
+import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { activeLines, applyLineEdits, flattenDoc, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
+import type { DialogValues } from "./node-dialog";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
-import type { StylePatch } from "./style";
+import type { MmMeta, StylePatch } from "./style";
 import { MapEdit, MapRenderer } from "./renderer";
 
 // Fenetre de confirmation avant de supprimer des titres et leur contenu.
@@ -112,6 +113,7 @@ export class MindmapView extends ItemView {
       onEdit: (edit) => void this.onEdit(edit),
       onMessage: (text) => new Notice(text),
       onContextMenu: (key, event) => this.showContextMenu(key, event),
+      onDetails: (key, values) => this.applyDetails(key, values),
     });
     await this.refresh();
   }
@@ -286,6 +288,57 @@ export class MindmapView extends ItemView {
     }
   }
 
+  // Validation de la fenetre d'un titre : le titre s'ecrit dans la note ; le titre court, le commentaire et les
+  // etiquettes vont dans le commentaire invisible sous le titre. Une seule modification de la note (une seule
+  // etape d'annulation).
+  private applyDetails(key: string, values: DialogValues) {
+    this.editQueue = this.editQueue.then(() => this.runDetails(key, values)).catch(() => undefined);
+  }
+
+  private async runDetails(key: string, values: DialogValues) {
+    const file = this.plugin.lastFile;
+    const renderer = this.renderer;
+    if (!file || !renderer) return;
+    if (key === `r`) {
+      await this.renameFile(file, values.title);
+      renderer.focus();
+      return;
+    }
+    const editor = this.plugin.getOpenEditor(file);
+    const before = editor ? editor.getValue() : await this.app.vault.read(file);
+    let text = before;
+    const node = nodeByKey(parseNote(text, file.name), key);
+    if (!node) return;
+    if (cleanTitle(values.title) !== node.title) {
+      const renamed = renameTitle(text, file.name, key, values.title);
+      if (renamed) text = renamed.text;
+    }
+    const doc = parseNote(text, file.name);
+    const current = nodeByKey(doc, key);
+    if (!current) return;
+    const meta: MmMeta = { ...(current.meta ?? {}) };
+    const short = values.short.trim();
+    const comment = values.comment.trim();
+    if (short) meta.short = short;
+    else delete meta.short;
+    if (comment) meta.comment = comment;
+    else delete meta.comment;
+    if (values.tags.length > 0) meta.tags = values.tags;
+    else delete meta.tags;
+    const edits = metaEditsFor(doc, [{ key, meta }]);
+    if (edits.length > 0) text = applyLineEdits(text, edits, doc.eol);
+    if (text === before) {
+      renderer.focus();
+      return;
+    }
+    await this.writeText(file, before, text);
+    const next = parseNote(text, file.name);
+    this.doc = next;
+    renderer.setDoc(next, this.mapKey, serializeNote(next) === text);
+    this.updateActiveRange();
+    renderer.focus();
+  }
+
   // Menu du clic droit sur une case : edition, presse-papiers et acces a l'apparence.
   private showContextMenu(key: string, event: MouseEvent) {
     const renderer = this.renderer;
@@ -304,7 +357,7 @@ export class MindmapView extends ItemView {
     };
     const run = (kind: MapEdit[`kind`]) => () => this.onEdit({ kind, key, keys });
 
-    add(isRoot ? `Renommer la note (F2)` : `Renommer (F2)`, `pencil`, () => renderer.startRename(key));
+    add(isRoot ? `Renommer la note (F2)` : `Titre, étiquettes et commentaire (F2)`, `pencil`, () => renderer.openDialog(key));
     add(`Ajouter un sous-titre (Tab)`, `corner-down-right`, run(`child`));
     add(`Ajouter un titre de même niveau (Entrée)`, `plus`, run(`sibling`), { disabled: isRoot });
     menu.addSeparator();
