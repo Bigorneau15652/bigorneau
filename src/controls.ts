@@ -438,7 +438,8 @@ export class MapControls {
       toggle(`Afficher le préfixe Markdown (#)`, s.showPrefix, (v) => a.change({ showPrefix: v })),
       toggle(`Titres longs : passer à la ligne`, s.longTitles === `wrap`, (v) => a.change({ longTitles: v ? `wrap` : `ellipsis` })),
       toggle(`Griser les chapitres inactifs`, s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
-      toggle(`Inclure les sous-titres dans le chapitre actif`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
+      toggle(`Inclure les sous-titres dans le chapitre actif`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v })),
+      toggle(`Flèches de lien toujours en bleu`, s.linkColored, (v) => a.change({ linkColored: v }))
     );
 
     const contrast = h(`div`, `mmw-menu-row`);

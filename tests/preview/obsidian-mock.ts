@@ -67,29 +67,6 @@ export class Modal {
     (this as unknown as { onClose?: () => void }).onClose?.();
   }
 }
-export class FuzzySuggestModal<T> {
-  constructor(public app: unknown) {}
-  setPlaceholder(): void {
-    /* sans objet */
-  }
-  getItems(): T[] {
-    return [];
-  }
-  getItemText(_item: T): string {
-    return ``;
-  }
-  onChooseItem(_item: T): void {
-    /* remplace par la vue */
-  }
-  // Simulation : l'element choisi est designe par window.suggestPick (nom ou indice, un par ouverture).
-  open(): void {
-    const picks = (w.suggestPicks as (string | number)[] | undefined) ?? [];
-    const pick = picks.shift();
-    const items = this.getItems();
-    const item = typeof pick === `number` ? items[pick] : items.find((i) => this.getItemText(i).includes(String(pick)));
-    if (item !== undefined) this.onChooseItem(item);
-  }
-}
 export class Setting {
   constructor(public el: HTMLElement) {}
   addButton(cb: (b: unknown) => void): this {

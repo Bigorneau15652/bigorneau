@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNote } from "../src/model";
 import { edgePoint, linkPath } from "../src/link-geom";
-import { formatLink, insertLink, linkHeading, parseLinks, removeLink } from "../src/links";
+import { formatLink, insertLink, linkHeading, parseLinks, removeLink, webLinks } from "../src/links";
 
 const NAME = `Ma note.md`;
 
@@ -72,4 +72,42 @@ test(`fleches de lien : trace droit ou courbe entre deux cases`, () => {
   // Cases l'une sous l'autre : le trait droit part du bord droit de chacune.
   const c = { x: 0, y: 100, w: 80, h: 40 };
   assert.equal(linkPath(a, c, false), `M 102 20 L 83 120`);
+});
+
+test(`liens vers une note entiere et liens web`, () => {
+  const text = [
+    `## A`,
+    `%% mmw {"comment":"voir https://exemple.org/cache"} %%`,
+    `[[Dossier/Autre note|Lien vers Autre note]]`,
+    `[[Ma note]]`,
+    `[[]]`,
+    `Texte avec [un site](https://exemple.org/page) et https://www.youtube.com/watch?v=abc123, puis <https://autre.fr/x>.`,
+    `![](https://www.youtube.com/watch?v=xyz789)`,
+    `<iframe width="560" src="https://www.youtube.com/embed/zzz" frameborder="0"></iframe>`,
+    `Doublon : https://exemple.org/page`,
+    "Code `https://code.test/a` ignore",
+    "```",
+    `https://bloc.test/b`,
+    "```",
+    `[[Note interne]] et ![[image.png]] ne sont pas des liens web.`,
+    `## B`,
+    `https://b.test`,
+    ``,
+  ].join(`\n`);
+  const doc = parseNote(text, NAME);
+  const links = parseLinks(doc, NAME);
+  // [[Ma note]] est un lien vers la note elle-meme sans titre : ce n'est pas un lien entre titres.
+  assert.deepEqual(links, [{ from: `r.0`, line: 2, note: `Dossier/Autre note`, heading: null, external: true, to: null }]);
+  assert.equal(formatLink(`Dossier/Autre note`, null), `[[Dossier/Autre note|Lien vers Autre note]]`);
+  assert.equal(insertLink(`## A\n`, parseNote(`## A\n`, NAME), `r.0`, `Autre`, null), `## A\n[[Autre|Lien vers Autre]]\n`);
+  assert.equal(insertLink(`## A\n`, parseNote(`## A\n`, NAME), `r.0`, ``, null), null);
+  const web = webLinks(doc, `r.0`);
+  assert.deepEqual(
+    web.map((w) => w.url),
+    [`https://exemple.org/page`, `https://www.youtube.com/watch?v=abc123`, `https://autre.fr/x`, `https://www.youtube.com/watch?v=xyz789`, `https://www.youtube.com/embed/zzz`]
+  );
+  assert.equal(web[0].label, `un site`);
+  assert.equal(web[2].label, `autre.fr/x`);
+  assert.deepEqual(webLinks(doc, `r.1`).map((w) => w.url), [`https://b.test`]);
+  assert.deepEqual(webLinks(doc, `r`), []);
 });

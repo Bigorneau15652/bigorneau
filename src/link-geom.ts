@@ -58,3 +58,23 @@ export function linkPath(a: Box, b: Box, curved: boolean): string {
   const p2 = edgePoint(b, cp.x, cp.y, 3);
   return `M ${round(p1.x)} ${round(p1.y)} Q ${round(cp.x)} ${round(cp.y)} ${round(p2.x)} ${round(p2.y)}`;
 }
+
+// Lien entre deux titres de la carte : le trait sort du bord droit du titre de depart et rentre par le bord droit du
+// titre d'arrivee, sans traverser les titres voisins. Courbe ou en equerre selon le style des branches.
+export function loopPath(ax: number, ay: number, bx: number, by: number, curved: boolean, clear = 0): string {
+  // `clear` : bord droit le plus avance des cases que le trait longe, pour passer a droite d'elles.
+  const base = Math.max(ax, bx, clear);
+  if (curved) {
+    const x = base + Math.min(90, 30 + Math.abs(by - ay) * 0.25);
+    return `M ${round(ax)} ${round(ay)} C ${round(x)} ${round(ay)} ${round(x)} ${round(by)} ${round(bx)} ${round(by)}`;
+  }
+  const x = base + 18;
+  return `M ${round(ax)} ${round(ay)} L ${round(x)} ${round(ay)} L ${round(x)} ${round(by)} L ${round(bx)} ${round(by)}`;
+}
+
+// Lien vers une note exterieure : du bord gauche du titre vers la case de la note, placee a gauche de la carte.
+export function sidePath(sx: number, sy: number, tx: number, ty: number, curved: boolean): string {
+  if (!curved) return `M ${round(sx)} ${round(sy)} L ${round(tx)} ${round(ty)}`;
+  const mx = (sx + tx) / 2;
+  return `M ${round(sx)} ${round(sy)} C ${round(mx)} ${round(sy)} ${round(mx)} ${round(ty)} ${round(tx)} ${round(ty)}`;
+}

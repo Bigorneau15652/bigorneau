@@ -3,54 +3,16 @@ import { setActiveRange, tempLineField } from "./active-chapter";
 import { moveCursorOutOfHidden, setHideEnabled, setHideMeta } from "./note-hide";
 import { openBlankLine, releaseTempLine } from "./temp-line";
 import { revealRange } from "./reveal";
-import { Editor, FuzzySuggestModal, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
+import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { activeLines, applyLineEdits, flattenDoc, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
-import { insertLink, linkHeading, MapLink, parseLinks, removeLink, sameHeading } from "./links";
+import { insertLink, linkHeading, MapLink, parseLinks, removeLink, sameHeading, WebLink } from "./links";
 import type { DialogValues } from "./node-dialog";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
 import type { MmMeta, StylePatch } from "./style";
 import { MapEdit, MapRenderer } from "./renderer";
-
-// Choix d'une note du coffre, puis d'un de ses titres, pour un lien vers une autre note.
-class NoteSuggest extends FuzzySuggestModal<TFile> {
-  constructor(app: import("obsidian").App, private files: TFile[], private choose: (file: TFile) => void) {
-    super(app);
-    this.setPlaceholder(`Note à relier…`);
-  }
-  getItems(): TFile[] {
-    return this.files;
-  }
-  getItemText(file: TFile): string {
-    return file.path.replace(/\.md$/i, ``);
-  }
-  onChooseItem(file: TFile): void {
-    this.choose(file);
-  }
-}
-
-interface HeadingItem {
-  title: string;
-  level: number;
-}
-
-class HeadingSuggest extends FuzzySuggestModal<HeadingItem> {
-  constructor(app: import("obsidian").App, private headings: HeadingItem[], private choose: (h: HeadingItem) => void) {
-    super(app);
-    this.setPlaceholder(`Titre à relier…`);
-  }
-  getItems(): HeadingItem[] {
-    return this.headings;
-  }
-  getItemText(h: HeadingItem): string {
-    return `${`#`.repeat(h.level)} ${h.title}`;
-  }
-  onChooseItem(h: HeadingItem): void {
-    this.choose(h);
-  }
-}
 
 // Fenetre de confirmation avant de supprimer des titres et leur contenu.
 class ConfirmDeleteModal extends Modal {
@@ -160,7 +122,10 @@ export class MindmapView extends ItemView {
       onToggleHidden: (key) => void this.toggleHidden(key),
       getFileName: () => this.plugin.lastFile?.name ?? `Note.md`,
       onLinkCreate: (from, to) => this.queue(() => this.createLink(from, to)),
-      onLinkExternal: (from) => this.pickExternalLink(from),
+      onLinkExternal: (from, path, heading) => this.queue(() => this.createExternalLink(from, path, heading)),
+      getVaultFiles: () => this.vaultFiles(),
+      getHeadings: (path) => this.vaultHeadings(path),
+      onWebOpen: (links, event) => this.openWeb(links, event),
       onLinkDelete: (link) => this.queue(() => this.deleteLink(link)),
       onLinkOpen: (links, event) => this.openLinks(links, event),
       onBack: () => void this.goBack(),
@@ -444,37 +409,47 @@ export class MindmapView extends ItemView {
     await this.commitText(file, before, removeLink(before, doc, now));
   }
 
-  // Lien vers un titre d'une autre note : choix de la note puis du titre.
-  private pickExternalLink(from: string) {
+  // Notes proposees pour un lien vers une autre note : celles du coffre, sauf la note de la carte.
+  private vaultFiles(): string[] {
     const current = this.plugin.lastFile;
-    if (!current) return;
-    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path !== current.path);
-    if (files.length === 0) {
-      new Notice(`Il n'y a pas d'autre note dans le coffre.`);
-      return;
-    }
-    new NoteSuggest(this.app, files, (file) => {
-      void this.app.vault.cachedRead(file).then((text) => {
-        const headings = flattenDoc(parseNote(text, file.name))
-          .filter((e) => e.key !== `r` && linkHeading(e.node.title) !== ``)
-          .map((e) => ({ title: e.node.title, level: e.node.level }));
-        if (headings.length === 0) {
-          new Notice(`Cette note n'a aucun titre à relier.`);
-          return;
-        }
-        new HeadingSuggest(this.app, headings, (h) => this.queue(() => this.createExternalLink(from, file, h.title))).open();
-      });
-    }).open();
+    return this.app.vault
+      .getMarkdownFiles()
+      .map((f) => f.path)
+      .filter((p) => !current || p !== current.path);
   }
 
-  private async createExternalLink(from: string, target: TFile, heading: string) {
+  private async vaultHeadings(path: string): Promise<{ title: string; level: number }[]> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return [];
+    const text = await this.app.vault.cachedRead(file);
+    return flattenDoc(parseNote(text, file.name))
+      .filter((e) => e.key !== `r` && linkHeading(e.node.title) !== ``)
+      .map((e) => ({ title: e.node.title, level: e.node.level }));
+  }
+
+  // Lien vers une autre note du coffre (et, si on l'a choisi, un de ses titres).
+  private async createExternalLink(from: string, path: string, heading: string | null) {
     const file = this.plugin.lastFile;
-    if (!file) return;
+    const target = this.app.vault.getAbstractFileByPath(path);
+    if (!file || !(target instanceof TFile)) return;
     const before = await this.currentText(file);
     const doc = parseNote(before, file.name);
     const name = this.app.metadataCache.fileToLinktext(target, file.path, true);
     const after = insertLink(before, doc, from, name, heading);
     if (after) await this.commitText(file, before, after);
+  }
+
+  // Clic sur la mappemonde d'un titre : ouvre la page, ou propose le choix s'il y en a plusieurs.
+  private openWeb(links: WebLink[], event: PointerEvent) {
+    if (links.length === 0) return;
+    const open = (url: string) => window.open(url, `_blank`, `noopener`);
+    if (links.length === 1) {
+      open(links[0].url);
+      return;
+    }
+    const menu = new Menu();
+    for (const l of links) menu.addItem((item) => item.setTitle(l.label).setIcon(`globe`).onClick(() => open(l.url)));
+    menu.showAtMouseEvent(event as unknown as MouseEvent);
   }
 
   // Clic sur le repere d'un titre relie a d'autres notes : ouvre la carte de la note visee.
@@ -485,7 +460,7 @@ export class MindmapView extends ItemView {
       return;
     }
     const menu = new Menu();
-    for (const l of links) menu.addItem((item) => item.setTitle(`${l.note} › ${l.heading}`).setIcon(`link`).onClick(() => void this.openLink(l)));
+    for (const l of links) menu.addItem((item) => item.setTitle(l.heading ? `${l.note} › ${l.heading}` : l.note).setIcon(`link`).onClick(() => void this.openLink(l)));
     menu.showAtMouseEvent(event as unknown as MouseEvent);
   }
 

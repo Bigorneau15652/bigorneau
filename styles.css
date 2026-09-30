@@ -822,14 +822,22 @@
   opacity: 0.8;
 }
 
+.mmw-link-blue {
+  stroke: var(--link-color, #4a8bfc);
+}
+
 .mmw-link-on {
-  stroke: var(--interactive-accent);
+  stroke: var(--link-color, #4a8bfc);
   stroke-width: 2.6px;
   opacity: 1;
 }
 
 .mmw-link-head {
   fill: var(--mmw-link, var(--text-normal));
+}
+
+.mmw-link-head-blue {
+  fill: var(--link-color, #4a8bfc);
 }
 
 .mmw-link-hit {
@@ -881,4 +889,134 @@
 
 .mmw-link-mark:hover {
   opacity: 1;
+}
+
+/* Mappemonde des titres qui contiennent des liens web ou des videos integrees. */
+.mmw-web-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--link-color, #4a8bfc);
+  cursor: pointer;
+}
+
+.mmw-web-mark:hover {
+  filter: brightness(1.25);
+}
+
+/* Case d'une note exterieure, a gauche de la carte : d'une autre couleur que les titres de la note. */
+.mmw-ext-box {
+  position: absolute;
+  box-sizing: border-box;
+  max-width: 220px;
+  padding: 5px 12px;
+  overflow: hidden;
+  border: 1.5px solid var(--link-color, #4a8bfc);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--link-color, #4a8bfc) 14%, transparent);
+  color: var(--link-color, #4a8bfc);
+  font-size: 0.92em;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mmw-ext-box:hover {
+  background: color-mix(in srgb, var(--link-color, #4a8bfc) 26%, transparent);
+}
+
+/* Fenetre de choix d'une note du coffre, au-dessus des menus de la carte. */
+.mmw-picker {
+  position: absolute;
+  left: 10px;
+  bottom: 62px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 340px;
+  max-width: calc(100% - 20px);
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  box-shadow: var(--shadow-l);
+}
+
+.mmw-picker-title {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.mmw-picker-input {
+  width: 100%;
+}
+
+.mmw-picker-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.mmw-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-normal);
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.mmw-picker-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.mmw-picker-row.mmw-picker-on {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.mmw-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.mmw-picker-folder {
+  font-weight: 600;
+}
+
+.mmw-picker-detail {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  opacity: 0.7;
+  font-size: 0.9em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mmw-picker-arrow {
+  flex: none;
+  opacity: 0.7;
+}
+
+.mmw-picker-empty,
+.mmw-picker-hint {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.mmw-picker-empty {
+  padding: 6px 8px;
 }
