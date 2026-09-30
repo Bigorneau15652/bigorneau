@@ -61,6 +61,16 @@ export class MmSettingTab extends PluginSettingTab {
           })
       );
 
+    new Setting(containerEl)
+      .setName(`Masquer les commentaires de la carte dans la note`)
+      .setDesc(`Les étiquettes, le titre court, le commentaire et les styles d'un titre sont conservés dans une ligne de commentaire sous le titre (%% mmw ... %%). Activé : cette ligne n'apparaît pas dans la note. Désactivé : elle reste visible.`)
+      .addToggle((t) =>
+        t.setValue(s.hideMetaLines).onChange(async (v) => {
+          s.hideMetaLines = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
     new Setting(containerEl).setName(`Carte`).setHeading();
 
     new Setting(containerEl)

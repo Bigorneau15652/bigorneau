@@ -1,8 +1,8 @@
 // Banc d'essai d'integration : le vrai code de la vue Carte, avec l'API d'Obsidian simulee et un vrai editeur CodeMirror
 // dans le volet de note.
-import { history } from "@codemirror/commands";
+import { defaultKeymap, history } from "@codemirror/commands";
 import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { App, Editor, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "../../src/active-chapter";
 import { isModEnter } from "../../src/keys";
@@ -45,6 +45,7 @@ app.makeNoteView = (leaf: WorkspaceLeaf, f: TFile): MarkdownView => {
   nv.file = f;
   const extensions = [
     history(),
+    keymap.of(defaultKeymap),
     EditorView.lineWrapping,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) app.files.set(f.path, u.state.doc.toString());

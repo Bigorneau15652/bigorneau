@@ -459,3 +459,14 @@ export function hiddenLineRanges(doc: MmDoc): { start: number; end: number }[] {
   walk(doc.root);
   return out;
 }
+
+// Numeros de ligne (a partir de 0, ordre croissant) des commentaires invisibles du plugin (styles, etiquettes, etc.).
+export function metaLineNumbers(doc: MmDoc): number[] {
+  const out: number[] = [];
+  const walk = (n: MmNode): void => {
+    if (n.metaLine !== undefined) out.push(n.metaLine);
+    for (const c of n.children) walk(c);
+  };
+  walk(doc.root);
+  return out.sort((a, b) => a - b);
+}

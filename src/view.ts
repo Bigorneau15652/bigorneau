@@ -1,6 +1,6 @@
 import { EditorView } from "@codemirror/view";
 import { setActiveRange, tempLineField } from "./active-chapter";
-import { moveCursorOutOfHidden, setHideEnabled } from "./note-hide";
+import { moveCursorOutOfHidden, setHideEnabled, setHideMeta } from "./note-hide";
 import { openBlankLine, releaseTempLine } from "./temp-line";
 import { revealRange } from "./reveal";
 import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
@@ -558,19 +558,19 @@ export class MindmapView extends ItemView {
     if (!cm) return;
     const s = this.plugin.settings;
     // Les titres masques disparaissent de la note ; le curseur ne reste pas dans une partie masquee.
-    const hideOn = setHideEnabled.of(true);
+    const hideOn = [setHideEnabled.of(true), setHideMeta.of(s.hideMetaLines)];
     // Titre masque selectionne : rien n'est actif dans la note, tout y est grise.
     const hiddenSelection = !!this.selectedKey && !!this.doc && isHiddenKey(this.doc, this.selectedKey);
     const range = s.contrastEnabled && this.selectedKey && this.doc && !hiddenSelection ? activeLines(this.doc, this.selectedKey, s.includeSubtitles) : null;
     if (hiddenSelection && s.contrastEnabled) {
-      cm.dispatch({ effects: [hideOn, setActiveRange.of({ from: 0, to: 0 })] });
+      cm.dispatch({ effects: [...hideOn, setActiveRange.of({ from: 0, to: 0 })] });
     } else if (!range) {
-      cm.dispatch({ effects: [hideOn, setActiveRange.of(null)] });
+      cm.dispatch({ effects: [...hideOn, setActiveRange.of(null)] });
     } else {
       const d = cm.state.doc;
       const from = d.line(Math.min(range.startLine, d.lines - 1) + 1).from;
       const to = range.endLine >= d.lines ? d.length : d.line(range.endLine + 1).from;
-      cm.dispatch({ effects: [hideOn, setActiveRange.of({ from, to })] });
+      cm.dispatch({ effects: [...hideOn, setActiveRange.of({ from, to })] });
     }
     moveCursorOutOfHidden(cm);
   }

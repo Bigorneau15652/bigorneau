@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EditorState } from "@codemirror/state";
-import { applyLineEdits, hiddenLineRanges, isHiddenKey, nodeByKey, parseNote, serializeNote } from "../src/model";
-import { hideExtension, hideField, setHideEnabled } from "../src/note-hide";
+import { applyLineEdits, hiddenLineRanges, isHiddenKey, metaLineNumbers, nodeByKey, parseNote, serializeNote } from "../src/model";
+import { hideExtension, hideField, setHideEnabled, setHideMeta } from "../src/note-hide";
 import { makeTag, migrateSettings, newTagId, nextTagColors, sanitizeTags, SETTINGS_VERSION, TAG_DEFAULT_COLORS, TAG_PALETTE } from "../src/settings";
 import { detailsOnly, formatMetaLine, isEmptyMeta, parseMetaLine, sanitizeMeta } from "../src/style";
 import { metaEditsFor, planReset, planStyle } from "../src/style-edit";
@@ -128,4 +128,28 @@ test(`titres masques : ecriture de la ligne, plages de lignes et heritage`, asyn
   const found: number[][] = [];
   on.field(hideField).deco.between(0, text.length, (from, to) => void found.push([on.doc.lineAt(from).number, on.doc.lineAt(to).number]));
   assert.deepEqual(found, [[3, 7], [11, 13]]);
+});
+
+test(`lignes de commentaire du plugin : masquees dans la note selon le reglage`, () => {
+  const meta = `%% mmw {"tags":["a"]} %%`;
+  const text = [`Intro`, `## A`, meta, `texte`, `## B`, `%% mmw {"hidden":true} %%`, `texte b`, ``].join(`\n`);
+  const doc = parseNote(text, `n.md`);
+  assert.deepEqual(metaLineNumbers(doc), [2, 5]);
+  const lines = (meta: boolean): number[][] => {
+    let st = EditorState.create({ doc: text, extensions: [hideExtension] });
+    st = st.update({ effects: [setHideEnabled.of(true), setHideMeta.of(meta)] }).state;
+    const out: number[][] = [];
+    st.field(hideField).deco.between(0, text.length, (from, to) => void out.push([st.doc.lineAt(from).number, st.doc.lineAt(to).number]));
+    return out;
+  };
+  // Sans le reglage, seule la partie masquee disparait ; avec le reglage, la ligne de A disparait aussi.
+  assert.deepEqual(lines(false), [[5, 7]]);
+  assert.deepEqual(lines(true), [[3, 3], [5, 7]]);
+  // Une suppression au clavier qui emporterait la ligne cachee sans son titre est refusee.
+  const st = EditorState.create({ doc: text, extensions: [hideExtension] }).update({ effects: [setHideEnabled.of(true), setHideMeta.of(true)] }).state;
+  const head = st.doc.line(2);
+  const refused = st.update({ changes: { from: head.to, to: head.to + 1 }, userEvent: `delete.forward` }).state;
+  assert.equal(refused.doc.toString(), text);
+  const allowed = st.update({ changes: { from: head.from, to: st.doc.line(3).to + 1 }, userEvent: `delete.selection` }).state;
+  assert.equal(allowed.doc.toString().includes(meta), false);
 });
