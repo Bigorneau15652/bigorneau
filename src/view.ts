@@ -7,7 +7,7 @@ import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting,
 import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { activeLines, applyLineEdits, flattenDoc, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
-import { insertLink, linkHeading, MapLink, parseLinks, removeLink, sameHeading, WebLink } from "./links";
+import { insertLink, insertWebLink, linkHeading, MapLink, moveLinkTo, parseLinks, removeLink, removeWebLink, replaceLink, replaceWebLink, sameHeading, WebLink, webLinks } from "./links";
 import type { DialogValues } from "./node-dialog";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
@@ -121,8 +121,9 @@ export class MindmapView extends ItemView {
       onDetails: (key, values) => this.applyDetails(key, values),
       onToggleHidden: (key) => void this.toggleHidden(key),
       getFileName: () => this.plugin.lastFile?.name ?? `Note.md`,
-      onLinkCreate: (from, to) => this.queue(() => this.createLink(from, to)),
-      onLinkExternal: (from, path, heading) => this.queue(() => this.createExternalLink(from, path, heading)),
+      onLinkCreate: (from, to, replace) => this.queue(() => this.createLink(from, to, replace)),
+      onLinkMove: (link, toLine) => this.queue(() => this.moveLinkLine(link, toLine)),
+      onLinkExternal: (from, path, heading, replace) => this.queue(() => this.createExternalLink(from, path, heading, replace)),
       getVaultFiles: () => this.vaultFiles(),
       getHeadings: (path) => this.vaultHeadings(path),
       onWebOpen: (links, event) => this.openWeb(links, event),
@@ -384,7 +385,7 @@ export class MindmapView extends ItemView {
   }
 
   // Lien d'un titre a un autre de la meme note : une ligne [[Note#Titre|Lien vers Titre]] au debut du texte du titre de depart.
-  private async createLink(from: string, to: string) {
+  private async createLink(from: string, to: string, replace?: MapLink) {
     const file = this.plugin.lastFile;
     if (!file) return;
     const before = await this.currentText(file);
@@ -395,7 +396,26 @@ export class MindmapView extends ItemView {
       new Notice(`Le titre d'arrivée est vide : donnez-lui un nom avant de le relier.`);
       return;
     }
-    const after = insertLink(before, doc, from, this.linkName(file), target.title);
+    let after: string | null;
+    if (replace) {
+      const current = this.findLink(doc, file, replace);
+      after = current ? replaceLink(before, doc, current, this.linkName(file), target.title) : null;
+    } else after = insertLink(before, doc, from, this.linkName(file), target.title);
+    if (after) await this.commitText(file, before, after);
+  }
+
+  // Le lien tel qu'il est maintenant dans la note (ses lignes ont pu changer depuis qu'il a ete affiche).
+  private findLink(doc: MmDoc, file: TFile, link: MapLink): MapLink | null {
+    return parseLinks(doc, file.name).find((l) => l.from === link.from && l.line === link.line && l.note === link.note && l.heading === link.heading) ?? null;
+  }
+
+  private async moveLinkLine(link: MapLink, toLine: number) {
+    const file = this.plugin.lastFile;
+    if (!file) return;
+    const before = await this.currentText(file);
+    const doc = parseNote(before, file.name);
+    const current = this.findLink(doc, file, link);
+    const after = current ? moveLinkTo(before, doc, current, toLine) : null;
     if (after) await this.commitText(file, before, after);
   }
 
@@ -428,15 +448,77 @@ export class MindmapView extends ItemView {
   }
 
   // Lien vers une autre note du coffre (et, si on l'a choisi, un de ses titres).
-  private async createExternalLink(from: string, path: string, heading: string | null) {
+  private async createExternalLink(from: string, path: string, heading: string | null, replace?: MapLink) {
     const file = this.plugin.lastFile;
     const target = this.app.vault.getAbstractFileByPath(path);
     if (!file || !(target instanceof TFile)) return;
     const before = await this.currentText(file);
     const doc = parseNote(before, file.name);
     const name = this.app.metadataCache.fileToLinktext(target, file.path, true);
-    const after = insertLink(before, doc, from, name, heading);
+    let after: string | null;
+    if (replace) {
+      const current = this.findLink(doc, file, replace);
+      after = current ? replaceLink(before, doc, current, name, heading) : null;
+    } else after = insertLink(before, doc, from, name, heading);
     if (after) await this.commitText(file, before, after);
+  }
+
+  // ---------------------------------------------------------------- liens web
+
+  private newWebLink(key: string) {
+    this.renderer?.openWebDialog({
+      title: `Nouveau lien web`,
+      url: ``,
+      label: ``,
+      embed: false,
+      onSubmit: (v) => this.queue(() => this.changeWebLink(key, -1, v)),
+    });
+  }
+
+  private editWebLink(key: string, index: number, w: WebLink) {
+    this.renderer?.openWebDialog({
+      title: `Modifier le lien web`,
+      url: w.url,
+      label: w.text,
+      embed: w.embed,
+      onSubmit: (v) => this.queue(() => this.changeWebLink(key, index, v)),
+      onDelete: () => this.queue(() => this.changeWebLink(key, index, null)),
+    });
+  }
+
+  // Ajoute (index -1), modifie ou retire (valeurs nulles) un lien web du paragraphe d'un titre.
+  private async changeWebLink(key: string, index: number, v: { url: string; label: string; embed: boolean } | null) {
+    const file = this.plugin.lastFile;
+    if (!file) return;
+    const before = await this.currentText(file);
+    const doc = parseNote(before, file.name);
+    let after: string | null;
+    if (index < 0) after = v ? insertWebLink(before, doc, key, v.url, v.label, v.embed) : null;
+    else if (v) after = replaceWebLink(before, doc, key, index, v.url, v.label, v.embed);
+    else after = removeWebLink(before, doc, key, index);
+    if (after) await this.commitText(file, before, after);
+    else new Notice(`Ce lien n'a pas pu être modifié : vérifiez l'adresse.`);
+  }
+
+  // Clic droit > Modifier un lien : liens vers des notes ou des titres, et liens web, du titre clique.
+  private chooseLinkToEdit(key: string, event: MouseEvent) {
+    const renderer = this.renderer;
+    const file = this.plugin.lastFile;
+    if (!renderer || !file || !this.doc) return;
+    const entries: { label: string; run: () => void }[] = [];
+    for (const l of parseLinks(this.doc, file.name).filter((x) => x.from === key)) {
+      const label = l.external ? `Note : ${l.note}${l.heading ? ` › ${l.heading}` : ``}` : `Flèche vers ${l.heading ?? ``}`;
+      entries.push({ label, run: () => renderer.editLink(l) });
+    }
+    webLinks(this.doc, key).forEach((w, i) => entries.push({ label: `Web : ${w.label}`, run: () => this.editWebLink(key, i, w) }));
+    if (entries.length === 0) return;
+    if (entries.length === 1) {
+      entries[0].run();
+      return;
+    }
+    const menu = new Menu();
+    for (const e of entries) menu.addItem((item) => item.setTitle(e.label).setIcon(`pencil`).onClick(e.run));
+    menu.showAtMouseEvent(event);
   }
 
   // Clic sur la mappemonde d'un titre : ouvre la page, ou propose le choix s'il y en a plusieurs.
@@ -455,21 +537,27 @@ export class MindmapView extends ItemView {
   // Clic sur le repere d'un titre relie a d'autres notes : ouvre la carte de la note visee.
   private openLinks(links: MapLink[], event: PointerEvent) {
     if (links.length === 0) return;
+    // Cmd ou Ctrl : la note s'ouvre dans un nouvel onglet ; sinon sa carte remplace celle-ci.
+    const tab = event.metaKey || event.ctrlKey;
     if (links.length === 1) {
-      void this.openLink(links[0]);
+      void this.openLink(links[0], tab);
       return;
     }
     const menu = new Menu();
-    for (const l of links) menu.addItem((item) => item.setTitle(l.heading ? `${l.note} › ${l.heading}` : l.note).setIcon(`link`).onClick(() => void this.openLink(l)));
+    for (const l of links) menu.addItem((item) => item.setTitle(l.heading ? `${l.note} › ${l.heading}` : l.note).setIcon(`link`).onClick(() => void this.openLink(l, tab)));
     menu.showAtMouseEvent(event as unknown as MouseEvent);
   }
 
-  private async openLink(link: MapLink) {
+  private async openLink(link: MapLink, newTab = false) {
     const current = this.plugin.lastFile;
     if (!current) return;
     const file = this.app.metadataCache.getFirstLinkpathDest(link.note, current.path);
     if (!file) {
       new Notice(`La note « ${link.note} » est introuvable.`);
+      return;
+    }
+    if (newTab) {
+      await this.app.workspace.getLeaf(`tab`).openFile(file);
       return;
     }
     this.history.push({ file: current, key: link.from });
@@ -532,6 +620,13 @@ export class MindmapView extends ItemView {
     menu.addSeparator();
     const hiddenNow = !!this.doc && !!nodeByKey(this.doc, key)?.meta?.hidden;
     add(hiddenNow ? `Afficher dans la note` : `Masquer dans la note`, hiddenNow ? `eye` : `eye-off`, () => void this.toggleHidden(key), { disabled: isRoot });
+    menu.addSeparator();
+    const file = this.plugin.lastFile;
+    const hasLinks = !isRoot && !!this.doc && !!file && (parseLinks(this.doc, file.name).some((l) => l.from === key) || webLinks(this.doc, key).length > 0);
+    add(`Nouveau lien vers une note ou un titre…`, `link`, () => renderer.startLinking(key), { disabled: isRoot });
+    add(`Nouveau lien web…`, `globe`, () => this.newWebLink(key), { disabled: isRoot });
+    add(`Modifier un lien…`, `link-2`, () => this.chooseLinkToEdit(key, event), { disabled: !hasLinks });
+    menu.addSeparator();
     add(`Apparence…`, `palette`, () => renderer.openStylePanel());
     menu.addSeparator();
     add(`Supprimer (Suppr)`, `trash-2`, run(`delete`), { disabled: isRoot, warning: true });

@@ -7,6 +7,7 @@ import { App, Editor, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "../../src/active-chapter";
 import { isModEnter } from "../../src/keys";
 import { DEFAULT_SETTINGS } from "../../src/settings";
+import { webLinks } from "../../src/links";
 import { MindmapView } from "../../src/view";
 
 const w = window as unknown as Record<string, unknown>;
@@ -110,6 +111,7 @@ const view = new MindmapView(mapLeaf as never, plugin as never);
 mapLeaf.view = view as never;
 
 w.app = app;
+w.webLinksOf = webLinks;
 w.view = view;
 w.plugin = plugin;
 w.noteView = () => view.getNoteView();
