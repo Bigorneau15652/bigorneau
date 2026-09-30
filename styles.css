@@ -926,6 +926,56 @@
   background: color-mix(in srgb, var(--link-color, #4a8bfc) 26%, transparent);
 }
 
+.mmw-ext-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+
+.mmw-ext-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Symbole d'ouverture : un clic ouvre la carte de la note, avec Cmd ou Ctrl la note dans un nouvel onglet. */
+.mmw-ext-open {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.mmw-ext-open:hover {
+  background: color-mix(in srgb, var(--link-color, #4a8bfc) 30%, transparent);
+}
+
+.mmw-ext-box.mmw-ext-on {
+  background: color-mix(in srgb, var(--link-color, #4a8bfc) 32%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-color, #4a8bfc) 35%, transparent);
+}
+
+.mmw-ext-box.mmw-ext-drag {
+  z-index: 4;
+  cursor: grabbing;
+  opacity: 0.85;
+}
+
+.mmw-web-embed {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.mmw-web-error {
+  color: var(--text-error);
+  font-size: var(--font-ui-small);
+}
+
 /* Fenetre de choix d'une note du coffre, au-dessus des menus de la carte. */
 .mmw-picker {
   position: absolute;

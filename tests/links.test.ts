@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNote } from "../src/model";
 import { edgePoint, linkPath } from "../src/link-geom";
-import { formatLink, insertLink, linkHeading, parseLinks, removeLink, webLinks } from "../src/links";
+import { formatLink, insertLink, insertWebLink, linkHeading, moveLinkTo, parseLinks, removeLink, removeWebLink, replaceLink, replaceWebLink, webLinks } from "../src/links";
 
 const NAME = `Ma note.md`;
 
@@ -110,4 +110,45 @@ test(`liens vers une note entiere et liens web`, () => {
   assert.equal(web[2].label, `autre.fr/x`);
   assert.deepEqual(webLinks(doc, `r.1`).map((w) => w.url), [`https://b.test`]);
   assert.deepEqual(webLinks(doc, `r`), []);
+});
+
+test(`liens : deplacer, remplacer, modifier et retirer`, () => {
+  const text = [`## A`, `[[Un|Lien vers Un]]`, `[[#B|Lien vers B]]`, `[[Trois|Lien vers Trois]]`, `texte`, `## B`, ``].join(`\n`);
+  const doc = parseNote(text, NAME);
+  const links = parseLinks(doc, NAME);
+  assert.equal(links.length, 3);
+  // Le premier lien passe en troisieme position.
+  const moved = moveLinkTo(text, doc, links[0], links[2].line)!;
+  assert.equal(moved.split(`\n`).slice(1, 5).join(`|`), `[[#B|Lien vers B]]|[[Trois|Lien vers Trois]]|[[Un|Lien vers Un]]|texte`);
+  // Et le dernier passe en premiere position.
+  const back = moveLinkTo(text, doc, links[2], links[0].line)!;
+  assert.equal(back.split(`\n`).slice(1, 4).join(`|`), `[[Trois|Lien vers Trois]]|[[Un|Lien vers Un]]|[[#B|Lien vers B]]`);
+  assert.equal(moveLinkTo(text, doc, links[0], links[0].line), null);
+  // Remplacement a la meme place.
+  assert.equal(replaceLink(text, doc, links[1], `Dossier/Autre`, null)!.split(`\n`)[2], `[[Dossier/Autre|Lien vers Autre]]`);
+  assert.equal(replaceLink(text, doc, links[1], ``, null), null);
+});
+
+test(`liens web : modifier, retirer et ajouter`, () => {
+  const text = [`## A`, `Voir [le site](https://a.test/x) puis https://b.test/y, et <https://c.test/z>.`, `![](https://www.youtube.com/watch?v=abc)`, `<iframe src="https://www.youtube.com/embed/zzz"></iframe>`, `## B`, ``].join(`\n`);
+  const doc = parseNote(text, NAME);
+  const web = webLinks(doc, `r.0`);
+  assert.deepEqual(web.map((w) => [w.kind, w.embed, w.line]), [[`md`, false, 1], [`bare`, false, 1], [`auto`, false, 1], [`md`, true, 2], [`src`, false, 3]]);
+  assert.equal(web[0].text, `le site`);
+  // Modification de chaque forme, sans toucher au reste de la ligne.
+  assert.equal(replaceWebLink(text, doc, `r.0`, 0, `https://n.test`, `nouveau`, false)!.split(`\n`)[1], `Voir [nouveau](https://n.test) puis https://b.test/y, et <https://c.test/z>.`);
+  assert.equal(replaceWebLink(text, doc, `r.0`, 1, `https://n.test/q`, ``, false)!.split(`\n`)[1], `Voir [le site](https://a.test/x) puis https://n.test/q, et <https://c.test/z>.`);
+  assert.equal(replaceWebLink(text, doc, `r.0`, 2, `https://n.test/c`, ``, false)!.split(`\n`)[1], `Voir [le site](https://a.test/x) puis https://b.test/y, et <https://n.test/c>.`);
+  assert.equal(replaceWebLink(text, doc, `r.0`, 3, `https://www.youtube.com/watch?v=new`, ``, true)!.split(`\n`)[2], `![](https://www.youtube.com/watch?v=new)`);
+  assert.equal(replaceWebLink(text, doc, `r.0`, 4, `https://www.youtube.com/embed/new`, ``, false)!.split(`\n`)[3], `<iframe src="https://www.youtube.com/embed/new"></iframe>`);
+  assert.equal(replaceWebLink(text, doc, `r.0`, 0, `pas une adresse`, ``, false), null);
+  // Retrait : la ligne disparait si elle devient vide.
+  assert.equal(removeWebLink(text, doc, `r.0`, 3)!.split(`\n`).length, text.split(`\n`).length - 1);
+  assert.equal(removeWebLink(text, doc, `r.0`, 0)!.split(`\n`)[1], `Voir  puis https://b.test/y, et <https://c.test/z>.`);
+  // Ajout apres les liens vers des notes.
+  const withNote = `## A\n[[Autre|Lien vers Autre]]\ntexte\n`;
+  const added = insertWebLink(withNote, parseNote(withNote, NAME), `r.0`, `https://n.test`, ``, false)!;
+  assert.equal(added, `## A\n[[Autre|Lien vers Autre]]\nhttps://n.test\ntexte\n`);
+  assert.equal(insertWebLink(`## A\n`, parseNote(`## A\n`, NAME), `r.0`, `https://v.test`, `Video`, true), `## A\n![Video](https://v.test)\n`);
+  assert.equal(insertWebLink(`## A\n`, parseNote(`## A\n`, NAME), `r.0`, `https://v.test`, ``, true), `## A\n![](https://v.test)\n`);
 });

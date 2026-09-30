@@ -95,6 +95,14 @@ export function removeLink(text: string, doc: MmDoc, link: MapLink): string {
 export interface WebLink {
   url: string;
   label: string;
+  // Texte du lien [texte](adresse), vide pour les autres formes ; integration ![](adresse) ou non.
+  text: string;
+  embed: boolean;
+  // Position dans le fichier : numero de ligne (a partir de 0), debut et longueur du morceau de texte, et sa forme.
+  line: number;
+  at: number;
+  len: number;
+  kind: `md` | `src` | `auto` | `bare`;
 }
 
 function hostLabel(url: string): string {
@@ -116,11 +124,13 @@ export function webLinks(doc: MmDoc, key: string): WebLink[] {
   const lines = node.body.split(/\r\n|\n|\r/);
   const out: WebLink[] = [];
   const seen = new Set<string>();
-  const add = (url: string, label: string): void => {
+  const add = (url: string, text: string, where: Pick<WebLink, `line` | `at` | `len` | `kind` | `embed`>): void => {
     const clean = url.replace(/[.,;:!?]+$/, ``);
     if (!/^https?:\/\/[^\s]+$/i.test(clean) || seen.has(clean)) return;
     seen.add(clean);
-    out.push({ url: clean, label: label.trim() || hostLabel(clean) });
+    // Les signes de ponctuation finaux d'une adresse ecrite telle quelle ne font pas partie du lien.
+    const len = where.kind === `bare` ? clean.length : where.len;
+    out.push({ url: clean, label: text.trim() || hostLabel(clean), text: text.trim(), ...where, len });
   };
   let fence: string | null = null;
   lines.forEach((raw, i) => {
@@ -134,21 +144,85 @@ export function webLinks(doc: MmDoc, key: string): WebLink[] {
     if (fence !== null) return;
     // Le code entre accents graves n'est pas un lien.
     let line = raw.replace(/`[^`]*`/g, (m) => ` `.repeat(m.length));
-    const found: { at: number; url: string; label: string }[] = [];
-    const take = (re: RegExp, pick: (m: string[]) => [string, string]): void => {
+    const found: { at: number; len: number; kind: WebLink[`kind`]; embed: boolean; url: string; label: string }[] = [];
+    const take = (re: RegExp, kind: WebLink[`kind`], pick: (m: string[]) => [string, string]): void => {
       line = line.replace(re, (...args) => {
         const m = args.slice(0, args.length - 2) as string[];
         const at = args[args.length - 2] as number;
         const [url, label] = pick(m);
-        found.push({ at, url, label });
+        found.push({ at, len: m[0].length, kind, embed: kind === `md` && m[0].startsWith(`!`), url, label });
         return ` `.repeat(m[0].length);
       });
     };
-    take(/!?\[([^\]]*)\]\((https?:\/\/[^\s)]+)(?:\s+"[^"]*")?\)/gi, (m) => [m[2], m[1]]);
-    take(/\bsrc\s*=\s*["'](https?:\/\/[^"']+)["']/gi, (m) => [m[1], ``]);
-    take(/<(https?:\/\/[^>\s]+)>/gi, (m) => [m[1], ``]);
-    take(/https?:\/\/[^\s<>()[\]"']+/gi, (m) => [m[0], ``]);
-    for (const f of found.sort((x, y) => x.at - y.at)) add(f.url, f.label);
+    take(/!?\[([^\]]*)\]\((https?:\/\/[^\s)]+)(?:\s+"[^"]*")?\)/gi, `md`, (m) => [m[2], m[1]]);
+    take(/\bsrc\s*=\s*["'](https?:\/\/[^"']+)["']/gi, `src`, (m) => [m[1], ``]);
+    take(/<(https?:\/\/[^>\s]+)>/gi, `auto`, (m) => [m[1], ``]);
+    take(/https?:\/\/[^\s<>()[\]"']+/gi, `bare`, (m) => [m[0], ``]);
+    for (const f of found.sort((x, y) => x.at - y.at)) add(f.url, f.label, { line: node.line! + 1 + i, at: f.at, len: f.len, kind: f.kind, embed: f.embed });
   });
   return out;
+}
+
+function splitKeep(text: string): string[] {
+  return text.split(/\r\n|\n|\r/);
+}
+
+// Nouveau texte d'un lien web selon sa forme d'origine.
+function webText(w: Pick<WebLink, `kind` | `embed`>, url: string, label: string): string {
+  const t = label.trim();
+  if (w.kind === `src`) return `src="${url}"`;
+  if (w.kind === `md` || t !== `` || w.embed) return `${w.embed ? `!` : ``}[${t}](${url})`;
+  return w.kind === `auto` ? `<${url}>` : url;
+}
+
+// Remplace l'adresse (et le texte) d'un lien web du titre. `index` est le rang du lien dans webLinks().
+export function replaceWebLink(text: string, doc: MmDoc, key: string, index: number, url: string, label: string, embed: boolean): string | null {
+  const w = webLinks(doc, key)[index];
+  if (!w || !/^https?:\/\/[^\s]+$/i.test(url.trim())) return null;
+  const lines = splitKeep(text);
+  const old = lines[w.line];
+  if (old === undefined) return null;
+  const piece = webText({ kind: label.trim() !== `` || embed ? `md` : w.kind, embed }, url.trim(), label);
+  const next = old.slice(0, w.at) + piece + old.slice(w.at + w.len);
+  return applyLineEdits(text, [{ kind: `replace`, line: w.line, text: next }], doc.eol);
+}
+
+// Retire un lien web du titre (et sa ligne si elle devient vide).
+export function removeWebLink(text: string, doc: MmDoc, key: string, index: number): string | null {
+  const w = webLinks(doc, key)[index];
+  if (!w) return null;
+  const old = splitKeep(text)[w.line];
+  if (old === undefined) return null;
+  const next = (old.slice(0, w.at) + old.slice(w.at + w.len)).replace(/\s+$/, ``);
+  return applyLineEdits(text, [next.trim() === `` ? { kind: `delete`, line: w.line, text: `` } : { kind: `replace`, line: w.line, text: next }], doc.eol);
+}
+
+// Ajoute un lien web sur sa propre ligne, apres les liens vers des notes du debut du paragraphe.
+export function insertWebLink(text: string, doc: MmDoc, key: string, url: string, label: string, embed: boolean): string | null {
+  const node = nodeByKey(doc, key);
+  if (!node || node.line === undefined || key === `r` || !/^https?:\/\/[^\s]+$/i.test(url.trim())) return null;
+  const existing = leadingLinkLines(doc, key);
+  const at = existing.length > 0 ? existing[existing.length - 1].line + 1 : (node.metaLine ?? node.line) + 1;
+  const piece = webText({ kind: `bare`, embed }, url.trim(), label);
+  return applyLineEdits(text, [{ kind: `insert`, line: at, text: piece }], doc.eol);
+}
+
+// Remplace la ligne d'un lien vers une note ou un titre, a la meme place.
+export function replaceLink(text: string, doc: MmDoc, link: MapLink, noteName: string, heading: string | null): string | null {
+  if (heading === null ? noteName.trim() === `` : linkHeading(heading) === ``) return null;
+  return applyLineEdits(text, [{ kind: `replace`, line: link.line, text: formatLink(noteName, heading) }], doc.eol);
+}
+
+// Deplace un lien a la place qu'occupe le lien de la ligne `toLine`, parmi les liens du meme titre.
+export function moveLinkTo(text: string, doc: MmDoc, link: MapLink, toLine: number): string | null {
+  const block = leadingLinkLines(doc, link.from).map((l) => l.line);
+  const i = block.indexOf(link.line);
+  const j = block.indexOf(toLine);
+  if (i < 0 || j < 0 || i === j) return null;
+  const lines = splitKeep(text);
+  const texts = block.map((n) => lines[n]);
+  const [moved] = texts.splice(i, 1);
+  texts.splice(j, 0, moved);
+  const edits = block.map((n, k) => ({ kind: `replace` as const, line: n, text: texts[k] }));
+  return applyLineEdits(text, edits, doc.eol);
 }

@@ -4,7 +4,7 @@ import { addNode, arrowTarget, cleanTitle, deleteNodes, duplicateNodes, EditResu
 import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings, TagDef } from "../../src/settings";
 import type { MmMeta } from "../../src/style";
 import { metaEditsFor, planReset, planStyle } from "../../src/style-edit";
-import { insertLink, removeLink } from "../../src/links";
+import { insertLink, moveLinkTo, removeLink, replaceLink } from "../../src/links";
 
 // Etiquettes de demonstration (parametre tags=demo).
 const DEMO_TAGS: TagDef[] = [
@@ -100,23 +100,31 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
   onMessage: (m) => calls.push(`message:${m}`),
   onContextMenu: (k) => calls.push(`menu:${k}`),
   getFileName: () => `Nom de la note.md`,
-  onLinkCreate: (from, to) => {
-    calls.push(`link:${from}>${to}`);
+  onLinkCreate: (from, to, replace) => {
+    calls.push(`link:${from}>${to}${replace ? `:replace` : ``}`);
     const name = `Nom de la note.md`;
     const doc = parseNote(text, name);
     const target = nodeByKey(doc, to);
     if (!target) return;
-    const next = insertLink(text, doc, from, `Nom de la note`, target.title);
+    const next = replace ? replaceLink(text, doc, replace, `Nom de la note`, target.title) : insertLink(text, doc, from, `Nom de la note`, target.title);
+    if (next) text = next;
+    renderer.setDoc(parseNote(text, name), `sample.md`, true);
+  },
+  onLinkMove: (link, toLine) => {
+    calls.push(`move:${link.line}>${toLine}`);
+    const name = `Nom de la note.md`;
+    const next = moveLinkTo(text, parseNote(text, name), link, toLine);
     if (next) text = next;
     renderer.setDoc(parseNote(text, name), `sample.md`, true);
   },
   getVaultFiles: () => [`Accueil.md`, `Projets/Alpha.md`, `Projets/Beta.md`, `Projets/Archives/Ancien.md`, `Reunions/2024-01.md`],
   getHeadings: async (path) => (path.endsWith(`Alpha.md`) ? [{ title: `Budget`, level: 1 }, { title: `Risques`, level: 2 }] : []),
-  onLinkExternal: (from, path, heading) => {
-    calls.push(`external:${from}:${path}:${heading}`);
+  onLinkExternal: (from, path, heading, replace) => {
+    calls.push(`external:${from}:${path}:${heading}${replace ? `:replace` : ``}`);
     const name = `Nom de la note.md`;
     const doc = parseNote(text, name);
-    const next = insertLink(text, doc, from, path.replace(/\.md$/i, ``), heading);
+    const note = path.replace(/\.md$/i, ``);
+    const next = replace ? replaceLink(text, doc, replace, note, heading) : insertLink(text, doc, from, note, heading);
     if (next) text = next;
     renderer.setDoc(parseNote(text, name), `sample.md`, true);
   },

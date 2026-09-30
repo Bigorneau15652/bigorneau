@@ -10,6 +10,7 @@ import { makeTag, MmSettings } from "./settings";
 import { linkPath, loopPath, sidePath } from "./link-geom";
 import { MapLink, parseLinks, WebLink, webLinks } from "./links";
 import { HeadingItem, VaultPicker } from "./vault-picker";
+import { WebDialog, WebDialogOptions } from "./web-dialog";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
@@ -50,8 +51,11 @@ export interface MapCallbacks {
   // Nom du fichier de la carte (pour reconnaitre les liens vers la note elle-meme).
   getFileName?: () => string;
   // Un lien vient d'etre trace d'un titre a un autre de la carte ; ou vers un titre d'une autre note (a choisir).
-  onLinkCreate?: (from: string, to: string) => void;
-  onLinkExternal?: (from: string, path: string, heading: string | null) => void;
+  // `replace` : lien existant que le nouveau remplace (modification d'un lien).
+  onLinkCreate?: (from: string, to: string, replace?: MapLink) => void;
+  onLinkExternal?: (from: string, path: string, heading: string | null, replace?: MapLink) => void;
+  // Un lien change de place parmi ceux de son titre : il prend la place de celui de la ligne `toLine`.
+  onLinkMove?: (link: MapLink, toLine: number) => void;
   // Notes du coffre proposees pour un lien (chemins) et titres d'une note.
   getVaultFiles?: () => string[];
   getHeadings?: (path: string) => Promise<HeadingItem[]>;
@@ -70,6 +74,9 @@ const COMMENT_ICON = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none
 // Oeil affiche au survol d'un titre (masquer dans la note) et oeil barre sur un titre masque.
 const EYE_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>`;
 const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5l11-11"/></svg>`;
+
+// Symbole d'ouverture d'un lien vers une autre note (fleche qui sort d'un cadre).
+const OPEN_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h4v4M13 3 7.5 8.5M11 9.5V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.5"/></svg>`;
 
 // Mappemonde affichee sur un titre qui contient des liens web ou des videos integrees.
 const WEB_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2.2 2.2 9.8 0 12M8 2c-2.2 2.2-2.2 9.8 0 12"/></svg>`;
@@ -139,7 +146,11 @@ export class MapRenderer {
   private links: MapLink[] = [];
   private selectedLink: string | null = null;
   // Creation d'un lien : titre de depart (null tant qu'il n'est pas choisi) et position de la souris.
-  private linking: { from: string | null; pressed: boolean; pending: { path: string; heading: string | null } | null } | null = null;
+  private linking: { from: string | null; pressed: boolean; pending: { path: string; heading: string | null } | null; replace: MapLink | null } | null = null;
+  // Lien a garder selectionne apres un deplacement (sa ligne change).
+  private pendingLink: string | null = null;
+  private linkDrag: { link: MapLink; box: { link: MapLink; el: HTMLElement; x: number; y: number; w: number; h: number }; sy: number; started: boolean; dy: number } | null = null;
+  private webDialog: WebDialog | null = null;
   private picker: VaultPicker | null = null;
   private webByKey = new Map<string, WebLink[]>();
   private extBoxes: { link: MapLink; el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
@@ -228,8 +239,18 @@ export class MapRenderer {
     });
     this.on(this.mapEl, `mouseleave`, () => this.setEyeHover(null));
     this.on(this.mapEl, `dblclick`, (e) => {
-      const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
-      if (node && !this.linking) this.openDialog(node.dataset.key!);
+      const t = e.target as HTMLElement;
+      if (this.linking) return;
+      // Double clic sur un lien (case d'une note ou fleche) : modification du lien.
+      const linkEl = (t.closest(`.mmw-ext-box`) as HTMLElement | null)?.dataset.ext ?? (t.closest(`[data-link]`) as Element | null)?.getAttribute(`data-link`);
+      if (linkEl) {
+        if (t.closest(`.mmw-ext-open`)) return;
+        const link = this.links.find((l) => this.linkId(l) === linkEl);
+        if (link) this.editLink(link);
+        return;
+      }
+      const node = t.closest(`.mmw-node`) as HTMLElement | null;
+      if (node) this.openDialog(node.dataset.key!);
     });
 
     const ro = new ResizeObserver(() => {
@@ -243,6 +264,7 @@ export class MapRenderer {
 
   destroy(): void {
     this.closeDialog(false);
+    this.webDialog?.cancel();
     this.cleanups.forEach((fn) => fn());
     this.cleanups = [];
     this.controls.destroy();
@@ -357,7 +379,11 @@ export class MapRenderer {
     this.root = buildLayoutTree((this.previewDoc ?? this.doc).root, `r`, 0, this.previewCollapsed ?? this.collapsed);
     this.list = flatten(this.root);
     this.links = parseLinks(this.previewDoc ?? this.doc!, this.callbacks.getFileName?.() ?? `Note.md`);
-    if (this.selectedLink && !this.links.some((l) => this.linkId(l) === this.selectedLink)) this.selectedLink = null;
+    if (this.pendingLink && this.links.some((l) => this.linkId(l) === this.pendingLink)) {
+      this.selectedLink = this.pendingLink;
+      this.pendingLink = null;
+    }
+    if (this.selectedLink && this.selectedLink !== this.pendingLink && !this.links.some((l) => this.linkId(l) === this.selectedLink)) this.selectedLink = null;
     this.webByKey.clear();
     for (const n of this.list) {
       if (n.depth < 1) continue;
@@ -621,8 +647,16 @@ export class MapRenderer {
       el.className = `mmw-ext-box`;
       el.dataset.ext = this.linkId(l);
       const name = l.note.replace(/^.*\//, ``);
-      el.textContent = l.heading ? `${name} › ${l.heading}` : name;
-      el.title = `Ouvrir la carte de « ${l.note} »`;
+      const label = document.createElement(`span`);
+      label.className = `mmw-ext-label`;
+      label.textContent = l.heading ? `${name} › ${l.heading}` : name;
+      const open = document.createElement(`span`);
+      open.className = `mmw-ext-open`;
+      open.innerHTML = OPEN_ICON;
+      open.title = `Ouvrir la carte de cette note (Cmd ou Ctrl : ouvrir la note dans un nouvel onglet)`;
+      el.append(label, open);
+      el.title = `Cliquer pour sélectionner (glisser pour changer l'ordre, Suppr pour retirer), double clic pour modifier`;
+      el.classList.toggle(`mmw-ext-on`, this.linkId(l) === this.selectedLink);
       this.worldEl.appendChild(el);
       made.push({ link: l, el });
     }
@@ -704,16 +738,52 @@ export class MapRenderer {
       p.classList.toggle(`mmw-link-on`, on);
       p.setAttribute(`marker-end`, `url(#${on || p.hasAttribute(`data-blue`) ? `mmw-arrow-blue` : `mmw-arrow`})`);
     }
+    for (const b of this.extBoxes) b.el.classList.toggle(`mmw-ext-on`, this.linkId(b.link) === id);
+  }
+
+  // Modification d'un lien : la fenetre du coffre s'ouvre, ou on clique sur un autre titre de la note ; le nouveau lien
+  // prend la place de l'ancien.
+  editLink(link: MapLink): void {
+    if (this.linking) this.stopLinking();
+    this.startLinking(undefined, link);
+  }
+
+  // Fenetre de saisie d'un lien web (ajout ou modification).
+  openWebDialog(opts: WebDialogOptions): void {
+    this.webDialog?.cancel();
+    const done = (): void => {
+      this.webDialog = null;
+      this.mapEl.focus();
+    };
+    this.webDialog = new WebDialog(this.mapEl, {
+      ...opts,
+      onSubmit: (v) => {
+        done();
+        opts.onSubmit(v);
+      },
+      onDelete: opts.onDelete
+        ? () => {
+            done();
+            opts.onDelete!();
+          }
+        : undefined,
+      onCancel: () => {
+        done();
+        opts.onCancel?.();
+      },
+    });
   }
 
   // ---------------------------------------------------------------- creation d'un lien
 
-  startLinking(): void {
+  // `from` : titre de depart impose (clic droit) ; `replace` : lien existant a remplacer.
+  startLinking(from?: string, replace?: MapLink): void {
     if (!this.doc || this.linking) return;
     this.commitRename(true, false);
     this.closeDialog(true);
     // Un titre deja selectionne sert de depart.
-    this.linking = { from: this.selected && this.selected !== `r` ? this.selected : null, pressed: false, pending: null };
+    const start = replace ? replace.from : from ?? (this.selected && this.selected !== `r` ? this.selected : null);
+    this.linking = { from: start, pressed: false, pending: null, replace: replace ?? null };
     this.mapEl.classList.add(`mmw-linking`);
     this.controls.setLinking(true);
     this.showLinkHint();
@@ -742,7 +812,8 @@ export class MapRenderer {
     }
     const from = L.from !== null ? this.list.find((n) => n.key === L.from) : null;
     let text: string;
-    if (L.pending) text = `Note choisie : ${L.pending.path.replace(/^.*\//, ``).replace(/\.md$/i, ``)}. Cliquez sur le titre de départ. Échap pour annuler.`;
+    if (L.replace) text = `Modification du lien : cliquez sur le nouveau titre d'arrivée, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
+    else if (L.pending) text = `Note choisie : ${L.pending.path.replace(/^.*\//, ``).replace(/\.md$/i, ``)}. Cliquez sur le titre de départ. Échap pour annuler.`;
     else if (from) text = `Départ : « ${from.node.title || `sans titre`} ». Cliquez sur le titre d'arrivée, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
     else text = `Lien : cliquez sur le titre de départ, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
     this.linkHint.textContent = text;
@@ -767,8 +838,9 @@ export class MapRenderer {
     if (!L) return;
     if (L.from !== null) {
       const from = L.from;
+      const replace = L.replace ?? undefined;
       this.stopLinking();
-      this.callbacks.onLinkExternal?.(from, path, heading);
+      this.callbacks.onLinkExternal?.(from, path, heading, replace);
       return;
     }
     // Le titre de depart reste a choisir : on garde la note choisie.
@@ -835,13 +907,14 @@ export class MapRenderer {
 
   private finishLink(to: string): void {
     const from = this.linking?.from;
+    const replace = this.linking?.replace ?? undefined;
     this.stopLinking();
     if (!from) return;
     if (to === `r`) {
       this.callbacks.onMessage?.(`Le lien doit viser un titre de la note, pas son nom.`);
       return;
     }
-    this.callbacks.onLinkCreate?.(from, to);
+    this.callbacks.onLinkCreate?.(from, to, replace);
   }
 
   // Le bouton Retour n'est visible que si une carte precedente est memorisee.
@@ -1029,7 +1102,14 @@ export class MapRenderer {
     if (extBox && !this.linking) {
       e.preventDefault();
       const link = this.links.find((l) => this.linkId(l) === extBox.dataset.ext);
-      if (link) this.callbacks.onLinkOpen?.([link], e);
+      if (!link) return;
+      // Le symbole ouvre la note ; le reste de la case la selectionne (et permet de la glisser).
+      if (target.closest(`.mmw-ext-open`)) this.callbacks.onLinkOpen?.([link], e);
+      else {
+        this.selectLink(this.linkId(link));
+        const box = this.extBoxes.find((b) => b.el === extBox);
+        if (box) this.linkDrag = { link, box, sy: e.clientY, started: false, dy: 0 };
+      }
       return;
     }
     const hit = target.closest(`[data-link]`) as Element | null;
@@ -1097,7 +1177,45 @@ export class MapRenderer {
     this.mapEl.setPointerCapture(e.pointerId);
   }
 
+  // Glisser d'un lien vers le haut ou le bas pour changer son ordre parmi les liens de son titre.
+  private moveLinkDrag(e: PointerEvent): void {
+    const d = this.linkDrag!;
+    const dy = e.clientY - d.sy;
+    if (!d.started && Math.abs(dy) > 5) {
+      d.started = true;
+      d.box.el.classList.add(`mmw-ext-drag`);
+    }
+    if (!d.started) return;
+    d.dy = dy / this.scale;
+    d.box.el.style.transform = `translateY(${d.dy}px)`;
+  }
+
+  private endLinkDrag(): void {
+    const d = this.linkDrag;
+    this.linkDrag = null;
+    if (!d || !d.started) return;
+    d.box.el.classList.remove(`mmw-ext-drag`);
+    d.box.el.style.transform = ``;
+    const centre = d.box.y + d.box.h / 2 + d.dy;
+    const others = this.extBoxes.filter((b) => b !== d.box && b.link.from === d.link.from);
+    let target: (typeof others)[number] | null = null;
+    for (const b of others) {
+      if (!target || Math.abs(b.y + b.h / 2 - centre) < Math.abs(target.y + target.h / 2 - centre)) target = b;
+    }
+    if (target) this.moveLink(d.link, target.link);
+  }
+
+  private moveLink(link: MapLink, target: MapLink): void {
+    this.pendingLink = this.linkId({ ...link, line: target.line });
+    this.selectedLink = this.pendingLink;
+    this.callbacks.onLinkMove?.(link, target.line);
+  }
+
   private onPointerMove(e: PointerEvent): void {
+    if (this.linkDrag) {
+      this.moveLinkDrag(e);
+      return;
+    }
     if (this.linking) {
       this.updateLinkPreview(e);
       return;
@@ -1121,6 +1239,10 @@ export class MapRenderer {
   }
 
   private onPointerUp(e: PointerEvent): void {
+    if (this.linkDrag) {
+      this.endLinkDrag();
+      return;
+    }
     if (this.linking) {
       this.onLinkPointerUp(e);
       return;
@@ -1199,6 +1321,16 @@ export class MapRenderer {
       e.preventDefault();
       this.selectLink(null);
       if (link) this.callbacks.onLinkDelete?.(link);
+      return;
+    }
+    if (this.selectedLink && !this.linking && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && (e.key === `ArrowUp` || e.key === `ArrowDown`)) {
+      const link = this.links.find((l) => this.linkId(l) === this.selectedLink);
+      e.preventDefault();
+      if (!link) return;
+      // Parmi les liens du meme titre et de meme sorte (vers une autre note, ou vers un titre de la note).
+      const same = this.links.filter((l) => l.from === link.from && l.external === link.external);
+      const neighbour = same[same.indexOf(link) + (e.key === `ArrowUp` ? -1 : 1)];
+      if (neighbour) this.moveLink(link, neighbour);
       return;
     }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === `a`) {

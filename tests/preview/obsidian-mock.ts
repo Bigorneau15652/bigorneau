@@ -233,6 +233,17 @@ export class Workspace {
     this.addLeaf(created, leaf, !before);
     return created;
   }
+  // Nouvel onglet : la note ouverte est consignee pour les essais.
+  getLeaf(_kind?: string): WorkspaceLeaf {
+    const leaf = new WorkspaceLeaf(this.app);
+    const open = leaf.openFile.bind(leaf);
+    leaf.openFile = async (file: TFile) => {
+      const w = window as unknown as Record<string, string[]>;
+      (w.openedTabs ??= []).push(file.path);
+      await open(file);
+    };
+    return leaf;
+  }
   setActiveLeaf(leaf: WorkspaceLeaf): void {
     this.activeLeaf = leaf;
     (window as unknown as Record<string, unknown>).activeLeafType = leaf.view.getViewType();
