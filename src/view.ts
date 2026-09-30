@@ -105,7 +105,10 @@ export class MindmapView extends ItemView {
       onRedo: () => this.undoRedo(`redo`),
       onOpenSettings: () => this.plugin.openSettings(),
       onSelect: (key) => void this.onSelect(key),
-      onEnter: () => this.focusNote(),
+      // Apres les modifications en cours (un titre valide juste avant, par exemple).
+      onEnter: () => {
+        this.editQueue = this.editQueue.then(() => this.focusNote()).catch(() => undefined);
+      },
       onEdit: (edit) => void this.onEdit(edit),
       onMessage: (text) => new Notice(text),
       onContextMenu: (key, event) => this.showContextMenu(key, event),
@@ -524,6 +527,25 @@ export class MindmapView extends ItemView {
     }
     const keys = renderer.getSelection();
     this.onEdit({ kind: `duplicate`, key, keys: keys.includes(key) ? keys : [key] });
+  }
+
+  // Clic dans la note, a droite du titre d'un chapitre sans texte : une ligne vierge est ouverte sous le titre pour y
+  // ecrire. Un clic dans le texte du titre reste une simple edition du titre.
+  onNoteClick(cm: EditorView, event: MouseEvent) {
+    const file = this.plugin.lastFile;
+    if (!file || event.button !== 0 || event.shiftKey || event.altKey) return;
+    window.setTimeout(() => {
+      const sel = cm.state.selection.main;
+      const line = cm.state.doc.lineAt(sel.head);
+      if (!sel.empty || sel.head !== line.to || !/^#{1,6}(\s|$)/.test(line.text)) return;
+      const doc = parseNote(cm.state.doc.toString(), file.name);
+      const line0 = line.number - 1;
+      const { node } = nodeAtLine(doc, line0);
+      if (node === doc.root || node.line !== line0) return;
+      const start = (node.metaLine ?? line0) + 1;
+      for (let i = start; i < (node.endLine ?? start); i++) if (cm.state.doc.line(i + 1).text.trim() !== ``) return;
+      openBlankLine(cm, start);
+    }, 0);
   }
 
   // Retire la ligne vierge temporaire de la note reliee, si elle est encore vide.

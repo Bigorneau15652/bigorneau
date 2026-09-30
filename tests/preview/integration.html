@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<style>
+:root {
+  --text-normal: #dcddde; --text-muted: #999; --text-faint: #777; --text-on-accent: #fff; --text-error: #e5534b;
+  --text-accent: #a68af9; --background-primary: #1e1e1e; --background-secondary: #262626; --background-modifier-hover: #333;
+  --background-modifier-border: #444; --interactive-accent: #7c5cd6; --font-ui-smaller: 12px; --font-ui-small: 13px;
+  --font-monospace: monospace;
+}
+body { margin: 0; background: var(--background-primary); color: var(--text-normal); font-family: sans-serif; font-size: 16px; }
+#layout { display: flex; width: 1300px; height: 700px; }
+.leaf { position: relative; width: 640px; height: 700px; border-right: 1px solid #555; overflow: hidden; }
+.leaf > div { width: 100%; height: 100%; }
+.cm-editor { height: 100%; background: #202020; color: #ddd; }
+</style>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body><div id="layout"></div><script src="integration.js"></script></body>
+</html>
