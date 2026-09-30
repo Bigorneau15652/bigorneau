@@ -431,3 +431,31 @@ export function applyLineEdits(text: string, edits: LineEdit[], eol: string): st
   }
   return lines.join(``);
 }
+
+// Vrai si le titre est masque, lui-meme ou par l'un de ses parents.
+export function isHiddenKey(doc: MmDoc, key: string): boolean {
+  let node: MmNode = doc.root;
+  const parts = key === `r` ? [] : key.split(`.`).slice(1);
+  for (const p of parts) {
+    if (node.meta?.hidden && node !== doc.root) return true;
+    const child = node.children[Number(p)];
+    if (!child) return false;
+    node = child;
+  }
+  return node !== doc.root && !!node.meta?.hidden;
+}
+
+// Plages de lignes (numeros a partir de 0, fin comprise) des titres masques, sous-titres compris.
+// Un titre masque dont un parent l'est aussi est deja compris dans la plage du parent.
+export function hiddenLineRanges(doc: MmDoc): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  const lastLine = (n: MmNode): number => (n.children.length > 0 ? lastLine(n.children[n.children.length - 1]) : (n.endLine ?? 1) - 1);
+  const walk = (n: MmNode): void => {
+    for (const c of n.children) {
+      if (c.meta?.hidden && c.line !== undefined) out.push({ start: c.line, end: Math.max(c.line, lastLine(c)) });
+      else walk(c);
+    }
+  };
+  walk(doc.root);
+  return out;
+}

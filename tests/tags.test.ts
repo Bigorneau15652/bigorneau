@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyLineEdits, nodeByKey, parseNote, serializeNote } from "../src/model";
+import { EditorState } from "@codemirror/state";
+import { applyLineEdits, hiddenLineRanges, isHiddenKey, nodeByKey, parseNote, serializeNote } from "../src/model";
+import { hideExtension, hideField, setHideEnabled } from "../src/note-hide";
 import { makeTag, migrateSettings, newTagId, nextTagColors, sanitizeTags, SETTINGS_VERSION, TAG_DEFAULT_COLORS, TAG_PALETTE } from "../src/settings";
 import { detailsOnly, formatMetaLine, isEmptyMeta, parseMetaLine, sanitizeMeta } from "../src/style";
 import { metaEditsFor, planReset, planStyle } from "../src/style-edit";
@@ -99,4 +101,31 @@ test(`couleurs proposees : vert, bleu, rouge, jaune, puis gris`, () => {
   assert.equal(nextTagColors(tags.filter((t) => t.name !== `T1`)).bg, TAG_PALETTE[1].bg);
   assert.equal(makeTag([], `  Etude   fine \n`).name, `Etude   fine`);
   assert.equal(migrateSettings({}).selectionContrast, 50);
+});
+
+test(`titres masques : ecriture de la ligne, plages de lignes et heritage`, async () => {
+  const text = [`Intro`, ``, `## A`, `%% mmw {"hidden":true} %%`, `Texte A`, `### A1`, `Texte A1`, `## B`, `Texte B`, `## C`, `### C1`, `%% mmw {"hidden":true} %%`, `Texte C1`, ``].join(`\n`);
+  const doc = parseNote(text, `n.md`);
+  assert.equal(nodeByKey(doc, `r.0`)?.meta?.hidden, true);
+  assert.deepEqual(hiddenLineRanges(doc), [{ start: 2, end: 6 }, { start: 10, end: 12 }]);
+  assert.equal(isHiddenKey(doc, `r.0`), true);
+  assert.equal(isHiddenKey(doc, `r.0.0`), true);
+  assert.equal(isHiddenKey(doc, `r.1`), false);
+  assert.equal(isHiddenKey(doc, `r.2`), false);
+  assert.equal(isHiddenKey(doc, `r.2.0`), true);
+  assert.equal(formatMetaLine({ tags: [`a`], hidden: true }), `%% mmw {"tags":["a"],"hidden":true} %%`);
+  assert.equal(isEmptyMeta({ hidden: true }), false);
+  assert.deepEqual(detailsOnly({ hidden: true, style: { strokeColor: `#e03131` } }), { hidden: true });
+  assert.equal(sanitizeMeta({ hidden: `oui` }).hidden, undefined);
+  // Un parent et un enfant masques : une seule plage.
+  const both = parseNote([`## A`, `%% mmw {"hidden":true} %%`, `### A1`, `%% mmw {"hidden":true} %%`, `x`].join(`\n`), `n.md`);
+  assert.equal(hiddenLineRanges(both).length, 1);
+
+  // Decorations de l'editeur : la plage masquee couvre les lignes du titre a la fin de ses sous-titres.
+  const state = EditorState.create({ doc: text, extensions: [hideExtension] });
+  assert.equal(state.field(hideField).deco.size, 0);
+  const on = state.update({ effects: setHideEnabled.of(true) }).state;
+  const found: number[][] = [];
+  on.field(hideField).deco.between(0, text.length, (from, to) => void found.push([on.doc.lineAt(from).number, on.doc.lineAt(to).number]));
+  assert.deepEqual(found, [[3, 7], [11, 13]]);
 });

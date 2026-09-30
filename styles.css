@@ -766,3 +766,48 @@
 .mmw-dlg-confirm[hidden] {
   display: none;
 }
+
+/* Titres masques dans la note : ils restent sur la carte, en gris, avec leurs sous-titres. */
+.mmw-node.mmw-hidden {
+  opacity: 0.4;
+}
+
+.mmw-node.mmw-hidden.mmw-selected {
+  opacity: 0.75;
+}
+
+.mmw-frame-hidden {
+  opacity: 0.35;
+}
+
+.mmw-eye {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mmw-eye.mmw-eye-show,
+.mmw-eye.mmw-eye-on {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mmw-eye:hover {
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
+}
+
+.mmw-map.mmw-dragging .mmw-eye {
+  display: none;
+}

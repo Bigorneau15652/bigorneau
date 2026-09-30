@@ -31,6 +31,8 @@ export interface MmMeta {
   tags?: string[];
   short?: string;
   comment?: string;
+  // Titre masque : grise sur la carte avec ses sous-titres, et absent de l'affichage de la note (le texte reste dans le fichier).
+  hidden?: boolean;
 }
 
 export const TAG_ID = /^[A-Za-z0-9_-]{1,24}$/;
@@ -125,13 +127,14 @@ export function sanitizeMeta(raw: unknown): MmMeta {
     const comment = r.comment.replace(/\r\n?/g, `\n`).trim().slice(0, MAX_COMMENT);
     if (comment !== ``) out.comment = comment;
   }
+  if (r.hidden === true) out.hidden = true;
   return out;
 }
 
 export function isEmptyMeta(m: MmMeta | undefined): boolean {
   return (
     !m ||
-    (isEmptyPatch(m.style) && (!m.levels || Object.keys(m.levels).length === 0) && (!m.tags || m.tags.length === 0) && !m.short && !m.comment)
+    (isEmptyPatch(m.style) && (!m.levels || Object.keys(m.levels).length === 0) && (!m.tags || m.tags.length === 0) && !m.short && !m.comment && !m.hidden)
   );
 }
 
@@ -142,6 +145,7 @@ export function detailsOnly(m: MmMeta | undefined): MmMeta | null {
   if (m.tags && m.tags.length > 0) out.tags = m.tags;
   if (m.short) out.short = m.short;
   if (m.comment) out.comment = m.comment;
+  if (m.hidden) out.hidden = true;
   return isEmptyMeta(out) ? null : out;
 }
 
@@ -167,6 +171,7 @@ export function formatMetaLine(meta: MmMeta): string {
   if (meta.tags) ordered.tags = meta.tags;
   if (meta.short) ordered.short = meta.short;
   if (meta.comment) ordered.comment = meta.comment;
+  if (meta.hidden) ordered.hidden = true;
   return `%% mmw ${JSON.stringify(ordered).replace(/%/g, `\\u0025`)} %%`;
 }
 
