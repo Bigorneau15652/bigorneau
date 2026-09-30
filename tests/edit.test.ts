@@ -23,10 +23,16 @@ test(`ajout d'un premier enfant : niveau du parent plus un`, () => {
   assert.equal(r.key, `r.1.0`);
 });
 
-test(`frere de la racine : devient un enfant`, () => {
-  const r = addNode(NOTE, `n.md`, `r`, `sibling`)!;
-  assert.equal(r.key, `r.2`);
-  assert.ok(r.text.endsWith(`texte b\n##\n`));
+test(`depuis la racine : le titre est cree au debut, apres l'introduction`, () => {
+  const sibling = addNode(`intro\n\n## A\ntexte\n## B\n`, `n.md`, `r`, `sibling`)!;
+  assert.equal(sibling.text, `intro\n\n##\n## A\ntexte\n## B\n`);
+  assert.equal(sibling.key, `r.0`);
+  const child = addNode(`## A\n## B\n`, `n.md`, `r`, `child`)!;
+  assert.equal(child.text, `##\n## A\n## B\n`);
+  assert.equal(child.key, `r.0`);
+  const empty = addNode(`intro\n`, `n.md`, `r`, `sibling`)!;
+  assert.equal(empty.text, `intro\n#\n`);
+  assert.equal(empty.key, `r.0`);
 });
 
 test(`ajout en fin de fichier sans retour a la ligne final`, () => {

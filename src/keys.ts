@@ -22,9 +22,11 @@ export function eventToCombo(e: KeyLike, isMac: boolean): string {
   return parts.join(`-`);
 }
 
-// Cmd ou Ctrl + Entree, sans autre modificateur : passe de la carte a la note, et de la note a la carte.
+// Cmd ou Ctrl + Entree, avec ou sans Maj : passe de la carte a la note, et de la note a la carte. Dans l'editeur,
+// Obsidian reserve Cmd + Entree a ses propres commandes (case a cocher, ouverture d'un lien) et peut l'intercepter :
+// Cmd + Maj + Entree est alors le raccourci fiable.
 export function isModEnter(e: KeyLike): boolean {
-  return e.key === `Enter` && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+  return e.key === `Enter` && (e.metaKey || e.ctrlKey) && !e.altKey;
 }
 
 export function comboMatches(e: KeyLike, combo: string, isMac: boolean): boolean {
