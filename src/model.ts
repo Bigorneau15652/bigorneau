@@ -3,7 +3,7 @@
 import { formatMetaLine, isEmptyMeta, MmMeta, parseMetaLine } from "./style";
 
 export interface MmNode {
-  // Niveau du titre Markdown (1 a 6). Le noeud racine sans titre general a le niveau 0.
+  // Niveau du titre Markdown (1 a 6). La racine (le nom de la note) a le niveau 0.
   level: number;
   title: string;
   // Ligne de titre d'origine, terminateur de ligne compris. Vaut null si le titre
@@ -13,7 +13,7 @@ export interface MmNode {
   body: string;
   children: MmNode[];
   // Position dans le fichier (numeros de ligne a partir de 0) : ligne du titre et ligne qui suit la fin du texte.
-  // Pour le noeud racine sans titre general, `line` est la premiere ligne apres les proprietes.
+  // Pour la racine, `line` est la premiere ligne apres les proprietes.
   line?: number;
   endLine?: number;
   // Commentaire de style place juste sous le titre, et numero de sa ligne dans le fichier.
@@ -23,10 +23,9 @@ export interface MmNode {
 
 export interface MmDoc {
   frontmatter: string;
-  // Texte place entre les proprietes et le titre general (uniquement si un titre general existe).
-  preamble: string;
+  // La racine est toujours le nom de la note : elle n'a pas de titre dans le fichier. Tous les titres Markdown,
+  // y compris un titre de niveau 1 unique, sont des chapitres.
   root: MmNode;
-  hasGeneralTitle: boolean;
   eol: string;
 }
 
@@ -170,10 +169,6 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
     if (m) headingIdx.push(i);
   });
 
-  const h1Count = headingIdx.filter((i) => matches[i]![1].length === 1).length;
-  const hasGeneralTitle =
-    headingIdx.length > 0 && h1Count === 1 && matches[headingIdx[0]]![1].length === 1;
-
   const firstHeading = headingIdx.length > 0 ? headingIdx[0] : lines.length;
   const introText = lines.slice(0, firstHeading).join(``);
 
@@ -193,36 +188,26 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
     };
   });
 
-  let root: MmNode;
-  let preamble = ``;
-  let rest: MmNode[];
-  if (hasGeneralTitle) {
-    root = nodes[0];
-    preamble = introText;
-    rest = nodes.slice(1);
-  } else {
-    const found = firstHeading > 0 ? parseMetaLine(lines[0]) : null;
-    root = {
-      level: 0,
-      title: fileName.replace(/\.md$/i, ``),
-      heading: null,
-      body: introText,
-      children: [],
-      line: fmCount,
-      endLine: fmCount + firstHeading,
-      ...(found ? { meta: found, metaLine: fmCount } : {}),
-    };
-    rest = nodes;
-  }
+  const found = firstHeading > 0 ? parseMetaLine(lines[0]) : null;
+  const root: MmNode = {
+    level: 0,
+    title: fileName.replace(/\.md$/i, ``),
+    heading: null,
+    body: introText,
+    children: [],
+    line: fmCount,
+    endLine: fmCount + firstHeading,
+    ...(found ? { meta: found, metaLine: fmCount } : {}),
+  };
 
   const stack: MmNode[] = [root];
-  for (const node of rest) {
+  for (const node of nodes) {
     while (stack[stack.length - 1].level >= node.level) stack.pop();
     stack[stack.length - 1].children.push(node);
     stack.push(node);
   }
 
-  return { frontmatter, preamble, root, hasGeneralTitle, eol };
+  return { frontmatter, root, eol };
 }
 
 function pushPiece(out: string[], piece: string, eol: string): void {
@@ -247,7 +232,6 @@ function emitNode(node: MmNode, out: string[], eol: string): void {
 export function serializeNote(doc: MmDoc): string {
   const out: string[] = [];
   pushPiece(out, doc.frontmatter, doc.eol);
-  pushPiece(out, doc.preamble, doc.eol);
   emitNode(doc.root, out, doc.eol);
   return out.join(``);
 }
@@ -421,7 +405,7 @@ export function planMetaEdit(doc: MmDoc, key: string, meta: MmMeta | null): Line
   const text = formatMetaLine(meta);
   if (has) return { kind: `replace`, line: node.metaLine!, text };
   // Le noeud racine sans titre n'a pas de ligne de titre : le commentaire va en tete du texte.
-  const at = node === doc.root && !doc.hasGeneralTitle ? node.line : node.line + 1;
+  const at = node === doc.root ? node.line : node.line + 1;
   return { kind: `insert`, line: at, text };
 }
 

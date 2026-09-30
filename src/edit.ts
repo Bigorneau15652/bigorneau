@@ -32,8 +32,7 @@ export function newLevel(doc: MmDoc, key: string, where: `child` | `sibling`): n
   let level: number;
   if (where === `sibling` && !isRoot) level = node.level;
   else if (node.children.length > 0) level = node.children[0].level;
-  // Sous la racine, le premier niveau est le 2 : un titre de niveau 1 deviendrait le titre general de la note.
-  else level = isRoot ? 2 : node.level + 1;
+  else level = node.level + 1;
   return level > MAX_LEVEL ? null : level;
 }
 
@@ -50,7 +49,7 @@ export function addNode(text: string, fileName: string, key: string, where: `chi
   return { text: next, key: created ? created.key : null };
 }
 
-// Change le titre d'un noeud. Le titre de la racine sans titre general est le nom du fichier : refuse.
+// Change le titre d'un noeud. Le titre de la racine est le nom du fichier : refuse.
 export function renameTitle(text: string, fileName: string, key: string, title: string): EditResult | null {
   const doc = parseNote(text, fileName);
   const node = nodeByKey(doc, key);
@@ -141,8 +140,7 @@ function levelAt(parent: MmNode, moved: MmNode, rank: number): number {
   const r = Math.max(0, Math.min(rank, others.length));
   if (r > 0) return others[r - 1].level;
   if (others.length > 0) return others[0].level;
-  // Racine sans titre general : un titre de niveau 1 deviendrait le titre general, donc on reste au niveau 2 ou plus.
-  return parent.level === 0 ? Math.max(2, moved.level) : parent.level + 1;
+  return parent.level + 1;
 }
 
 function branchMaxLevel(n: MmNode): number {

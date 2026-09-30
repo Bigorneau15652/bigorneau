@@ -5,7 +5,6 @@ import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings } from "../../src/sett
 import { metaEditsFor, planReset, planStyle } from "../../src/style-edit";
 
 let text = [
-  `# Nom de la note`,
   `Introduction de la note.`,
   ``,
   `## Titre A`,

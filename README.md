@@ -2,7 +2,7 @@
 
 Plugin Obsidian d'ecriture en branche : une note est representee sous forme de carte mentale dont chaque noeud porte un veritable paragraphe.
 
-Etat : phase 7 (deplacement de titres avec leur branche). Glisser une case pour la deplacer : un apercu montre le resultat, la position horizontale choisit la profondeur, Echap annule. Cmd ou Ctrl + Maj + fleches deplacent la case selectionnee (haut et bas parmi les freres, gauche et droite pour changer de niveau). Tab cree un sous-titre, Entree un titre de meme niveau, F2 ou clic sur une case selectionnee renomme, Suppr supprime avec confirmation. La commande Ouvrir la carte place la note active a cote de la carte.
+Etat : phase 7 (deplacement de titres avec leur branche). La premiere case de la carte est toujours le nom de la note ; tous les titres Markdown, y compris un titre # unique, sont des chapitres. Glisser une case pour la deplacer : un apercu montre le resultat, la position horizontale choisit la profondeur, Echap annule. Cmd ou Ctrl + Maj + fleches deplacent la case selectionnee. Tab cree un sous-titre, Entree un titre de meme niveau, F2 ou clic sur une case selectionnee renomme (le nom de la note pour la premiere case), Suppr supprime avec confirmation.
 
 ## Installation avec BRAT
 

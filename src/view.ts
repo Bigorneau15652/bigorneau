@@ -185,7 +185,7 @@ export class MindmapView extends ItemView {
     const before = await readText();
     // Une direction (fleches) s'applique a la case selectionnee au moment du traitement, pas a celle de l'appui.
     if (edit.kind === `move` && edit.dir) edit.key = renderer.getSelectedKey() ?? edit.key;
-    if (edit.kind === `rename` && edit.key === `r` && !parseNote(before, file.name).hasGeneralTitle) {
+    if (edit.kind === `rename` && edit.key === `r`) {
       await this.renameFile(file, edit.title ?? ``);
       return;
     }
@@ -236,7 +236,7 @@ export class MindmapView extends ItemView {
     return `Déplacement impossible à cet endroit.`;
   }
 
-  // Le titre de la racine d'une note sans titre general est le nom du fichier : le modifier renomme la note.
+  // Le titre de la racine est le nom du fichier : le modifier renomme la note.
   private async renameFile(file: TFile, title: string) {
     const name = title.replace(/[\\/:*?"<>|#^\[\]]/g, ` `).replace(/\s+/g, ` `).trim();
     if (name === ``) {
@@ -252,6 +252,8 @@ export class MindmapView extends ItemView {
     }
     await this.app.fileManager.renameFile(file, path);
     await this.refresh();
+    // Deuxieme lecture peu apres : si Obsidian met a jour le titre de la note avec un retard, la carte reste juste.
+    window.setTimeout(() => void this.refresh(), 600);
   }
 
   // Remplace le texte de la note en ne touchant que la partie modifiee.

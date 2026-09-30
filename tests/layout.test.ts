@@ -4,7 +4,7 @@ import { parseNote } from "../src/model";
 import { buildLayoutTree, computeLayout, flatten, sequential, trunkX, LNode } from "../src/layout";
 import { elbowPoints, framePath, resample, rng, trunkBranch, trunkLine, trunkRadius } from "../src/sketch";
 
-const NOTE = `# Racine\n## A\n### A1\n### A2\n#### A2a\n## B\n## C\n### C1\n`;
+const NOTE = `## A\n### A1\n### A2\n#### A2a\n## B\n## C\n### C1\n`;
 
 function laidOut(collapsed: Set<string> = new Set()): LNode {
   const doc = parseNote(NOTE, `f.md`);
@@ -50,7 +50,7 @@ test(`disposition : l ordre de la note est respecte de haut en bas`, () => {
 });
 
 test(`disposition : la largeur de la carte reste faible meme avec beaucoup de titres`, () => {
-  const lines = [`# R`];
+  const lines: string[] = [];
   for (let i = 0; i < 40; i++) lines.push(`## Titre ${i}`, `### Sous-titre ${i}`, `#### Detail ${i}`);
   const doc = parseNote(lines.join(`\n`) + `\n`, `f.md`);
   const root = buildLayoutTree(doc.root, `r`, 0, new Set());

@@ -4,7 +4,7 @@ import { applyLineEdits, flattenDoc, nodeByKey, parseNote } from "../src/model";
 import { metaEditsFor, planReset, planStyle } from "../src/style-edit";
 
 // Trois niveaux : A (niveau 2) avec un sous-titre, B (niveau 2), C (niveau 3 sous B).
-const NOTE = `# Note\nintro\n## A\ntexte A\n### A1\ntexte A1\n## B\ntexte B\n`;
+const NOTE = `intro\n## A\ntexte A\n### A1\ntexte A1\n## B\ntexte B\n`;
 
 function run(text: string, keys: string[], patch: object, individual: boolean): string {
   const doc = parseNote(text, `f.md`);
@@ -22,7 +22,7 @@ test(`portee : sans selection, la modification s applique a toute la carte`, () 
 test(`portee : un titre de niveau 2 selectionne, tous les titres de niveau 2 changent`, () => {
   const out = run(NOTE, [`r.0`], { strokeColor: `#e03131` }, false);
   // Le style de niveau est porte par le noeud racine, sous le titre general.
-  assert.equal(out, `# Note\n%% mmw {"levels":{"2":{"strokeColor":"#e03131"}}} %%\nintro\n## A\ntexte A\n### A1\ntexte A1\n## B\ntexte B\n`);
+  assert.equal(out, `%% mmw {"levels":{"2":{"strokeColor":"#e03131"}}} %%\nintro\n## A\ntexte A\n### A1\ntexte A1\n## B\ntexte B\n`);
   // Les deux titres de niveau 2 sont concernes, pas le sous-titre de niveau 3.
   const doc = parseNote(out, `f.md`);
   assert.deepEqual(doc.root.meta?.levels, { "2": { strokeColor: `#e03131` } });
@@ -39,7 +39,7 @@ test(`portee : plusieurs modifications successives sur le meme niveau se cumulen
 
 test(`portee : avec Cmd, seule la case selectionnee change`, () => {
   const out = run(NOTE, [`r.1`], { strokeColor: `#1971c2` }, true);
-  assert.equal(out, `# Note\nintro\n## A\ntexte A\n### A1\ntexte A1\n## B\n%% mmw {"style":{"strokeColor":"#1971c2"}} %%\ntexte B\n`);
+  assert.equal(out, `intro\n## A\ntexte A\n### A1\ntexte A1\n## B\n%% mmw {"style":{"strokeColor":"#1971c2"}} %%\ntexte B\n`);
   const doc = parseNote(out, `f.md`);
   assert.equal(nodeByKey(doc, `r.0`)!.meta, undefined);
   assert.deepEqual(nodeByKey(doc, `r.1`)!.meta?.style, { strokeColor: `#1971c2` });
