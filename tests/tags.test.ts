@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyLineEdits, nodeByKey, parseNote, serializeNote } from "../src/model";
-import { migrateSettings, newTagId, sanitizeTags, SETTINGS_VERSION } from "../src/settings";
+import { EditorState } from "@codemirror/state";
+import { applyLineEdits, hiddenLineRanges, isHiddenKey, nodeByKey, parseNote, serializeNote } from "../src/model";
+import { hideExtension, hideField, setHideEnabled } from "../src/note-hide";
+import { makeTag, migrateSettings, newTagId, nextTagColors, sanitizeTags, SETTINGS_VERSION, TAG_DEFAULT_COLORS, TAG_PALETTE } from "../src/settings";
 import { detailsOnly, formatMetaLine, isEmptyMeta, parseMetaLine, sanitizeMeta } from "../src/style";
 import { metaEditsFor, planReset, planStyle } from "../src/style-edit";
 
@@ -87,4 +89,43 @@ test(`migration : les reglages de la version 3 recoivent une liste d'etiquettes 
   assert.equal(s.settingsVersion, SETTINGS_VERSION);
   const kept = migrateSettings({ settingsVersion: 4, tags: [{ id: `k1`, name: `P1`, bg: `#ffc9c9`, fg: `#c92a2a` }] });
   assert.equal(kept.tags.length, 1);
+});
+
+test(`couleurs proposees : vert, bleu, rouge, jaune, puis gris`, () => {
+  let tags: ReturnType<typeof sanitizeTags> = [];
+  for (let i = 0; i < 6; i++) tags = [...tags, makeTag(tags, `T${i}`)];
+  assert.deepEqual(tags.slice(0, 4).map((t) => t.bg), TAG_PALETTE.map((c) => c.bg));
+  assert.equal(tags[4].bg, TAG_DEFAULT_COLORS.bg);
+  assert.equal(tags[5].fg, TAG_DEFAULT_COLORS.fg);
+  // Une couleur liberee par la suppression d'une etiquette est reproposee.
+  assert.equal(nextTagColors(tags.filter((t) => t.name !== `T1`)).bg, TAG_PALETTE[1].bg);
+  assert.equal(makeTag([], `  Etude   fine \n`).name, `Etude   fine`);
+  assert.equal(migrateSettings({}).selectionContrast, 50);
+});
+
+test(`titres masques : ecriture de la ligne, plages de lignes et heritage`, async () => {
+  const text = [`Intro`, ``, `## A`, `%% mmw {"hidden":true} %%`, `Texte A`, `### A1`, `Texte A1`, `## B`, `Texte B`, `## C`, `### C1`, `%% mmw {"hidden":true} %%`, `Texte C1`, ``].join(`\n`);
+  const doc = parseNote(text, `n.md`);
+  assert.equal(nodeByKey(doc, `r.0`)?.meta?.hidden, true);
+  assert.deepEqual(hiddenLineRanges(doc), [{ start: 2, end: 6 }, { start: 10, end: 12 }]);
+  assert.equal(isHiddenKey(doc, `r.0`), true);
+  assert.equal(isHiddenKey(doc, `r.0.0`), true);
+  assert.equal(isHiddenKey(doc, `r.1`), false);
+  assert.equal(isHiddenKey(doc, `r.2`), false);
+  assert.equal(isHiddenKey(doc, `r.2.0`), true);
+  assert.equal(formatMetaLine({ tags: [`a`], hidden: true }), `%% mmw {"tags":["a"],"hidden":true} %%`);
+  assert.equal(isEmptyMeta({ hidden: true }), false);
+  assert.deepEqual(detailsOnly({ hidden: true, style: { strokeColor: `#e03131` } }), { hidden: true });
+  assert.equal(sanitizeMeta({ hidden: `oui` }).hidden, undefined);
+  // Un parent et un enfant masques : une seule plage.
+  const both = parseNote([`## A`, `%% mmw {"hidden":true} %%`, `### A1`, `%% mmw {"hidden":true} %%`, `x`].join(`\n`), `n.md`);
+  assert.equal(hiddenLineRanges(both).length, 1);
+
+  // Decorations de l'editeur : la plage masquee couvre les lignes du titre a la fin de ses sous-titres.
+  const state = EditorState.create({ doc: text, extensions: [hideExtension] });
+  assert.equal(state.field(hideField).deco.size, 0);
+  const on = state.update({ effects: setHideEnabled.of(true) }).state;
+  const found: number[][] = [];
+  on.field(hideField).deco.between(0, text.length, (from, to) => void found.push([on.doc.lineAt(from).number, on.doc.lineAt(to).number]));
+  assert.deepEqual(found, [[3, 7], [11, 13]]);
 });

@@ -3,6 +3,7 @@
 // Utilise uniquement CodeMirror, pour pouvoir etre verifiee hors d'Obsidian.
 import { Extension, Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
+import { hideExtension } from "./note-hide";
 
 export interface ActiveRange {
   from: number;
@@ -92,5 +93,5 @@ export function noteExtension(hooks: NoteHooks): Extension[] {
       },
     })
   );
-  return [activeRangeField, tempLineField, plugin, keys];
+  return [activeRangeField, tempLineField, hideExtension, plugin, keys];
 }

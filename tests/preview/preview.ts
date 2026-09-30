@@ -81,6 +81,19 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
   onEnter: () => calls.push(`enter`),
   onMessage: (m) => calls.push(`message:${m}`),
   onContextMenu: (k) => calls.push(`menu:${k}`),
+  onToggleHidden: (key) => {
+    calls.push(`hidden:${key}`);
+    const name = `Nom de la note.md`;
+    const doc = parseNote(text, name);
+    const node = nodeByKey(doc, key);
+    if (!node || key === `r`) return;
+    const meta: MmMeta = { ...(node.meta ?? {}) };
+    if (meta.hidden) delete meta.hidden;
+    else meta.hidden = true;
+    const edits = metaEditsFor(doc, [{ key, meta }]);
+    if (edits.length > 0) text = applyLineEdits(text, edits, doc.eol);
+    renderer.setDoc(parseNote(text, name), `sample.md`, true);
+  },
   // Reproduit la vue : titre puis commentaire invisible, en une seule modification de la note.
   onDetails: (key, values) => {
     calls.push(`details:${key}`);

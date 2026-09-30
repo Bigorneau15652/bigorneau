@@ -1,11 +1,12 @@
 import { EditorView } from "@codemirror/view";
 import { setActiveRange, tempLineField } from "./active-chapter";
+import { moveCursorOutOfHidden, setHideEnabled } from "./note-hide";
 import { openBlankLine, releaseTempLine } from "./temp-line";
 import { revealRange } from "./reveal";
 import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
-import { activeLines, applyLineEdits, flattenDoc, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
+import { activeLines, applyLineEdits, flattenDoc, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
 import type { DialogValues } from "./node-dialog";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
@@ -114,6 +115,7 @@ export class MindmapView extends ItemView {
       onMessage: (text) => new Notice(text),
       onContextMenu: (key, event) => this.showContextMenu(key, event),
       onDetails: (key, values) => this.applyDetails(key, values),
+      onToggleHidden: (key) => void this.toggleHidden(key),
     });
     await this.refresh();
   }
@@ -367,6 +369,8 @@ export class MindmapView extends ItemView {
     add(`Coller dedans (${mod} + V)`, `clipboard-paste`, run(`paste`));
     add(`Coller après`, `clipboard-list`, run(`pasteAfter`), { disabled: isRoot });
     menu.addSeparator();
+    const hiddenNow = !!this.doc && !!nodeByKey(this.doc, key)?.meta?.hidden;
+    add(hiddenNow ? `Afficher dans la note` : `Masquer dans la note`, hiddenNow ? `eye` : `eye-off`, () => void this.toggleHidden(key), { disabled: isRoot });
     add(`Apparence…`, `palette`, () => renderer.openStylePanel());
     menu.addSeparator();
     add(`Supprimer (Suppr)`, `trash-2`, run(`delete`), { disabled: isRoot, warning: true });
@@ -553,21 +557,48 @@ export class MindmapView extends ItemView {
     const cm = this.getNoteCm();
     if (!cm) return;
     const s = this.plugin.settings;
-    const range = s.contrastEnabled && this.selectedKey && this.doc ? activeLines(this.doc, this.selectedKey, s.includeSubtitles) : null;
-    if (!range) {
-      cm.dispatch({ effects: setActiveRange.of(null) });
-      return;
+    // Les titres masques disparaissent de la note ; le curseur ne reste pas dans une partie masquee.
+    const hideOn = setHideEnabled.of(true);
+    // Titre masque selectionne : rien n'est actif dans la note, tout y est grise.
+    const hiddenSelection = !!this.selectedKey && !!this.doc && isHiddenKey(this.doc, this.selectedKey);
+    const range = s.contrastEnabled && this.selectedKey && this.doc && !hiddenSelection ? activeLines(this.doc, this.selectedKey, s.includeSubtitles) : null;
+    if (hiddenSelection && s.contrastEnabled) {
+      cm.dispatch({ effects: [hideOn, setActiveRange.of({ from: 0, to: 0 })] });
+    } else if (!range) {
+      cm.dispatch({ effects: [hideOn, setActiveRange.of(null)] });
+    } else {
+      const d = cm.state.doc;
+      const from = d.line(Math.min(range.startLine, d.lines - 1) + 1).from;
+      const to = range.endLine >= d.lines ? d.length : d.line(range.endLine + 1).from;
+      cm.dispatch({ effects: [hideOn, setActiveRange.of({ from, to })] });
     }
-    const d = cm.state.doc;
-    const from = d.line(Math.min(range.startLine, d.lines - 1) + 1).from;
-    const to = range.endLine >= d.lines ? d.length : d.line(range.endLine + 1).from;
-    cm.dispatch({ effects: setActiveRange.of({ from, to }) });
+    moveCursorOutOfHidden(cm);
   }
 
   clearActive() {
     this.releaseTemp();
     const cm = this.getNoteCm();
-    if (cm) cm.dispatch({ effects: setActiveRange.of(null) });
+    if (cm) cm.dispatch({ effects: [setActiveRange.of(null), setHideEnabled.of(false)] });
+  }
+
+  // Masque ou affiche des titres (et leurs sous-titres) dans la note : le texte reste dans le fichier.
+  private async toggleHidden(key: string) {
+    const renderer = this.renderer;
+    if (!renderer || !this.doc || key === `r`) return;
+    const selection = renderer.getSelection();
+    const keys = (selection.includes(key) ? selection : [key]).filter((k) => k !== `r`);
+    const target = !nodeByKey(this.doc, key)?.meta?.hidden;
+    const changes: MetaChange[] = [];
+    for (const k of keys) {
+      const node = nodeByKey(this.doc, k);
+      if (!node || !!node.meta?.hidden === target) continue;
+      const meta: MmMeta = { ...(node.meta ?? {}) };
+      if (target) meta.hidden = true;
+      else delete meta.hidden;
+      changes.push({ key: k, meta });
+    }
+    await this.applyMetaChanges(changes);
+    renderer.focus();
   }
 
   // Duplique les titres selectionnes (raccourci de la carte et commande d'Obsidian).
@@ -692,6 +723,12 @@ export class MindmapView extends ItemView {
   private async revealInNote(key: string, focus: boolean) {
     const file = this.plugin.lastFile;
     if (!file || !this.doc || !nodeByKey(this.doc, key)) return;
+    if (isHiddenKey(this.doc, key)) {
+      // Un titre masque n'apparait pas dans la note : rien a y montrer.
+      if (focus) new Notice(`Ce titre est masqué dans la note. Cliquez sur l'œil de la carte pour l'afficher.`);
+      this.updateActiveRange();
+      return;
+    }
     const leaf = await this.ensureNoteLeaf(file);
     const view = leaf.view;
     if (!(view instanceof MarkdownView)) return;

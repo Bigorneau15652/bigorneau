@@ -43,6 +43,26 @@ export function sanitizeTags(raw: unknown): TagDef[] {
   return out.slice(0, 100);
 }
 
+// Couleurs proposees pour les nouvelles etiquettes : vert, bleu, rouge, jaune, puis gris clair et gris fonce pour toutes les suivantes.
+export const TAG_PALETTE: { bg: string; fg: string }[] = [
+  { bg: `#dcf5e3`, fg: `#14532d` },
+  { bg: `#dbeafe`, fg: `#1e3a8a` },
+  { bg: `#fee2e2`, fg: `#7f1d1d` },
+  { bg: `#fef3c7`, fg: `#713f12` },
+];
+export const TAG_DEFAULT_COLORS = { bg: `#e5e7eb`, fg: `#374151` };
+
+// Couleurs de la prochaine etiquette : la premiere couleur de la palette pas encore utilisee, sinon le gris.
+export function nextTagColors(existing: TagDef[]): { bg: string; fg: string } {
+  const used = new Set(existing.map((t) => t.bg.toLowerCase()));
+  return TAG_PALETTE.find((c) => !used.has(c.bg)) ?? TAG_DEFAULT_COLORS;
+}
+
+// Nouvelle etiquette prete a etre ajoutee a la liste.
+export function makeTag(existing: TagDef[], name: string): TagDef {
+  return { id: newTagId(existing), name: name.replace(/[\r\n]+/g, ` `).trim().slice(0, 40), ...nextTagColors(existing) };
+}
+
 // Nouvel identifiant d'etiquette, distinct de ceux qui existent.
 export function newTagId(existing: TagDef[]): string {
   const used = new Set(existing.map((t) => t.id));
@@ -83,6 +103,8 @@ export interface MmSettings {
   textAlign: TextAlign;
   // Liste des etiquettes disponibles (menu de la carte).
   tags: TagDef[];
+  // Contraste de la case selectionnee, de 0 (discret) a 100 (tres marque).
+  selectionContrast: number;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -113,6 +135,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   fontScale: 1,
   textAlign: `center`,
   tags: [],
+  selectionContrast: 50,
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).

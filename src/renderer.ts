@@ -6,7 +6,7 @@ import { buildLayoutTree, Bounds, childIndent, computeLayout, flatten, LNode, se
 import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
-import type { MmSettings } from "./settings";
+import { makeTag, MmSettings } from "./settings";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
@@ -42,10 +42,16 @@ export interface MapCallbacks {
   onContextMenu?: (key: string, event: MouseEvent) => void;
   // Validation de la fenetre de modification d'un titre (titre, titre court, commentaire, etiquettes).
   onDetails?: (key: string, values: DialogValues) => void;
+  // Clic sur l'oeil d'un titre : masquer ou afficher ce titre (et ses sous-titres) dans la note.
+  onToggleHidden?: (key: string) => void;
 }
 
 // Repere affiche a cote d'un titre qui a un commentaire.
 const COMMENT_ICON = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3h11v7.5h-6L4.5 13.5v-3h-2z"/></svg>`;
+
+// Oeil affiche au survol d'un titre (masquer dans la note) et oeil barre sur un titre masque.
+const EYE_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>`;
+const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5l11-11"/></svg>`;
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
 const MIN_SCALE = 0.15;
@@ -108,6 +114,8 @@ export class MapRenderer {
   private suspendBlur = false;
   // Fenetre de modification du titre (titre court, commentaire, etiquettes), ouverte par double clic ou F2.
   private dialog: NodeDialog | null = null;
+  private eyes = new Map<string, HTMLElement>();
+  private eyeHover: string | null = null;
   // Detection du double clic : la carte peut etre redessinee entre les deux clics (ouverture de la note),
   // l'evenement dblclick du navigateur n'est alors plus fiable.
   private lastDown: { key: string; time: number } | null = null;
@@ -181,6 +189,13 @@ export class MapRenderer {
       if (!this.selectedKeys.has(key)) this.select(key);
       this.callbacks.onContextMenu?.(key, e as MouseEvent);
     });
+    // L'oeil de masquage n'apparait qu'au survol du titre.
+    this.on(this.mapEl, `mouseover`, (e) => {
+      const t = e.target as HTMLElement;
+      const key = (t.closest(`.mmw-node`) as HTMLElement | null)?.dataset.key ?? (t.closest(`.mmw-eye`) as HTMLElement | null)?.dataset.eye ?? null;
+      this.setEyeHover(key);
+    });
+    this.on(this.mapEl, `mouseleave`, () => this.setEyeHover(null));
     this.on(this.mapEl, `dblclick`, (e) => {
       const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
       if (node) this.openDialog(node.dataset.key!);
@@ -280,6 +295,11 @@ export class MapRenderer {
     const s = this.getSettings();
     this.mapEl.style.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
     this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
+    // Contraste de la case selectionnee : 0 (discret) a 100 (tres marque).
+    const c = Math.max(0, Math.min(100, s.selectionContrast ?? 50));
+    this.mapEl.style.setProperty(`--mmw-sel-bg`, `${Math.round(8 + c * 0.42)}%`);
+    this.mapEl.style.setProperty(`--mmw-sel-ring`, `${Math.round(25 + c * 0.7)}%`);
+    this.mapEl.style.setProperty(`--mmw-sel-halo`, `${(1 + c * 0.05).toFixed(1)}px`);
 
     if (!this.doc) {
       this.worldEl.replaceChildren();
@@ -306,6 +326,7 @@ export class MapRenderer {
     this.root = buildLayoutTree((this.previewDoc ?? this.doc).root, `r`, 0, this.previewCollapsed ?? this.collapsed);
     this.list = flatten(this.root);
     this.els.clear();
+    this.eyes.clear();
     for (const n of this.list) {
       const el = this.createNodeEl(n, s);
       this.worldEl.appendChild(el);
@@ -322,7 +343,13 @@ export class MapRenderer {
       el.style.left = `${n.x}px`;
       el.style.top = `${n.y}px`;
       if (n.hasChildren && n.depth >= 1) this.worldEl.appendChild(this.createFold(n));
+      const eye = this.createEye(n);
+      if (eye) {
+        this.worldEl.appendChild(eye);
+        this.eyes.set(n.key, eye);
+      }
     }
+    if (this.eyeHover) this.eyes.get(this.eyeHover)?.classList.add(`mmw-eye-show`);
     this.draw(s);
     if (typing) {
       if (this.els.has(typing.key)) {
@@ -359,6 +386,7 @@ export class MapRenderer {
     const el = document.createElement(`div`);
     el.className = `mmw-node mmw-depth-${Math.min(n.depth, 3)}`;
     el.dataset.key = n.key;
+    if (this.isHidden(n)) el.classList.add(`mmw-hidden`);
     const st = this.styleOf(n);
     el.style.setProperty(`--mmw-node-color`, st.strokeColor || `var(--text-normal)`);
     el.style.setProperty(`--mmw-node-font`, FONT_CSS[st.fontFamily] ?? `inherit`);
@@ -411,6 +439,34 @@ export class MapRenderer {
     return el;
   }
 
+  // Titre masque : lui-meme ou par l'un de ses parents. Ses sous-titres le sont avec lui.
+  private isHidden(n: LNode): boolean {
+    for (let p: LNode | null = n; p; p = p.parent) if (p.depth >= 1 && p.node.meta?.hidden) return true;
+    return false;
+  }
+
+  // Oeil de masquage, en haut a droite de la case. Pas d'oeil sur la racine ni sur un sous-titre masque par son parent.
+  private createEye(n: LNode): HTMLElement | null {
+    if (n.depth < 1) return null;
+    const own = !!n.node.meta?.hidden;
+    if (!own && n.parent && this.isHidden(n.parent)) return null;
+    const el = document.createElement(`div`);
+    el.className = `mmw-eye` + (own ? ` mmw-eye-on` : ``);
+    el.dataset.eye = n.key;
+    el.innerHTML = own ? EYE_OFF_ICON : EYE_ICON;
+    el.title = own ? `Afficher ce titre dans la note` : `Masquer ce titre dans la note`;
+    el.style.left = `${n.x + n.w - 10}px`;
+    el.style.top = `${n.y - 9}px`;
+    return el;
+  }
+
+  private setEyeHover(key: string | null): void {
+    if (key === this.eyeHover) return;
+    if (this.eyeHover) this.eyes.get(this.eyeHover)?.classList.remove(`mmw-eye-show`);
+    this.eyeHover = key;
+    if (key) this.eyes.get(key)?.classList.add(`mmw-eye-show`);
+  }
+
   private createFold(n: LNode): HTMLElement {
     const el = document.createElement(`div`);
     el.className = `mmw-fold` + (n.collapsed ? ` mmw-fold-collapsed` : ``);
@@ -440,7 +496,7 @@ export class MapRenderer {
       const st = styleOf(n);
       if (!st.showFrames) continue;
       const shape = framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, st.corners, st.roughness);
-      const cls = `mmw-frame`;
+      const cls = `mmw-frame` + (this.isHidden(n) ? ` mmw-frame-hidden` : ``);
       const css = strokeCss(st, n.depth === 0 ? 1.45 : 1) + `fill:${st.fillColor || `transparent`};`;
       if (shape.kind === `path`) this.path(shape.d, cls, css);
       else {
@@ -656,6 +712,12 @@ export class MapRenderer {
     if (target.closest(`.mmw-rename, .mmw-dialog`)) return;
     this.controls.closePopup();
     this.mapEl.focus();
+    const eye = target.closest(`.mmw-eye`) as HTMLElement | null;
+    if (eye) {
+      e.preventDefault();
+      this.callbacks.onToggleHidden?.(eye.dataset.eye!);
+      return;
+    }
     const fold = target.closest(`.mmw-fold`) as HTMLElement | null;
     if (fold) {
       this.toggleFold(fold.dataset.fold!);
@@ -1089,6 +1151,12 @@ export class MapRenderer {
       defs: this.getSettings().tags,
       isRoot: n.node.level === 0,
       anchor: { left: box.left - host.left, top: box.top - host.top, bottom: box.bottom - host.top },
+      onCreateTag: (name) => {
+        const tags = this.getSettings().tags;
+        const def = makeTag(tags, name);
+        this.callbacks.onChange?.({ tags: [...tags, def] });
+        return def;
+      },
       onSubmit: (values) => {
         this.dialog = null;
         this.mapEl.focus();
