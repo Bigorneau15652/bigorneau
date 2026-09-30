@@ -2,7 +2,7 @@ import { EditorView } from "@codemirror/view";
 import { setActiveRange } from "./active-chapter";
 import { revealRange } from "./reveal";
 import { Editor, ItemView, MarkdownView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
-import { addNode, deleteNodes, DeletionReport, describeDeletion, EditResult, renameTitle } from "./edit";
+import { addNode, arrowTarget, deleteNodes, DeletionReport, describeDeletion, EditResult, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { activeLines, applyLineEdits, flattenDoc, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
@@ -178,11 +178,24 @@ export class MindmapView extends ItemView {
     let result: EditResult | null;
     if (edit.kind === `delete`) result = deleteNodes(before, file.name, edit.keys);
     else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
-    else {
+    else if (edit.kind === `move`) {
+      const target = edit.dir
+        ? arrowTarget(parseNote(before, file.name), edit.key, edit.dir)
+        : { parentKey: edit.parentKey ?? `r`, index: edit.index ?? 0 };
+      result = target ? moveNode(before, file.name, edit.key, target.parentKey, target.index) : null;
+      if (!result && target) new Notice(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`);
+      if (!result || result.text === before) {
+        renderer.resetPreview();
+        return;
+      }
+    } else {
       result = addNode(before, file.name, edit.key, edit.kind);
       if (!result) new Notice(`Le niveau de titre maximum (6) est atteint : impossible d'ajouter un sous-titre.`);
     }
-    if (!result) return;
+    if (!result) {
+      renderer.resetPreview();
+      return;
+    }
 
     await this.writeText(file, before, result.text);
     const doc = parseNote(result.text, file.name);
@@ -196,7 +209,7 @@ export class MindmapView extends ItemView {
       await this.revealInNote(key, false);
       this.updateActiveRange();
     }
-    if (edit.kind === `delete`) renderer.focus();
+    if (edit.kind === `delete` || edit.kind === `move`) renderer.focus();
     else if (edit.kind !== `rename` && key) renderer.startRename(key);
   }
 

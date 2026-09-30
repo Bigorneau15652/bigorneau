@@ -1,6 +1,6 @@
 import { applyLineEdits, parseNote } from "../../src/model";
 import { MapEdit, MapRenderer } from "../../src/renderer";
-import { addNode, deleteNodes, EditResult, renameTitle } from "../../src/edit";
+import { addNode, arrowTarget, deleteNodes, EditResult, moveNode, renameTitle } from "../../src/edit";
 import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings } from "../../src/settings";
 import { metaEditsFor, planReset, planStyle } from "../../src/style-edit";
 
@@ -70,14 +70,21 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
     let r: EditResult | null;
     if (edit.kind === `delete`) r = deleteNodes(text, `Nom de la note.md`, edit.keys);
     else if (edit.kind === `rename`) r = renameTitle(text, `Nom de la note.md`, edit.key, edit.title ?? ``);
-    else r = addNode(text, `Nom de la note.md`, edit.key, edit.kind);
+    else if (edit.kind === `move`) {
+      const t = edit.dir ? arrowTarget(parseNote(text, `Nom de la note.md`), edit.key, edit.dir) : { parentKey: edit.parentKey ?? `r`, index: edit.index ?? 0 };
+      r = t ? moveNode(text, `Nom de la note.md`, edit.key, t.parentKey, t.index) : null;
+      if (!r || r.text === text) {
+        renderer.resetPreview();
+        return;
+      }
+    } else r = addNode(text, `Nom de la note.md`, edit.key, edit.kind);
     if (!r) return;
     text = r.text;
     renderer.setDoc(parseNote(text, `Nom de la note.md`), `sample.md`, true);
     if (edit.kind !== `rename` && r.key) {
       renderer.reveal(r.key);
       renderer.select(r.key, false);
-      if (edit.kind !== `delete`) renderer.startRename(r.key);
+      if (edit.kind !== `delete` && edit.kind !== `move`) renderer.startRename(r.key);
     }
   },
 });

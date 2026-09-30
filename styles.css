@@ -494,3 +494,28 @@
 .mmw-rename:focus {
   outline: none;
 }
+
+/* Glisser une case : fantome sous la souris et emplacement d'arrivee */
+.mmw-map.mmw-dragging,
+.mmw-map.mmw-dragging .mmw-node {
+  cursor: grabbing;
+}
+
+.mmw-node.mmw-ghost {
+  z-index: 6;
+  background: var(--background-primary);
+  outline: 2px solid var(--interactive-accent);
+  opacity: 0.85;
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.3));
+  pointer-events: none;
+}
+
+.mmw-node.mmw-ghost.mmw-ghost-invalid {
+  outline-color: var(--text-error);
+  opacity: 0.55;
+}
+
+.mmw-node.mmw-drop-target {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: 3px;
+}
