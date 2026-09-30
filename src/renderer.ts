@@ -1,6 +1,7 @@
 // Affichage de la carte : cases, branches, zoom, deplacement, pliage et selection.
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
-import { computeStats, flattenDoc, MmDoc, MmNode } from "./model";
+import { computeStats, flattenDoc, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
+import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
 import { buildLayoutTree, Bounds, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
 import { framePath, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
@@ -9,10 +10,14 @@ import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from 
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
 export interface MapEdit {
-  kind: `child` | `sibling` | `rename` | `delete`;
+  kind: `child` | `sibling` | `rename` | `delete` | `move`;
   key: string;
   keys: string[];
   title?: string;
+  // Deplacement : nouveau parent et rang (glisser), ou direction (fleches).
+  parentKey?: string;
+  index?: number;
+  dir?: MoveDir;
 }
 
 export interface MapCallbacks {
@@ -97,6 +102,25 @@ export class MapRenderer {
   // l'evenement dblclick du navigateur n'est alors plus fiable.
   private lastDown: { key: string; time: number } | null = null;
   private dblKey: string | null = null;
+  // Glisser d'une case : apercu en direct de la carte apres le deplacement.
+  private nodeDrag: {
+    key: string;
+    pointerId: number;
+    sx: number;
+    sy: number;
+    started: boolean;
+    grabX: number;
+    grabY: number;
+    ghost: HTMLElement | null;
+    keyOf: Map<MmNode, string>;
+    targetId: string;
+    target: MoveTarget | null;
+  } | null = null;
+  private previewDoc: MmDoc | null = null;
+  private previewCollapsed: Set<string> | null = null;
+  private previewOrigin: Map<MmNode, MmNode> | null = null;
+  private previewDragKey: string | null = null;
+  private settleTimer: number | null = null;
 
   constructor(private container: HTMLElement, private getSettings: () => MmSettings, private callbacks: MapCallbacks) {
     this.mapEl = container;
@@ -167,6 +191,10 @@ export class MapRenderer {
   }
 
   setDoc(doc: MmDoc | null, fileKey: string, identical: boolean): void {
+    // Un glisser en cours ne survit pas a une nouvelle version de la note ; un apercu en attente est abandonne.
+    if (this.nodeDrag?.started) this.finishNodeDrag(true);
+    this.clearPreviewState();
+    if (fileKey === this.fileKey && this.doc && doc) this.remapFolds(this.doc, doc);
     if (fileKey !== this.fileKey) {
       this.collapsed.clear();
       this.selected = null;
@@ -177,6 +205,29 @@ export class MapRenderer {
     this.doc = doc;
     this.identical = identical;
     this.rebuild();
+  }
+
+  // Les branches repliees suivent leur titre quand la structure de la note change (ajout, suppression,
+  // deplacement, frappe dans la note). Un simple changement de titre garde les memes cles.
+  private remapFolds(before: MmDoc, after: MmDoc): void {
+    if (this.collapsed.size === 0) return;
+    const a = flattenDoc(before);
+    const b = flattenDoc(after);
+    if (a.length === b.length && a.every((e, i) => e.key === b[i].key && e.node.level === b[i].node.level)) {
+      const renamed = a.filter((e, i) => e.node.title !== b[i].node.title).length;
+      if (renamed <= 1) return;
+    }
+    const signatures = (doc: MmDoc): { key: string; sig: string }[] => {
+      const seen = new Map<string, number>();
+      return flattenDoc(doc).map((e) => {
+        const path = pathTitles(doc, e.key).join(`\u0001`);
+        const n = seen.get(path) ?? 0;
+        seen.set(path, n + 1);
+        return { key: e.key, sig: `${path}\u0002${n}` };
+      });
+    };
+    const wanted = new Set(signatures(before).filter((x) => this.collapsed.has(x.key)).map((x) => x.sig));
+    this.collapsed = new Set(signatures(after).filter((x) => wanted.has(x.sig)).map((x) => x.key));
   }
 
   // ---------------------------------------------------------------- styles
@@ -233,7 +284,7 @@ export class MapRenderer {
     const typingFocused = !!typing && typing.input.ownerDocument.activeElement === typing.input;
     this.suspendBlur = true;
     this.worldEl.replaceChildren(this.svgEl);
-    this.root = buildLayoutTree(this.doc.root, `r`, 0, this.collapsed);
+    this.root = buildLayoutTree((this.previewDoc ?? this.doc).root, `r`, 0, this.previewCollapsed ?? this.collapsed);
     this.list = flatten(this.root);
     this.els.clear();
     for (const n of this.list) {
@@ -263,11 +314,16 @@ export class MapRenderer {
     }
     this.suspendBlur = false;
 
-    // Les noeuds qui n'existent plus sont retires de la selection.
-    const valid = new Set(flattenDoc(this.doc).map((e) => e.key));
-    for (const k of [...this.selectedKeys]) if (!valid.has(k)) this.selectedKeys.delete(k);
-    if (this.selected && !this.els.has(this.selected)) this.selected = null;
-    this.applySelection();
+    if (this.previewDoc) {
+      // Apercu d'un deplacement : seule la case deplacee est mise en avant.
+      this.els.get(this.previewDragKey ?? ``)?.classList.add(`mmw-drop-target`);
+    } else {
+      // Les noeuds qui n'existent plus sont retires de la selection.
+      const valid = new Set(flattenDoc(this.doc).map((e) => e.key));
+      for (const k of [...this.selectedKeys]) if (!valid.has(k)) this.selectedKeys.delete(k);
+      if (this.selected && !this.els.has(this.selected)) this.selected = null;
+      this.applySelection();
+    }
 
     const stats = computeStats(this.doc);
     this.statusEl.textContent = `${stats.nodeCount} nœud${stats.nodeCount > 1 ? `s` : ``}. ${
@@ -553,6 +609,22 @@ export class MapRenderer {
       const key = node.dataset.key!;
       if (e.shiftKey) this.toggleSelect(key);
       else {
+        if (key !== `r`) {
+          const box = node.getBoundingClientRect();
+          this.nodeDrag = {
+            key,
+            pointerId: e.pointerId,
+            sx: e.clientX,
+            sy: e.clientY,
+            started: false,
+            grabX: e.clientX - box.left,
+            grabY: e.clientY - box.top,
+            ghost: null,
+            keyOf: new Map(),
+            targetId: ``,
+            target: null,
+          };
+        }
         const now = Date.now();
         if (this.lastDown && this.lastDown.key === key && now - this.lastDown.time < 450) {
           this.dblKey = key;
@@ -577,6 +649,10 @@ export class MapRenderer {
   }
 
   private onPointerMove(e: PointerEvent): void {
+    if (this.nodeDrag) {
+      this.updateNodeDrag(e);
+      return;
+    }
     if (this.marquee) {
       this.updateMarquee(e);
       return;
@@ -592,6 +668,11 @@ export class MapRenderer {
   }
 
   private onPointerUp(e: PointerEvent): void {
+    if (this.nodeDrag) {
+      const started = this.nodeDrag.started;
+      this.finishNodeDrag(false);
+      if (started) return;
+    }
     if (this.dblKey) {
       // Apres le relachement, pour que le focus donne par le navigateur ne retire pas la saisie.
       const key = this.dblKey;
@@ -650,6 +731,20 @@ export class MapRenderer {
       if (this.selected) {
         e.preventDefault();
         this.callbacks.onEnter?.();
+      }
+      return;
+    }
+    if (e.key === `Escape` && this.nodeDrag?.started) {
+      e.preventDefault();
+      this.finishNodeDrag(true);
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.startsWith(`Arrow`)) {
+      // Cmd ou Ctrl + Maj + fleche : deplacer la case avec sa branche.
+      const dirs: Record<string, MoveDir> = { ArrowUp: `up`, ArrowDown: `down`, ArrowLeft: `left`, ArrowRight: `right` };
+      if (this.selected && dirs[e.key]) {
+        e.preventDefault();
+        this.callbacks.onEdit?.({ kind: `move`, key: this.selected, keys: [this.selected], dir: dirs[e.key] });
       }
       return;
     }
@@ -733,6 +828,161 @@ export class MapRenderer {
           this.startRename(cur.key, e.key);
         }
     }
+  }
+
+  // ---------------------------------------------------------------- glisser une case
+
+  private startNodeDrag(): void {
+    const d = this.nodeDrag!;
+    if (!this.doc) return;
+    d.started = true;
+    this.dblKey = null;
+    this.lastDown = null;
+    d.keyOf = new Map(flattenDoc(this.doc).map((x) => [x.node, x.key]));
+    const src = this.els.get(d.key);
+    if (src) {
+      const ghost = src.cloneNode(true) as HTMLElement;
+      ghost.classList.remove(`mmw-selected`);
+      ghost.classList.add(`mmw-ghost`);
+      ghost.style.left = ``;
+      ghost.style.top = ``;
+      ghost.style.visibility = ``;
+      ghost.style.transformOrigin = `0 0`;
+      ghost.style.transform = `scale(${this.scale})`;
+      this.mapEl.appendChild(ghost);
+      d.ghost = ghost;
+    }
+    this.mapEl.setPointerCapture(d.pointerId);
+    this.mapEl.classList.add(`mmw-dragging`);
+  }
+
+  private updateNodeDrag(e: PointerEvent): void {
+    const d = this.nodeDrag!;
+    if (!d.started) {
+      if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= 5) return;
+      this.startNodeDrag();
+      if (!d.started) return;
+    }
+    const rect = this.mapEl.getBoundingClientRect();
+    const left = e.clientX - d.grabX;
+    if (d.ghost) {
+      d.ghost.style.left = `${left - rect.left}px`;
+      d.ghost.style.top = `${e.clientY - d.grabY - rect.top}px`;
+    }
+    const target = this.dropTarget(e.clientY, left, rect);
+    const id = target ? `${target.parentKey}|${target.index}` : `none`;
+    if (id === d.targetId) return;
+    d.targetId = id;
+    this.showPreview(target);
+    d.ghost?.classList.toggle(`mmw-ghost-invalid`, d.target === null);
+  }
+
+  // Emplacement vise par la souris : la hauteur choisit l'intervalle entre deux cases, la position horizontale de la
+  // case glissee choisit la profondeur (vers la droite : sous-titre de la case du dessus).
+  private dropTarget(clientY: number, leftScreen: number, rect: DOMRect): MoveTarget | null {
+    const d = this.nodeDrag!;
+    if (!this.doc || !this.root) return null;
+    const shown = this.previewDragKey ?? d.key;
+    const rows = this.list.filter((n) => n.key !== shown && !n.key.startsWith(`${shown}.`));
+    if (rows.length === 0) return null;
+    const wy = (clientY - rect.top - this.ty) / this.scale;
+    let index = 0;
+    rows.forEach((n, i) => {
+      if (n.y + n.h / 2 <= wy) index = i;
+    });
+    const above = rows[index];
+    const below = rows[index + 1];
+    const minDepth = below ? below.depth : 1;
+    const maxDepth = above.depth + 1;
+    const indent = 36 * this.getSettings().compactness;
+    const wx = (leftScreen - rect.left - this.tx) / this.scale;
+    let depth = maxDepth;
+    let best = Infinity;
+    for (let dd = minDepth; dd <= maxDepth; dd++) {
+      let x = this.root.x;
+      if (dd > 1) {
+        let q = above;
+        while (q.depth > dd - 1 && q.parent) q = q.parent;
+        x = trunkX(q) + indent;
+      }
+      if (Math.abs(x - wx) < best) {
+        best = Math.abs(x - wx);
+        depth = dd;
+      }
+    }
+    const realNode = this.previewOrigin ? this.previewOrigin.get(above.node) : above.node;
+    const afterKey = realNode ? d.keyOf.get(realNode) : undefined;
+    if (!afterKey) return null;
+    return dropToParentIndex(this.doc, d.key, afterKey, depth, above.collapsed);
+  }
+
+  // Affiche la carte telle qu'elle serait apres le deplacement (les autres cases s'ecartent), ou la carte normale.
+  private showPreview(target: MoveTarget | null): void {
+    const d = this.nodeDrag!;
+    const moved = target && this.doc ? previewMove(this.doc, d.key, target.parentKey, target.index) : null;
+    if (!target || !moved || !this.doc) {
+      d.target = null;
+      if (this.previewDoc) {
+        this.clearPreviewState();
+        this.rebuild();
+      }
+      return;
+    }
+    d.target = target;
+    const realCollapsed = new Set<MmNode>();
+    for (const k of this.collapsed) {
+      const n = nodeByKey(this.doc, k);
+      if (n) realCollapsed.add(n);
+    }
+    const keys = new Set<string>();
+    for (const e of flattenDoc(moved.doc)) {
+      const origin = moved.origin.get(e.node);
+      if (origin && realCollapsed.has(origin)) keys.add(e.key);
+    }
+    // La branche qui recoit la case est depliee pour la montrer.
+    const parts = moved.key.split(`.`);
+    for (let i = 1; i < parts.length; i++) keys.delete(parts.slice(0, i).join(`.`));
+    this.previewDoc = moved.doc;
+    this.previewCollapsed = keys;
+    this.previewOrigin = moved.origin;
+    this.previewDragKey = moved.key;
+    this.rebuild();
+  }
+
+  // Fin du glisser : depose la case a l'emplacement montre, ou annule.
+  private finishNodeDrag(cancel: boolean): void {
+    const d = this.nodeDrag;
+    if (!d) return;
+    this.nodeDrag = null;
+    if (this.mapEl.hasPointerCapture(d.pointerId)) this.mapEl.releasePointerCapture(d.pointerId);
+    d.ghost?.remove();
+    this.mapEl.classList.remove(`mmw-dragging`);
+    if (!d.started) return;
+    const target = cancel ? null : d.target;
+    if (target && this.previewDoc) {
+      // L'apercu reste affiche jusqu'a ce que la note ait ete modifiee et la carte relue.
+      if (this.settleTimer !== null) window.clearTimeout(this.settleTimer);
+      this.settleTimer = window.setTimeout(() => this.resetPreview(), 2500);
+      this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: [d.key], parentKey: target.parentKey, index: target.index });
+    } else {
+      this.resetPreview();
+    }
+  }
+
+  private clearPreviewState(): void {
+    if (this.settleTimer !== null) window.clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    this.previewDoc = null;
+    this.previewCollapsed = null;
+    this.previewOrigin = null;
+    this.previewDragKey = null;
+  }
+
+  // Revient a la carte reelle (deplacement annule ou impossible).
+  resetPreview(): void {
+    const had = this.previewDoc !== null;
+    this.clearPreviewState();
+    if (had) this.rebuild();
   }
 
   // ---------------------------------------------------------------- modification depuis la carte

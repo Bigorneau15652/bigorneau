@@ -116,3 +116,167 @@ export function deleteNodes(text: string, fileName: string, keys: string[]): Edi
   const kept = parseNote(next, fileName);
   return { text: next, key: nodeAtLine(kept, keepLine - shift).key };
 }
+
+// ---------------------------------------------------------------- deplacement
+
+export type MoveDir = `up` | `down` | `left` | `right`;
+
+export interface MoveTarget {
+  // Cle du nouveau parent dans le document d'origine, et rang parmi ses enfants (la case deplacee non comprise).
+  parentKey: string;
+  index: number;
+}
+
+function isInside(key: string, ancestor: string): boolean {
+  return key === ancestor || key.startsWith(`${ancestor}.`);
+}
+
+// Niveau de titre que prend la case deplacee sous ce parent : celui de ses autres enfants, sinon un de plus que le parent.
+function levelUnder(parent: MmNode, moved: MmNode): number {
+  const first = parent.children.find((c) => c !== moved);
+  return first ? first.level : parent.level + 1;
+}
+
+function branchMaxLevel(n: MmNode): number {
+  return Math.max(n.level, ...n.children.map(branchMaxLevel));
+}
+
+function branchNodes(n: MmNode): MmNode[] {
+  return [n, ...n.children.flatMap(branchNodes)];
+}
+
+// Destination d'un deplacement au clavier (fleches) : monter ou descendre parmi les freres, entrer dans le
+// frere precedent, ou sortir apres le parent.
+export function arrowTarget(doc: MmDoc, key: string, dir: MoveDir): MoveTarget | null {
+  if (key === `r`) return null;
+  const parts = key.split(`.`);
+  const index = Number(parts.pop());
+  const parentKey = parts.join(`.`);
+  const parent = nodeByKey(doc, parentKey);
+  if (!parent) return null;
+  if (dir === `up`) return index > 0 ? { parentKey, index: index - 1 } : null;
+  if (dir === `down`) return index < parent.children.length - 1 ? { parentKey, index: index + 1 } : null;
+  if (dir === `right`) {
+    return index > 0 ? { parentKey: `${parentKey}.${index - 1}`, index: parent.children[index - 1].children.length } : null;
+  }
+  if (parentKey === `r`) return null;
+  const up = parentKey.split(`.`);
+  const parentIndex = Number(up.pop());
+  return { parentKey: up.join(`.`), index: parentIndex + 1 };
+}
+
+// Traduit une position de depot (juste apres la case affichee `afterKey`, a la profondeur voulue) en parent et rang.
+// La profondeur va de 1 a la profondeur de la case plus un ; `afterCollapsed` : la case est repliee, le depot
+// comme sous-titre se fait alors apres ses enfants caches.
+export function dropToParentIndex(doc: MmDoc, movedKey: string, afterKey: string, depth: number, afterCollapsed: boolean): MoveTarget | null {
+  const after = nodeByKey(doc, afterKey);
+  const moved = nodeByKey(doc, movedKey);
+  if (!after) return null;
+  const parts = afterKey.split(`.`);
+  const afterDepth = parts.length - 1;
+  if (depth < 1 || depth > afterDepth + 1) return null;
+  if (depth === afterDepth + 1) {
+    const others = after.children.filter((c) => c !== moved).length;
+    return { parentKey: afterKey, index: afterCollapsed ? others : 0 };
+  }
+  const parentKey = parts.slice(0, depth).join(`.`);
+  const parent = nodeByKey(doc, parentKey);
+  if (!parent) return null;
+  const carrier = Number(parts[depth]);
+  let index = 0;
+  for (let i = 0; i <= carrier; i++) if (parent.children[i] !== moved) index++;
+  return { parentKey, index };
+}
+
+function countNodes(n: MmNode): number {
+  return branchNodes(n).length;
+}
+
+// Deplace un titre avec toute sa descendance sous un nouveau parent, en ajustant les niveaux de titre de la branche.
+// Renvoie null si le deplacement est impossible (niveau 6 depasse, destination dans la branche elle-meme).
+export function moveNode(text: string, fileName: string, key: string, parentKey: string, index: number): EditResult | null {
+  if (key === `r` || isInside(parentKey, key)) return null;
+  const doc = parseNote(text, fileName);
+  const moved = nodeByKey(doc, key);
+  const parent = nodeByKey(doc, parentKey);
+  if (!moved || !parent || moved.line === undefined || parent.endLine === undefined) return null;
+
+  const others = parent.children.filter((c) => c !== moved);
+  const rank = Math.max(0, Math.min(index, others.length));
+  const level = levelUnder(parent, moved);
+  const delta = level - moved.level;
+  if (level < 1 || branchMaxLevel(moved) + delta > MAX_LEVEL) return null;
+
+  const from = moved.line;
+  const to = branchEnd(moved);
+  const length = to - from;
+  let at: number;
+  if (rank < others.length) at = others[rank].line ?? parent.endLine;
+  else if (others.length > 0) at = branchEnd(others[others.length - 1]);
+  else at = parent.endLine;
+
+  const lines = splitLines(text);
+  const block = lines.slice(from, to);
+  if (delta !== 0) {
+    for (const n of branchNodes(moved)) {
+      const i = (n.line ?? from) - from;
+      block[i] = block[i].replace(/^#{1,6}/, `#`.repeat(n.level + delta));
+    }
+  }
+  if (block.length > 0 && !/[\r\n]$/.test(block[block.length - 1])) block[block.length - 1] += doc.eol;
+  lines.splice(from, length);
+  const insertAt = at >= to ? at - length : at;
+  if (insertAt >= lines.length && lines.length > 0 && !/[\r\n]$/.test(lines[lines.length - 1])) lines[lines.length - 1] += doc.eol;
+  lines.splice(insertAt, 0, ...block);
+  const next = lines.join(``);
+
+  // Controle : la case doit se retrouver sous le bon parent, au bon rang, avec la meme descendance.
+  const after = parseNote(next, fileName);
+  const flat = flattenDoc(after);
+  const entry = flat.find((e) => e.node.line === insertAt);
+  if (!entry || flat.length !== flattenDoc(doc).length || countNodes(entry.node) !== countNodes(moved)) return null;
+  const parts = entry.key.split(`.`);
+  const newParent = nodeByKey(after, parts.slice(0, -1).join(`.`));
+  if (!newParent || newParent.children.indexOf(entry.node) !== rank) return null;
+  const expectedLine = parent.line !== undefined && parent.line > from ? parent.line - length : parent.line;
+  if (parent === doc.root ? newParent !== after.root : newParent.line !== expectedLine) return null;
+  return { text: next, key: entry.key };
+}
+
+export interface MovePreview {
+  doc: MmDoc;
+  // Noeud du document d'apercu -> noeud du document d'origine.
+  origin: Map<MmNode, MmNode>;
+  // Cle de la case deplacee dans le document d'apercu.
+  key: string;
+}
+
+function cloneTree(n: MmNode, origin: Map<MmNode, MmNode>, skip: MmNode | null): MmNode {
+  const copy: MmNode = { ...n, children: [] };
+  origin.set(copy, n);
+  for (const c of n.children) if (c !== skip) copy.children.push(cloneTree(c, origin, skip));
+  return copy;
+}
+
+// Document tel qu'il serait apres le deplacement, pour l'afficher pendant le glisser. Ne modifie pas l'original.
+export function previewMove(doc: MmDoc, key: string, parentKey: string, index: number): MovePreview | null {
+  if (key === `r` || isInside(parentKey, key)) return null;
+  const moved = nodeByKey(doc, key);
+  const parent = nodeByKey(doc, parentKey);
+  if (!moved || !parent) return null;
+  const level = levelUnder(parent, moved);
+  const delta = level - moved.level;
+  if (level < 1 || branchMaxLevel(moved) + delta > MAX_LEVEL) return null;
+
+  const origin = new Map<MmNode, MmNode>();
+  const root = cloneTree(doc.root, origin, moved);
+  let parentCopy: MmNode | undefined;
+  for (const [copy, orig] of origin) if (orig === parent) parentCopy = copy;
+  if (!parentCopy) return null;
+  const movedCopy = cloneTree(moved, origin, null);
+  for (const n of branchNodes(movedCopy)) n.level += delta;
+  parentCopy.children.splice(Math.max(0, Math.min(index, parentCopy.children.length)), 0, movedCopy);
+  const preview: MmDoc = { ...doc, root };
+  const found = flattenDoc(preview).find((e) => e.node === movedCopy);
+  return found ? { doc: preview, origin, key: found.key } : null;
+}
