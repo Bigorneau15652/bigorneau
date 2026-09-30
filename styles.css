@@ -481,7 +481,8 @@
 }
 
 /* Chapitres inactifs de la note reliee a la carte */
-.cm-line.mmw-inactive {
+.cm-line.mmw-inactive,
+.cm-embed-block.mmw-inactive-block {
   opacity: var(--mmw-inactive-opacity, 0.45);
   transition: opacity 0.15s ease;
 }
