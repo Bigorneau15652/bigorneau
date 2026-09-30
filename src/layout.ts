@@ -60,9 +60,18 @@ export function flatten(root: LNode): LNode[] {
   return out;
 }
 
+// La cascade des titres ne doit pas s'etaler vers la droite : la ligne verticale part pres du bord gauche de la
+// case, et chaque niveau n'est decale que de peu (cette distance est multipliee par la compacite).
+const TRUNK_MAX = 22;
+const INDENT = 20;
+
+export function childIndent(compact: number): number {
+  return INDENT * compact;
+}
+
 // Abscisse de la ligne verticale d'ou partent les enfants d'un noeud.
 export function trunkX(n: LNode): number {
-  return n.x + Math.min(n.w / 2, 60);
+  return n.x + Math.min(n.w / 2, TRUNK_MAX);
 }
 
 // Les tailles (w, h) doivent etre renseignees avant l'appel. La racine est placee en (0, 0).
@@ -73,7 +82,7 @@ export function computeLayout(root: LNode, compact: number): Bounds {
   const vGap = 16 * c;
   const vGapTop = 26 * c;
   const rootGap = 30 * c;
-  const indent = 36 * c;
+  const indent = childIndent(c);
 
   // Place le sous-arbre et renvoie l'ordonnee de son bord inferieur.
   const place = (n: LNode, x: number, y: number): number => {

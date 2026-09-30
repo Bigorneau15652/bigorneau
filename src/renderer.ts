@@ -2,8 +2,8 @@
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
 import { computeStats, flattenDoc, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
 import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
-import { buildLayoutTree, Bounds, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
-import { framePath, trunkBranch, trunkLine, trunkRadius } from "./sketch";
+import { buildLayoutTree, Bounds, childIndent, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
+import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
 import type { MmSettings } from "./settings";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
@@ -424,7 +424,8 @@ export class MapRenderer {
       for (const c of n.children) {
         const cs = styleOf(c);
         const cy = c.y + c.h / 2;
-        trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x, cs.corners));
+        // Sans ligne verticale (styles courbe et droit), rien ne descend le long des branches.
+        if (hasTrunk(s.branchStyle)) trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x, cs.corners));
         this.path(trunkBranch(s.branchStyle, tx, y0, c.x, cy, `${n.key}>${c.key}`, cs.corners, cs.roughness), `mmw-line`, strokeCss(cs));
       }
       // Les noeuds de premier niveau sont relies entre eux par la meme ligne verticale.
@@ -903,7 +904,7 @@ export class MapRenderer {
     const below = rows[index + 1];
     const minDepth = below ? below.depth : 1;
     const maxDepth = above.depth + 1;
-    const indent = 36 * this.getSettings().compactness;
+    const indent = childIndent(this.getSettings().compactness);
     const wx = (leftScreen - rect.left - this.tx) / this.scale;
     let depth = maxDepth;
     let best = Infinity;
