@@ -125,9 +125,14 @@ export function trunkRadius(ly0: number, y2: number, lx: number, x2: number, cor
   return Math.max(0, Math.min(24, y2 - ly0, x2 - lx));
 }
 
+// Les styles angle et crayon partent d'une ligne verticale sous le noeud ; les styles courbe et droit n'en ont pas.
+export function hasTrunk(style: BranchStyle): boolean {
+  return style !== `curve` && style !== `straight`;
+}
+
 // Ligne verticale issue d'un noeud (styles angle et crayon uniquement).
 export function trunkLine(style: BranchStyle, x: number, y1: number, y2: number, seed: string, rough: Roughness = 1): string | null {
-  if (style === `curve` || style === `straight`) return null;
+  if (!hasTrunk(style)) return null;
   if (rough === 0) return `M ${f(x)} ${f(y1)} L ${f(x)} ${f(y2)}`;
   const pts = resample([{ x, y: y1 }, { x, y: y2 }], 40, false);
   return smoothPath(wobble(pts, rng(seed), WOBBLE * ROUGH[rough], false), false);

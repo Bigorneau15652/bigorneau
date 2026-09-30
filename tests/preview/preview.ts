@@ -21,9 +21,12 @@ let text = [
 ].join(`\n`);
 
 const params = new URLSearchParams(location.search);
+if (params.get(`doc`) === `cascade`) {
+  text = [`# Titre niveau 1`, `## Titre niveau 2`, `### Titre niveau 3`, `#### Titre niveau 4`, `##### Titre niveau 5`, ``].join(`\n`);
+}
 const settings: MmSettings = { ...DEFAULT_SETTINGS };
 for (const [k, v] of params) {
-  if (k === `select` || k === `collapse`) continue;
+  if (k === `select` || k === `collapse` || k === `doc`) continue;
   const current = (settings as unknown as Record<string, unknown>)[k];
   if (typeof current === `number`) (settings as unknown as Record<string, number>)[k] = Number(v);
   else if (typeof current === `boolean`) (settings as unknown as Record<string, boolean>)[k] = v === `1`;
