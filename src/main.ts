@@ -105,6 +105,12 @@ export default class MindmapWritingPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: `duplicate-selection`,
+      name: `Dupliquer le titre sélectionné`,
+      callback: () => this.forEachView((v) => v.duplicateSelection()),
+    });
+
+    this.addCommand({
       id: `focus-map`,
       name: `Revenir à la carte`,
       callback: () => this.forEachView((v) => v.focusMap()),
