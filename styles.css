@@ -135,9 +135,18 @@
   background: var(--background-modifier-hover);
 }
 
+/* Carte inactive (le curseur est dans la note) : la selection reste visible mais discrete. */
 .mmw-node.mmw-selected {
+  background: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+  color: var(--text-normal);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--interactive-accent) 55%, transparent);
+}
+
+/* Carte active (elle a le focus) : contraste fort et halo autour de la selection. */
+.mmw-map:focus-within .mmw-node.mmw-selected {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 40%, transparent);
 }
 
 .mmw-node.mmw-depth-0 .mmw-title {

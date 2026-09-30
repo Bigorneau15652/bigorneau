@@ -779,6 +779,9 @@ export class MapRenderer {
   // ---------------------------------------------------------------- clavier
 
   private onKey(e: KeyboardEvent): void {
+    // Dans un champ de saisie (nom d'une etiquette, etc.), les touches appartiennent au champ.
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === `INPUT` || t.tagName === `TEXTAREA`)) return;
     // Une touche entre deux clics : ce n'est pas un double clic.
     this.lastDown = null;
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === `a`) {
