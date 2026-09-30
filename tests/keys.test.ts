@@ -37,3 +37,14 @@ test(`touches : libelles lisibles`, () => {
   assert.equal(comboLabel(`Mod-Shift-J`, false), `Ctrl + Maj + J`);
   assert.equal(comboLabel(``, false), `Aucune`);
 });
+
+import { isModEnter } from "../src/keys";
+
+test(`Cmd ou Ctrl + Entree : sans autre modificateur`, () => {
+  const base = { key: `Enter`, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+  assert.equal(isModEnter({ ...base, metaKey: true }), true);
+  assert.equal(isModEnter({ ...base, ctrlKey: true }), true);
+  assert.equal(isModEnter(base), false);
+  assert.equal(isModEnter({ ...base, metaKey: true, shiftKey: true }), false);
+  assert.equal(isModEnter({ ...base, key: `a`, metaKey: true }), false);
+});

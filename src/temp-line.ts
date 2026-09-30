@@ -40,7 +40,15 @@ export function releaseTempLine(cm: EditorView): boolean {
   const line = doc.lineAt(Math.min(pos, doc.length));
   if (line.from === pos && line.text === ``) {
     if (line.to < doc.length) {
-      cm.dispatch({ changes: { from: line.from, to: line.to + 1 }, effects: clear, annotations: silent });
+      // Si le curseur est sur la ligne retiree, il revient a la fin du titre du dessus (et non au debut du titre suivant).
+      const head = cm.state.selection.main.head;
+      const inside = head >= line.from && head <= line.to && line.from > 0;
+      cm.dispatch({
+        changes: { from: line.from, to: line.to + 1 },
+        selection: inside ? { anchor: line.from - 1 } : undefined,
+        effects: clear,
+        annotations: silent,
+      });
       return true;
     }
     if (line.from > 0) {

@@ -5,6 +5,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { App, Editor, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "../../src/active-chapter";
+import { isModEnter } from "../../src/keys";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { MindmapView } from "../../src/view";
 
@@ -60,7 +61,12 @@ app.makeNoteView = (leaf: WorkspaceLeaf, f: TFile): MarkdownView => {
       click: (cm, e) => {
         if (view.ownsEditor(cm)) view.onNoteClick(cm, e);
       },
-      key: () => false,
+      key: (e, cm) => {
+        if (!isModEnter(e) || !view.ownsEditor(cm)) return false;
+        e.preventDefault();
+        view.focusMap();
+        return true;
+      },
     }),
   ];
   const cm = new EditorView({ parent: nv.contentEl, state: EditorState.create({ doc: app.files.get(f.path) ?? ``, extensions }) });
