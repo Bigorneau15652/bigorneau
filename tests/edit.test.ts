@@ -35,8 +35,14 @@ test(`ajout en fin de fichier sans retour a la ligne final`, () => {
   assert.equal(r.key, `r.1`);
 });
 
-test(`note sans titre general : les enfants de la racine sont au niveau 1`, () => {
-  assert.equal(newLevel(parseNote(`texte\n`, `n.md`), `r`, `child`), 1);
+test(`note sans titre general : les enfants de la racine sont au niveau 2`, () => {
+  assert.equal(newLevel(parseNote(`texte\n`, `n.md`), `r`, `child`), 2);
+});
+
+test(`note vierge : le premier titre cree est selectionne, pas la racine`, () => {
+  const r = addNode(``, `Sans titre.md`, `r`, `child`)!;
+  assert.equal(r.text, `##\n`);
+  assert.equal(r.key, `r.0`);
 });
 
 test(`niveau 6 : pas d'enfant possible`, () => {
@@ -169,4 +175,65 @@ test(`apercu du deplacement : structure et niveaux, sans modifier l'original`, (
   assert.equal(doc.root.children.length, 3);
   assert.equal(doc.root.children[2].level, 2);
   assert.equal(p.origin.get(flat[2].node), doc.root.children[2]);
+});
+
+test(`niveaux irreguliers : le titre deplace reste le frere de celui qui le precede`, () => {
+  const t = `# T\n## P\n#### A\n### B\n## Q\n`;
+  // Q devient dernier enfant de P : niveau de B (3), pas celui de A (4)
+  const r = moveNode(t, `n.md`, `r.1`, `r.0`, 2)!;
+  assert.equal(r.text, `# T\n## P\n#### A\n### B\n### Q\n`);
+  assert.equal(r.key, `r.0.2`);
+});
+
+test(`note qui commence par un titre, sans titre general : deplacement possible`, () => {
+  const t = `## A\ntexte\n## B\n`;
+  const r = moveNode(t, `n.md`, `r.1`, `r`, 0)!;
+  assert.equal(r.text, `## B\n## A\ntexte\n`);
+  assert.equal(r.key, `r.0`);
+});
+
+// Verification sur des notes tirees au hasard : un deplacement valide n'est jamais refuse, et la note obtenue a la
+// structure montree par l'apercu.
+test(`deplacements sur des notes aleatoires`, () => {
+  let seed = 4242;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pick = (n: number) => Math.floor(rnd() * n);
+  let refused = 0;
+  let different = 0;
+  for (let n = 0; n < 150; n++) {
+    const out: string[] = [];
+    if (rnd() < 0.3) out.push(`---`, `tags: x`, `---`);
+    if (rnd() < 0.5) out.push(`# Racine`, ``);
+    const count = 3 + pick(7);
+    for (let i = 0; i < count; i++) {
+      out.push(`${`#`.repeat(2 + pick(4))} T${i}`);
+      if (rnd() < 0.4) out.push(`%% mmw {"style":{"strokeColor":"#e03131"}} %%`);
+      if (rnd() < 0.6) out.push(`texte ${i}`);
+      if (rnd() < 0.5) out.push(``);
+    }
+    const text = out.join(`\n`) + (rnd() < 0.5 ? `\n` : ``);
+    const doc = parseNote(text, `n.md`);
+    const flat = flattenDoc(doc);
+    for (const x of flat) {
+      if (x.key === `r`) continue;
+      for (const q of flat) {
+        if (q.key === x.key || q.key.startsWith(x.key + `.`)) continue;
+        const others = q.node.children.filter((c) => c !== x.node).length;
+        for (let rank = 0; rank <= others; rank++) {
+          const pv = previewMove(doc, x.key, q.key, rank);
+          const r = moveNode(text, `n.md`, x.key, q.key, rank);
+          if (pv === null) continue;
+          if (r === null) {
+            refused++;
+            continue;
+          }
+          const after = flattenDoc(parseNote(r.text, `n.md`));
+          const want = flattenDoc(pv.doc);
+          if (after.length !== want.length || !after.every((e, i) => e.node.title === want[i].node.title && e.key === want[i].key)) different++;
+        }
+      }
+    }
+  }
+  assert.equal(refused, 0);
+  assert.equal(different, 0);
 });

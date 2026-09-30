@@ -60,7 +60,9 @@ export class MindmapView extends ItemView {
   private noteCursors = new Map<string, { line: number; ch: number }>();
   private lastNoteLine = -1;
   private lastNoteLines = -1;
-  private currentPath = ``;
+  private currentFile: TFile | null = null;
+  private mapKey = ``;
+  private editQueue: Promise<void> = Promise.resolve();
 
   constructor(leaf: WorkspaceLeaf, plugin: MindmapWritingPlugin) {
     super(leaf);
@@ -118,9 +120,10 @@ export class MindmapView extends ItemView {
       renderer.setDoc(null, ``, true);
       return;
     }
-    if (file.path !== this.currentPath) {
+    if (file !== this.currentFile) {
       // Autre note : la selection et les positions memorisees ne s'appliquent plus.
-      this.currentPath = file.path;
+      this.currentFile = file;
+      this.mapKey = file.path;
       this.selectedKey = null;
       this.noteCursors.clear();
       this.lastNoteLine = -1;
@@ -130,7 +133,7 @@ export class MindmapView extends ItemView {
     if (token !== this.renderToken || this.renderer !== renderer) return;
     const doc = parseNote(text, file.name);
     this.doc = doc;
-    renderer.setDoc(doc, file.path, serializeNote(doc) === text);
+    renderer.setDoc(doc, this.mapKey, serializeNote(doc) === text);
   }
 
   // Redessine la carte apres un changement de reglage, sans relire le fichier.
@@ -152,7 +155,12 @@ export class MindmapView extends ItemView {
 
   // Creer, renommer ou supprimer depuis la carte : le nouveau texte est calcule puis ecrit dans l'editeur
   // de la note en une seule transaction, ce qui rend l'annulation d'Obsidian utilisable.
-  private async onEdit(edit: MapEdit) {
+  // Les modifications se font l'une apres l'autre : des appuis rapproches sur les fleches ne se melangent pas.
+  private onEdit(edit: MapEdit) {
+    this.editQueue = this.editQueue.then(() => this.runEdit(edit)).catch(() => undefined);
+  }
+
+  private async runEdit(edit: MapEdit) {
     const file = this.plugin.lastFile;
     const renderer = this.renderer;
     if (!file || !renderer) return;
@@ -175,6 +183,12 @@ export class MindmapView extends ItemView {
     }
 
     const before = await readText();
+    // Une direction (fleches) s'applique a la case selectionnee au moment du traitement, pas a celle de l'appui.
+    if (edit.kind === `move` && edit.dir) edit.key = renderer.getSelectedKey() ?? edit.key;
+    if (edit.kind === `rename` && edit.key === `r` && !parseNote(before, file.name).hasGeneralTitle) {
+      await this.renameFile(file, edit.title ?? ``);
+      return;
+    }
     let result: EditResult | null;
     if (edit.kind === `delete`) result = deleteNodes(before, file.name, edit.keys);
     else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
@@ -183,7 +197,8 @@ export class MindmapView extends ItemView {
         ? arrowTarget(parseNote(before, file.name), edit.key, edit.dir)
         : { parentKey: edit.parentKey ?? `r`, index: edit.index ?? 0 };
       result = target ? moveNode(before, file.name, edit.key, target.parentKey, target.index) : null;
-      if (!result && target) new Notice(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`);
+      if (!target) new Notice(this.noMoveReason(edit.dir), 2500);
+      else if (!result) new Notice(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`);
       if (!result || result.text === before) {
         renderer.resetPreview();
         return;
@@ -200,7 +215,7 @@ export class MindmapView extends ItemView {
     await this.writeText(file, before, result.text);
     const doc = parseNote(result.text, file.name);
     this.doc = doc;
-    renderer.setDoc(doc, file.path, serializeNote(doc) === result.text);
+    renderer.setDoc(doc, this.mapKey, serializeNote(doc) === result.text);
     const key = result.key;
     if (edit.kind !== `rename` && key) {
       this.selectedKey = key;
@@ -211,6 +226,32 @@ export class MindmapView extends ItemView {
     }
     if (edit.kind === `delete` || edit.kind === `move`) renderer.focus();
     else if (edit.kind !== `rename` && key) renderer.startRename(key);
+  }
+
+  private noMoveReason(dir?: `up` | `down` | `left` | `right`): string {
+    if (dir === `up`) return `Ce titre est déjà le premier parmi les titres de même niveau.`;
+    if (dir === `down`) return `Ce titre est déjà le dernier parmi les titres de même niveau.`;
+    if (dir === `right`) return `Il n'y a pas de titre juste avant celui-ci au même niveau pour l'accueillir comme sous-titre.`;
+    if (dir === `left`) return `Ce titre est déjà au premier niveau.`;
+    return `Déplacement impossible à cet endroit.`;
+  }
+
+  // Le titre de la racine d'une note sans titre general est le nom du fichier : le modifier renomme la note.
+  private async renameFile(file: TFile, title: string) {
+    const name = title.replace(/[\\/:*?"<>|#^\[\]]/g, ` `).replace(/\s+/g, ` `).trim();
+    if (name === ``) {
+      new Notice(`Le nom de la note ne peut pas être vide.`);
+      return;
+    }
+    const folder = file.parent && file.parent.path !== `/` ? `${file.parent.path}/` : ``;
+    const path = `${folder}${name}.${file.extension}`;
+    if (path === file.path) return;
+    if (this.app.vault.getAbstractFileByPath(path)) {
+      new Notice(`Une note porte déjà ce nom.`);
+      return;
+    }
+    await this.app.fileManager.renameFile(file, path);
+    await this.refresh();
   }
 
   // Remplace le texte de la note en ne touchant que la partie modifiee.
@@ -289,6 +330,29 @@ export class MindmapView extends ItemView {
     editor.transaction({ changes });
   }
 
+  // ---------------------------------------------------------------- volet de note
+
+  // Volet de note deja ouvert a cote de la carte (par exemple la note active au moment d'ouvrir la carte).
+  adoptNoteLeaf(leaf: WorkspaceLeaf) {
+    this.noteLeaf = leaf;
+    this.notePosition = this.plugin.settings.panePosition;
+  }
+
+  getNoteView(): MarkdownView | null {
+    const view = this.noteLeaf?.view;
+    return view instanceof MarkdownView ? view : null;
+  }
+
+  // Ouvre la note a cote de la carte, sans attendre un clic sur un titre.
+  async showNote() {
+    const renderer = this.renderer;
+    if (!renderer || !this.doc || !this.plugin.lastFile) return;
+    const key = this.selectedKey && nodeByKey(this.doc, this.selectedKey) ? this.selectedKey : `r`;
+    this.selectedKey = key;
+    renderer.select(key, false);
+    await this.revealInNote(key, false);
+  }
+
   // ---------------------------------------------------------------- chapitre actif
 
   // Vrai si l'editeur est celui du volet de note ouvert par cette carte.
@@ -322,7 +386,7 @@ export class MindmapView extends ItemView {
     this.doc = doc;
     this.selectedKey = key;
     this.noteCursors.set(key, { line: line0, ch: head - line.from });
-    renderer.setDoc(doc, file.path, serializeNote(doc) === text);
+    renderer.setDoc(doc, this.mapKey, serializeNote(doc) === text);
     renderer.reveal(key);
     renderer.select(key, false);
     this.updateActiveRange();
