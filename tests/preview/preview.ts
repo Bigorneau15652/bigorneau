@@ -1,8 +1,17 @@
-import { applyLineEdits, parseNote } from "../../src/model";
+import { applyLineEdits, nodeByKey, parseNote } from "../../src/model";
 import { MapEdit, MapRenderer } from "../../src/renderer";
-import { addNode, arrowTarget, deleteNodes, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "../../src/edit";
-import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings } from "../../src/settings";
+import { addNode, arrowTarget, cleanTitle, deleteNodes, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "../../src/edit";
+import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings, TagDef } from "../../src/settings";
+import type { MmMeta } from "../../src/style";
 import { metaEditsFor, planReset, planStyle } from "../../src/style-edit";
+
+// Etiquettes de demonstration (parametre tags=demo).
+const DEMO_TAGS: TagDef[] = [
+  { id: `dmg`, name: `DMG`, bg: `#ffe8cc`, fg: `#b45309` },
+  { id: `p2`, name: `P2`, bg: `#ffe3a3`, fg: `#946200` },
+  { id: `dsin`, name: `DSIN`, bg: `#3b82f6`, fg: `#ffffff` },
+  { id: `p1`, name: `P1`, bg: `#ffc9c9`, fg: `#c92a2a` },
+];
 
 let text = [
   `Introduction de la note.`,
@@ -27,6 +36,10 @@ if (params.get(`doc`) === `cascade`) {
 const settings: MmSettings = { ...DEFAULT_SETTINGS };
 for (const [k, v] of params) {
   if (k === `select` || k === `collapse` || k === `doc`) continue;
+  if (k === `tags`) {
+    if (v === `demo`) settings.tags = DEMO_TAGS.map((t) => ({ ...t }));
+    continue;
+  }
   const current = (settings as unknown as Record<string, unknown>)[k];
   if (typeof current === `number`) (settings as unknown as Record<string, number>)[k] = Number(v);
   else if (typeof current === `boolean`) (settings as unknown as Record<string, boolean>)[k] = v === `1`;
@@ -68,6 +81,30 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
   onEnter: () => calls.push(`enter`),
   onMessage: (m) => calls.push(`message:${m}`),
   onContextMenu: (k) => calls.push(`menu:${k}`),
+  // Reproduit la vue : titre puis commentaire invisible, en une seule modification de la note.
+  onDetails: (key, values) => {
+    calls.push(`details:${key}`);
+    const name = `Nom de la note.md`;
+    let next = text;
+    const node = nodeByKey(parseNote(next, name), key);
+    if (!node || key === `r`) return;
+    if (cleanTitle(values.title) !== node.title) {
+      const r = renameTitle(next, name, key, values.title);
+      if (r) next = r.text;
+    }
+    const doc = parseNote(next, name);
+    const meta: MmMeta = { ...(nodeByKey(doc, key)?.meta ?? {}) };
+    if (values.short.trim()) meta.short = values.short.trim();
+    else delete meta.short;
+    if (values.comment.trim()) meta.comment = values.comment.trim();
+    else delete meta.comment;
+    if (values.tags.length > 0) meta.tags = values.tags;
+    else delete meta.tags;
+    const edits = metaEditsFor(doc, [{ key, meta }]);
+    if (edits.length > 0) next = applyLineEdits(next, edits, doc.eol);
+    text = next;
+    renderer.setDoc(parseNote(text, name), `sample.md`, true);
+  },
   // Reproduit la vue : le nouveau texte est calcule, la note relue, la case creee passe en saisie.
   onEdit: (edit: MapEdit) => {
     calls.push(`edit:${edit.kind}:${edit.key}`);

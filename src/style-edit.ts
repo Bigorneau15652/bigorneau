@@ -1,7 +1,7 @@
 // Portee d'une modification de style : quelles reglages et quels commentaires de la note changent
 // selon la selection et la touche Cmd (ou Ctrl). Sans dependance a Obsidian.
 import { flattenDoc, LineEdit, MmDoc, planMetaEdit } from "./model";
-import { isEmptyMeta, MmMeta, mergePatch, omitKeys, StylePatch } from "./style";
+import { detailsOnly, isEmptyMeta, MmMeta, mergePatch, omitKeys, StylePatch } from "./style";
 
 export interface MetaChange {
   key: string;
@@ -75,7 +75,8 @@ export function planReset(doc: MmDoc, keys: string[], individual: boolean): Styl
   const levels = levelMap(doc);
 
   if (keys.length === 0 || (keys.length >= flat.length && !individual)) {
-    return { resetSettings: true, changes: flat.filter((e) => e.node.meta).map((e) => ({ key: e.key, meta: null })) };
+    // Les etiquettes, titres courts et commentaires ne font pas partie de l'apparence : ils sont conserves.
+    return { resetSettings: true, changes: flat.filter((e) => e.node.meta).map((e) => ({ key: e.key, meta: detailsOnly(e.node.meta) })) };
   }
   if (!individual) {
     const rootMeta: MmMeta = doc.root.meta ?? {};

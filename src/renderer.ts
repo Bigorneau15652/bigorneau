@@ -5,6 +5,7 @@ import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
 import { buildLayoutTree, Bounds, childIndent, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
 import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
+import { DialogValues, NodeDialog } from "./node-dialog";
 import type { MmSettings } from "./settings";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
@@ -39,7 +40,12 @@ export interface MapCallbacks {
   onMessage?: (text: string) => void;
   // Clic droit sur une case (la case fait partie de la selection).
   onContextMenu?: (key: string, event: MouseEvent) => void;
+  // Validation de la fenetre de modification d'un titre (titre, titre court, commentaire, etiquettes).
+  onDetails?: (key: string, values: DialogValues) => void;
 }
+
+// Repere affiche a cote d'un titre qui a un commentaire.
+const COMMENT_ICON = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3h11v7.5h-6L4.5 13.5v-3h-2z"/></svg>`;
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
 const MIN_SCALE = 0.15;
@@ -100,6 +106,8 @@ export class MapRenderer {
   // Saisie en cours du titre d'une case.
   private renaming: { key: string; input: HTMLInputElement; original: string; stop: () => void } | null = null;
   private suspendBlur = false;
+  // Fenetre de modification du titre (titre court, commentaire, etiquettes), ouverte par double clic ou F2.
+  private dialog: NodeDialog | null = null;
   // Detection du double clic : la carte peut etre redessinee entre les deux clics (ouverture de la note),
   // l'evenement dblclick du navigateur n'est alors plus fiable.
   private lastDown: { key: string; time: number } | null = null;
@@ -113,8 +121,6 @@ export class MapRenderer {
     started: boolean;
     grabX: number;
     grabY: number;
-    // La case etait deja la seule selectionnee : un clic simple ouvre alors la saisie du titre.
-    wasSelected: boolean;
     ghost: HTMLElement | null;
     keyOf: Map<MmNode, string>;
     targetId: string;
@@ -177,7 +183,7 @@ export class MapRenderer {
     });
     this.on(this.mapEl, `dblclick`, (e) => {
       const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
-      if (node) this.startRename(node.dataset.key!);
+      if (node) this.openDialog(node.dataset.key!);
     });
 
     const ro = new ResizeObserver(() => {
@@ -190,6 +196,7 @@ export class MapRenderer {
   }
 
   destroy(): void {
+    this.closeDialog(false);
     this.cleanups.forEach((fn) => fn());
     this.cleanups = [];
     this.controls.destroy();
@@ -358,15 +365,49 @@ export class MapRenderer {
     el.style.setProperty(`--mmw-node-size`, `${BASE_EM[Math.min(n.depth, 2)] * st.fontScale}em`);
     el.style.setProperty(`--mmw-node-align`, st.textAlign);
     el.style.setProperty(`--mmw-pad`, String(padFactor(s.compactness, st.showFrames)));
+    el.style.setProperty(`--mmw-node-justify`, st.textAlign === `left` ? `flex-start` : st.textAlign === `right` ? `flex-end` : `center`);
+    const meta = n.node.meta;
     const title = n.node.title;
+    // Le titre court remplace le titre sur la carte ; la note garde le titre complet.
+    const shown = meta?.short || title;
     const prefix = s.showPrefix && n.depth > 0 ? `${`#`.repeat(n.node.level)} ` : ``;
-    if (title === `` && prefix === ``) {
+    const label = document.createElement(`span`);
+    label.className = `mmw-title`;
+    if (shown === `` && prefix === ``) {
       el.classList.add(`mmw-empty-title`);
-      el.textContent = ` `;
+      label.textContent = ` `;
     } else {
-      el.textContent = prefix + title;
-      el.title = prefix + title;
+      label.textContent = prefix + shown;
     }
+    el.appendChild(label);
+
+    // Etiquettes : en petit, a droite du titre, en ecriture normale. Une etiquette supprimee des reglages n'est pas affichee.
+    const defs = new Map(s.tags.map((t) => [t.id, t]));
+    const tags = (meta?.tags ?? []).flatMap((id) => (defs.has(id) ? [defs.get(id)!] : []));
+    if (tags.length > 0) {
+      const box = document.createElement(`span`);
+      box.className = `mmw-tags`;
+      for (const t of tags) {
+        const chip = document.createElement(`span`);
+        chip.className = `mmw-tag`;
+        chip.textContent = t.name === `` ? `?` : t.name;
+        chip.style.background = t.bg;
+        chip.style.color = t.fg;
+        box.appendChild(chip);
+      }
+      el.appendChild(box);
+    }
+
+    const tip: string[] = [];
+    if (title !== `` || prefix !== ``) tip.push(prefix + title);
+    if (meta?.comment) {
+      const mark = document.createElement(`span`);
+      mark.className = `mmw-comment-mark`;
+      mark.innerHTML = COMMENT_ICON;
+      el.appendChild(mark);
+      tip.push(meta.comment);
+    }
+    if (tip.length > 0) el.title = tip.join(`\n\n`);
     return el;
   }
 
@@ -595,6 +636,8 @@ export class MapRenderer {
 
   private onWheel(e: WheelEvent): void {
     if (this.controls.contains(e.target)) return;
+    // Le defilement du commentaire ou de la liste des etiquettes ne deplace pas la carte.
+    if ((e.target as HTMLElement).closest(`.mmw-dialog`)) return;
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
       this.zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
@@ -610,7 +653,7 @@ export class MapRenderer {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (this.controls.contains(target)) return;
-    if (target.closest(`.mmw-rename`)) return;
+    if (target.closest(`.mmw-rename, .mmw-dialog`)) return;
     this.controls.closePopup();
     this.mapEl.focus();
     const fold = target.closest(`.mmw-fold`) as HTMLElement | null;
@@ -633,7 +676,6 @@ export class MapRenderer {
             started: false,
             grabX: e.clientX - box.left,
             grabY: e.clientY - box.top,
-            wasSelected: this.selected === key && this.selectedKeys.size === 1,
             ghost: null,
             keyOf: new Map(),
             targetId: ``,
@@ -684,19 +726,15 @@ export class MapRenderer {
 
   private onPointerUp(e: PointerEvent): void {
     if (this.nodeDrag) {
-      const { started, wasSelected, key } = this.nodeDrag;
+      const { started } = this.nodeDrag;
       this.finishNodeDrag(false);
       if (started) return;
-      if (wasSelected && !this.dblKey && !e.shiftKey) {
-        window.setTimeout(() => this.startRename(key), 0);
-        return;
-      }
     }
     if (this.dblKey) {
-      // Apres le relachement, pour que le focus donne par le navigateur ne retire pas la saisie.
+      // Double clic : ouvre la fenetre du titre, apres le relachement pour que le focus donne par le navigateur ne la ferme pas.
       const key = this.dblKey;
       this.dblKey = null;
-      window.setTimeout(() => this.startRename(key), 0);
+      window.setTimeout(() => this.openDialog(key), 0);
       return;
     }
     if (this.marquee) {
@@ -741,6 +779,8 @@ export class MapRenderer {
   // ---------------------------------------------------------------- clavier
 
   private onKey(e: KeyboardEvent): void {
+    // Une touche entre deux clics : ce n'est pas un double clic.
+    this.lastDown = null;
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === `a`) {
       e.preventDefault();
       this.selectAll();
@@ -820,7 +860,7 @@ export class MapRenderer {
       case `F2`:
         if (cur) {
           e.preventDefault();
-          this.startRename(cur.key);
+          this.openDialog(cur.key);
         }
         break;
       case `Delete`:
@@ -1026,6 +1066,48 @@ export class MapRenderer {
   private emitEdit(kind: MapEdit[`kind`], key: string): void {
     const keys = this.getSelection();
     this.callbacks.onEdit?.({ kind, key, keys: keys.includes(key) ? keys : [key] });
+  }
+
+  // Ouvre la fenetre de modification du titre (double clic ou F2) : titre, titre court, commentaire et etiquettes.
+  // Pour la racine, seul le nom de la note se modifie.
+  openDialog(key: string): void {
+    if (!this.doc) return;
+    const n = this.list.find((x) => x.key === key);
+    const el = this.els.get(key);
+    if (!n || !el) return;
+    this.commitRename(true, false);
+    this.closeDialog(true);
+    if (this.selected !== key) this.select(key);
+    const box = el.getBoundingClientRect();
+    const host = this.mapEl.getBoundingClientRect();
+    const meta = n.node.meta;
+    this.dialog = new NodeDialog(this.mapEl, {
+      values: { title: n.node.title, short: meta?.short ?? ``, comment: meta?.comment ?? ``, tags: meta?.tags ?? [] },
+      defs: this.getSettings().tags,
+      isRoot: n.node.level === 0,
+      anchor: { left: box.left - host.left, top: box.top - host.top, bottom: box.bottom - host.top },
+      onSubmit: (values) => {
+        this.dialog = null;
+        this.mapEl.focus();
+        const before = { title: n.node.title, short: meta?.short ?? ``, comment: meta?.comment ?? ``, tags: meta?.tags ?? [] };
+        const same =
+          values.title === before.title &&
+          values.short.trim() === before.short &&
+          values.comment.trim() === before.comment &&
+          values.tags.join(`,`) === before.tags.join(`,`);
+        if (!same) this.callbacks.onDetails?.(key, values);
+      },
+      onCancel: () => {
+        this.dialog = null;
+        this.mapEl.focus();
+      },
+    });
+  }
+
+  // Ferme la fenetre de modification (en validant ou en annulant).
+  closeDialog(save: boolean): void {
+    this.dialog?.close(save);
+    this.dialog = null;
   }
 
   // Ouvre la saisie du titre sur la case. `initial` remplace le titre actuel (lettre tapee sur la case).
