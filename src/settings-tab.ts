@@ -138,7 +138,7 @@ export class MmSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(`Griser les chapitres inactifs dans la note`)
-      .setDesc(`Le chapitre qui contient le curseur reste en contraste normal, les autres sont grisés mais lisibles. S'applique à l'éditeur (modes Édition et Aperçu en direct) de la note reliée à la carte. Un tableau affiché en aperçu en direct garde son contraste.`)
+      .setDesc(`Le chapitre qui contient le curseur reste en contraste normal, les autres sont grisés mais lisibles. S'applique à l'éditeur (modes Édition et Aperçu en direct) de la note reliée à la carte..`)
       .addToggle((t) =>
         t.setValue(s.contrastEnabled).onChange(async (v) => {
           s.contrastEnabled = v;

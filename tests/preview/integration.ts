@@ -1,8 +1,8 @@
 // Banc d'essai d'integration : le vrai code de la vue Carte, avec l'API d'Obsidian simulee et un vrai editeur CodeMirror
 // dans le volet de note.
 import { defaultKeymap, history } from "@codemirror/commands";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorState, RangeSetBuilder, StateField } from "@codemirror/state";
+import { Decoration, DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
 import { App, Editor, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "../../src/active-chapter";
 import { isModEnter } from "../../src/keys";
@@ -35,9 +35,36 @@ const plugin = {
   },
 };
 for (const [k, v] of params) {
-  if (k === `text` || k === `other`) continue;
+  if (k === `text` || k === `other` || k === `callout`) continue;
   const cur = (plugin.settings as unknown as Record<string, unknown>)[k];
   (plugin.settings as unknown as Record<string, unknown>)[k] = typeof cur === `boolean` ? v === `1` : typeof cur === `number` ? Number(v) : v;
+}
+
+// Simule les blocs de l'apercu en direct d'Obsidian (callout, tableau) : un bloc remplace les lignes qui commencent par « > ».
+class CalloutWidget extends WidgetType {
+  toDOM(): HTMLElement {
+    const el = document.createElement(`div`);
+    el.className = `cm-embed-block cm-callout`;
+    el.textContent = `Callout`;
+    return el;
+  }
+}
+const calloutField = StateField.define<DecorationSet>({
+  create: (state) => calloutBlocks(state),
+  update: (_value, tr) => calloutBlocks(tr.state),
+  provide: (f) => EditorView.decorations.from(f),
+});
+function calloutBlocks(state: EditorState): DecorationSet {
+  const b = new RangeSetBuilder<Decoration>();
+  const doc = state.doc;
+  for (let n = 1; n <= doc.lines; n++) {
+    if (!doc.line(n).text.startsWith(`>`)) continue;
+    let end = n;
+    while (end < doc.lines && doc.line(end + 1).text.startsWith(`>`)) end++;
+    b.add(doc.line(n).from, doc.line(end).to, Decoration.replace({ widget: new CalloutWidget(), block: true }));
+    n = end;
+  }
+  return b.finish();
 }
 
 let timer: number | undefined;
@@ -47,6 +74,7 @@ app.makeNoteView = (leaf: WorkspaceLeaf, f: TFile): MarkdownView => {
   const extensions = [
     history(),
     keymap.of(defaultKeymap),
+    ...(params.get(`callout`) === `1` ? [calloutField] : []),
     EditorView.lineWrapping,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) app.files.set(f.path, u.state.doc.toString());

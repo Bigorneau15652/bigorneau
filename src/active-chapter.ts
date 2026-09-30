@@ -65,20 +65,57 @@ function buildDecorations(view: EditorView): DecorationSet {
   return Decoration.set(ranges.map((r) => inactiveLine.range(r.from)));
 }
 
+// Les callouts, les tableaux et les contenus integres de l'aperçu en direct sont des blocs qui remplacent leurs lignes :
+// une decoration de ligne ne les atteint pas. Leur element recoit donc la classe d'inactivite selon la position du bloc.
+const BLOCK_SELECTOR = `.cm-embed-block`;
+
+function syncBlocks(view: EditorView): void {
+  view.requestMeasure({
+    key: syncBlocks,
+    read: (v) => {
+      const active = v.state.field(activeRangeField, false);
+      const out: { el: HTMLElement; inactive: boolean }[] = [];
+      for (const el of Array.from(v.contentDOM.querySelectorAll<HTMLElement>(BLOCK_SELECTOR))) {
+        let inactive = false;
+        if (active) {
+          try {
+            const pos = v.posAtDOM(el);
+            inactive = pos >= active.to || pos < active.from;
+          } catch {
+            inactive = false;
+          }
+        }
+        out.push({ el, inactive });
+      }
+      return out;
+    },
+    write: (blocks) => {
+      for (const b of blocks) b.el.classList.toggle(`mmw-inactive-block`, b.inactive);
+    },
+  });
+}
+
 export function noteExtension(hooks: NoteHooks): Extension[] {
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      private observer: MutationObserver;
       constructor(private view: EditorView) {
         this.decorations = buildDecorations(view);
         hooks.attach(view);
+        // Obsidian recree les blocs (defilement, changement de mode) : la classe est reposee a chaque fois.
+        this.observer = new MutationObserver(() => syncBlocks(this.view));
+        this.observer.observe(view.contentDOM, { childList: true });
+        syncBlocks(view);
       }
       update(u: ViewUpdate): void {
         const effect = u.transactions.some((t) => t.effects.some((e) => e.is(setActiveRange)));
         if (u.docChanged || u.viewportChanged || effect) this.decorations = buildDecorations(u.view);
+        if (u.docChanged || u.viewportChanged || u.geometryChanged || effect) syncBlocks(u.view);
         if (u.selectionSet || u.docChanged) hooks.changed(u.view);
       }
       destroy(): void {
+        this.observer.disconnect();
         hooks.detach(this.view);
       }
     },
