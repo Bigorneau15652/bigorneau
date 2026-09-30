@@ -1,8 +1,8 @@
 // Banc d'essai d'integration : le vrai code de la vue Carte, avec l'API d'Obsidian simulee et un vrai editeur CodeMirror
 // dans le volet de note.
-import { history } from "@codemirror/commands";
+import { defaultKeymap, history } from "@codemirror/commands";
 import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { App, Editor, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "../../src/active-chapter";
 import { isModEnter } from "../../src/keys";
@@ -15,6 +15,7 @@ const layout = document.getElementById(`layout`)!;
 const app = new App(layout);
 const file = new TFile(`Note.md`);
 app.files.set(file.path, params.get(`text`) ?? ``);
+if (params.get(`other`) !== null) app.files.set(`Autre.md`, params.get(`other`) ?? ``);
 
 const plugin = {
   settings: { ...DEFAULT_SETTINGS },
@@ -34,7 +35,7 @@ const plugin = {
   },
 };
 for (const [k, v] of params) {
-  if (k === `text`) continue;
+  if (k === `text` || k === `other`) continue;
   const cur = (plugin.settings as unknown as Record<string, unknown>)[k];
   (plugin.settings as unknown as Record<string, unknown>)[k] = typeof cur === `boolean` ? v === `1` : typeof cur === `number` ? Number(v) : v;
 }
@@ -45,6 +46,7 @@ app.makeNoteView = (leaf: WorkspaceLeaf, f: TFile): MarkdownView => {
   nv.file = f;
   const extensions = [
     history(),
+    keymap.of(defaultKeymap),
     EditorView.lineWrapping,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) app.files.set(f.path, u.state.doc.toString());

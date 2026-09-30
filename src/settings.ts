@@ -105,6 +105,8 @@ export interface MmSettings {
   tags: TagDef[];
   // Contraste de la case selectionnee, de 0 (discret) a 100 (tres marque).
   selectionContrast: number;
+  // Masque dans la note les lignes de commentaire du plugin (%% mmw ... %%) : etiquettes, styles, titre court.
+  hideMetaLines: boolean;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -136,6 +138,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   textAlign: `center`,
   tags: [],
   selectionContrast: 50,
+  hideMetaLines: true,
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).

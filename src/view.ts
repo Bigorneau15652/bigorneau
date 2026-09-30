@@ -1,17 +1,56 @@
 import { EditorView } from "@codemirror/view";
 import { setActiveRange, tempLineField } from "./active-chapter";
-import { moveCursorOutOfHidden, setHideEnabled } from "./note-hide";
+import { moveCursorOutOfHidden, setHideEnabled, setHideMeta } from "./note-hide";
 import { openBlankLine, releaseTempLine } from "./temp-line";
 import { revealRange } from "./reveal";
-import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
+import { Editor, FuzzySuggestModal, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { activeLines, applyLineEdits, flattenDoc, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
+import { insertLink, linkHeading, MapLink, parseLinks, removeLink, sameHeading } from "./links";
 import type { DialogValues } from "./node-dialog";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
 import type { MmMeta, StylePatch } from "./style";
 import { MapEdit, MapRenderer } from "./renderer";
+
+// Choix d'une note du coffre, puis d'un de ses titres, pour un lien vers une autre note.
+class NoteSuggest extends FuzzySuggestModal<TFile> {
+  constructor(app: import("obsidian").App, private files: TFile[], private choose: (file: TFile) => void) {
+    super(app);
+    this.setPlaceholder(`Note à relier…`);
+  }
+  getItems(): TFile[] {
+    return this.files;
+  }
+  getItemText(file: TFile): string {
+    return file.path.replace(/\.md$/i, ``);
+  }
+  onChooseItem(file: TFile): void {
+    this.choose(file);
+  }
+}
+
+interface HeadingItem {
+  title: string;
+  level: number;
+}
+
+class HeadingSuggest extends FuzzySuggestModal<HeadingItem> {
+  constructor(app: import("obsidian").App, private headings: HeadingItem[], private choose: (h: HeadingItem) => void) {
+    super(app);
+    this.setPlaceholder(`Titre à relier…`);
+  }
+  getItems(): HeadingItem[] {
+    return this.headings;
+  }
+  getItemText(h: HeadingItem): string {
+    return `${`#`.repeat(h.level)} ${h.title}`;
+  }
+  onChooseItem(h: HeadingItem): void {
+    this.choose(h);
+  }
+}
 
 // Fenetre de confirmation avant de supprimer des titres et leur contenu.
 class ConfirmDeleteModal extends Modal {
@@ -65,6 +104,9 @@ export class MindmapView extends ItemView {
   private lastNoteLines = -1;
   private currentFile: TFile | null = null;
   private mapKey = ``;
+  // Cartes visitees par des liens vers d'autres notes, pour le bouton Retour.
+  private history: { file: TFile; key: string | null }[] = [];
+  private navigating = false;
   private editQueue: Promise<void> = Promise.resolve();
 
   constructor(leaf: WorkspaceLeaf, plugin: MindmapWritingPlugin) {
@@ -116,6 +158,12 @@ export class MindmapView extends ItemView {
       onContextMenu: (key, event) => this.showContextMenu(key, event),
       onDetails: (key, values) => this.applyDetails(key, values),
       onToggleHidden: (key) => void this.toggleHidden(key),
+      getFileName: () => this.plugin.lastFile?.name ?? `Note.md`,
+      onLinkCreate: (from, to) => this.queue(() => this.createLink(from, to)),
+      onLinkExternal: (from) => this.pickExternalLink(from),
+      onLinkDelete: (link) => this.queue(() => this.deleteLink(link)),
+      onLinkOpen: (links, event) => this.openLinks(links, event),
+      onBack: () => void this.goBack(),
     });
     await this.refresh();
   }
@@ -142,6 +190,10 @@ export class MindmapView extends ItemView {
     if (file !== this.currentFile) {
       // Autre note : la selection et les positions memorisees ne s'appliquent plus.
       this.currentFile = file;
+      if (!this.navigating) {
+        this.history = [];
+        renderer.setBackAvailable(false);
+      }
       this.mapKey = file.path;
       this.selectedKey = null;
       this.noteCursors.clear();
@@ -339,6 +391,140 @@ export class MindmapView extends ItemView {
     renderer.setDoc(next, this.mapKey, serializeNote(next) === text);
     this.updateActiveRange();
     renderer.focus();
+  }
+
+  // ---------------------------------------------------------------- liens entre titres
+
+  private queue(job: () => Promise<void>) {
+    this.editQueue = this.editQueue.then(job).catch(() => undefined);
+  }
+
+  private linkName(file: TFile): string {
+    return file.name.replace(/\.md$/i, ``);
+  }
+
+  // Ecrit le nouveau texte de la note et met la carte a jour.
+  private async commitText(file: TFile, before: string, after: string) {
+    if (after === before) return;
+    await this.writeText(file, before, after);
+    const next = parseNote(after, file.name);
+    this.doc = next;
+    this.renderer?.setDoc(next, this.mapKey, serializeNote(next) === after);
+    this.updateActiveRange();
+  }
+
+  private async currentText(file: TFile): Promise<string> {
+    const editor = this.plugin.getOpenEditor(file);
+    return editor ? editor.getValue() : await this.app.vault.read(file);
+  }
+
+  // Lien d'un titre a un autre de la meme note : une ligne [[Note#Titre|Lien vers Titre]] au debut du texte du titre de depart.
+  private async createLink(from: string, to: string) {
+    const file = this.plugin.lastFile;
+    if (!file) return;
+    const before = await this.currentText(file);
+    const doc = parseNote(before, file.name);
+    const target = nodeByKey(doc, to);
+    if (!target || !nodeByKey(doc, from)) return;
+    if (linkHeading(target.title) === ``) {
+      new Notice(`Le titre d'arrivée est vide : donnez-lui un nom avant de le relier.`);
+      return;
+    }
+    const after = insertLink(before, doc, from, this.linkName(file), target.title);
+    if (after) await this.commitText(file, before, after);
+  }
+
+  private async deleteLink(link: MapLink) {
+    const file = this.plugin.lastFile;
+    if (!file) return;
+    const before = await this.currentText(file);
+    const doc = parseNote(before, file.name);
+    const now = parseLinks(doc, file.name).find((l) => l.from === link.from && l.line === link.line && l.heading === link.heading);
+    if (!now) return;
+    await this.commitText(file, before, removeLink(before, doc, now));
+  }
+
+  // Lien vers un titre d'une autre note : choix de la note puis du titre.
+  private pickExternalLink(from: string) {
+    const current = this.plugin.lastFile;
+    if (!current) return;
+    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path !== current.path);
+    if (files.length === 0) {
+      new Notice(`Il n'y a pas d'autre note dans le coffre.`);
+      return;
+    }
+    new NoteSuggest(this.app, files, (file) => {
+      void this.app.vault.cachedRead(file).then((text) => {
+        const headings = flattenDoc(parseNote(text, file.name))
+          .filter((e) => e.key !== `r` && linkHeading(e.node.title) !== ``)
+          .map((e) => ({ title: e.node.title, level: e.node.level }));
+        if (headings.length === 0) {
+          new Notice(`Cette note n'a aucun titre à relier.`);
+          return;
+        }
+        new HeadingSuggest(this.app, headings, (h) => this.queue(() => this.createExternalLink(from, file, h.title))).open();
+      });
+    }).open();
+  }
+
+  private async createExternalLink(from: string, target: TFile, heading: string) {
+    const file = this.plugin.lastFile;
+    if (!file) return;
+    const before = await this.currentText(file);
+    const doc = parseNote(before, file.name);
+    const name = this.app.metadataCache.fileToLinktext(target, file.path, true);
+    const after = insertLink(before, doc, from, name, heading);
+    if (after) await this.commitText(file, before, after);
+  }
+
+  // Clic sur le repere d'un titre relie a d'autres notes : ouvre la carte de la note visee.
+  private openLinks(links: MapLink[], event: PointerEvent) {
+    if (links.length === 0) return;
+    if (links.length === 1) {
+      void this.openLink(links[0]);
+      return;
+    }
+    const menu = new Menu();
+    for (const l of links) menu.addItem((item) => item.setTitle(`${l.note} › ${l.heading}`).setIcon(`link`).onClick(() => void this.openLink(l)));
+    menu.showAtMouseEvent(event as unknown as MouseEvent);
+  }
+
+  private async openLink(link: MapLink) {
+    const current = this.plugin.lastFile;
+    if (!current) return;
+    const file = this.app.metadataCache.getFirstLinkpathDest(link.note, current.path);
+    if (!file) {
+      new Notice(`La note « ${link.note} » est introuvable.`);
+      return;
+    }
+    this.history.push({ file: current, key: link.from });
+    await this.showMapOf(file, link.heading);
+  }
+
+  private async goBack() {
+    const entry = this.history.pop();
+    if (!entry) return;
+    await this.showMapOf(entry.file, null, entry.key);
+  }
+
+  // Affiche la carte d'une autre note et y selectionne un titre (par son texte ou par sa cle).
+  private async showMapOf(file: TFile, heading: string | null, key: string | null = null) {
+    const renderer = this.renderer;
+    if (!renderer) return;
+    this.navigating = true;
+    try {
+      this.plugin.lastFile = file;
+      await this.refresh();
+    } finally {
+      this.navigating = false;
+    }
+    renderer.setBackAvailable(this.history.length > 0);
+    let target = key;
+    if (heading !== null && this.doc) target = flattenDoc(this.doc).find((e) => e.key !== `r` && sameHeading(e.node.title, heading))?.key ?? null;
+    if (target && this.doc && nodeByKey(this.doc, target)) {
+      renderer.reveal(target);
+      renderer.select(target);
+    }
   }
 
   // Menu du clic droit sur une case : edition, presse-papiers et acces a l'apparence.
@@ -558,19 +744,19 @@ export class MindmapView extends ItemView {
     if (!cm) return;
     const s = this.plugin.settings;
     // Les titres masques disparaissent de la note ; le curseur ne reste pas dans une partie masquee.
-    const hideOn = setHideEnabled.of(true);
+    const hideOn = [setHideEnabled.of(true), setHideMeta.of(s.hideMetaLines)];
     // Titre masque selectionne : rien n'est actif dans la note, tout y est grise.
     const hiddenSelection = !!this.selectedKey && !!this.doc && isHiddenKey(this.doc, this.selectedKey);
     const range = s.contrastEnabled && this.selectedKey && this.doc && !hiddenSelection ? activeLines(this.doc, this.selectedKey, s.includeSubtitles) : null;
     if (hiddenSelection && s.contrastEnabled) {
-      cm.dispatch({ effects: [hideOn, setActiveRange.of({ from: 0, to: 0 })] });
+      cm.dispatch({ effects: [...hideOn, setActiveRange.of({ from: 0, to: 0 })] });
     } else if (!range) {
-      cm.dispatch({ effects: [hideOn, setActiveRange.of(null)] });
+      cm.dispatch({ effects: [...hideOn, setActiveRange.of(null)] });
     } else {
       const d = cm.state.doc;
       const from = d.line(Math.min(range.startLine, d.lines - 1) + 1).from;
       const to = range.endLine >= d.lines ? d.length : d.line(range.endLine + 1).from;
-      cm.dispatch({ effects: [hideOn, setActiveRange.of({ from, to })] });
+      cm.dispatch({ effects: [...hideOn, setActiveRange.of({ from, to })] });
     }
     moveCursorOutOfHidden(cm);
   }

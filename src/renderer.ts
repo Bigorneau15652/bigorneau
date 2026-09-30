@@ -7,6 +7,8 @@ import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sket
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
 import { makeTag, MmSettings } from "./settings";
+import { linkPath } from "./link-geom";
+import { MapLink, parseLinks } from "./links";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
@@ -44,6 +46,16 @@ export interface MapCallbacks {
   onDetails?: (key: string, values: DialogValues) => void;
   // Clic sur l'oeil d'un titre : masquer ou afficher ce titre (et ses sous-titres) dans la note.
   onToggleHidden?: (key: string) => void;
+  // Nom du fichier de la carte (pour reconnaitre les liens vers la note elle-meme).
+  getFileName?: () => string;
+  // Un lien vient d'etre trace d'un titre a un autre de la carte ; ou vers un titre d'une autre note (a choisir).
+  onLinkCreate?: (from: string, to: string) => void;
+  onLinkExternal?: (from: string) => void;
+  // Suppression d'un lien selectionne, et clic sur le repere d'un titre qui a des liens vers d'autres notes.
+  onLinkDelete?: (link: MapLink) => void;
+  onLinkOpen?: (links: MapLink[], event: PointerEvent) => void;
+  // Le bouton Retour de la carte.
+  onBack?: () => void;
 }
 
 // Repere affiche a cote d'un titre qui a un commentaire.
@@ -52,6 +64,9 @@ const COMMENT_ICON = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none
 // Oeil affiche au survol d'un titre (masquer dans la note) et oeil barre sur un titre masque.
 const EYE_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>`;
 const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8s-2.3 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/><path d="M2.5 13.5l11-11"/></svg>`;
+
+// Repere affiche sur un titre qui a des liens vers d'autres notes.
+const LINK_ICON = `<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-.7.7"/><path d="M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l.7-.7"/></svg>`;
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
 const MIN_SCALE = 0.15;
@@ -115,6 +130,11 @@ export class MapRenderer {
   // Fenetre de modification du titre (titre court, commentaire, etiquettes), ouverte par double clic ou F2.
   private dialog: NodeDialog | null = null;
   private eyes = new Map<string, HTMLElement>();
+  private links: MapLink[] = [];
+  private selectedLink: string | null = null;
+  // Creation d'un lien : titre de depart (null tant qu'il n'est pas choisi) et position de la souris.
+  private linking: { from: string | null; pressed: boolean } | null = null;
+  private linkHint: HTMLElement | null = null;
   private eyeHover: string | null = null;
   // Detection du double clic : la carte peut etre redessinee entre les deux clics (ouverture de la note),
   // l'evenement dblclick du navigateur n'est alors plus fiable.
@@ -170,6 +190,8 @@ export class MapRenderer {
       resetStyle: (individual) => this.callbacks.onResetStyle(individual),
       currentStyle: () => this.currentStyle(),
       scopeLabel: (individual) => this.scopeLabel(individual),
+      toggleLink: () => (this.linking ? this.stopLinking() : this.startLinking()),
+      back: () => this.callbacks.onBack?.(),
     });
 
     this.statusEl = document.createElement(`div`);
@@ -198,7 +220,7 @@ export class MapRenderer {
     this.on(this.mapEl, `mouseleave`, () => this.setEyeHover(null));
     this.on(this.mapEl, `dblclick`, (e) => {
       const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
-      if (node) this.openDialog(node.dataset.key!);
+      if (node && !this.linking) this.openDialog(node.dataset.key!);
     });
 
     const ro = new ResizeObserver(() => {
@@ -325,6 +347,8 @@ export class MapRenderer {
     this.worldEl.replaceChildren(this.svgEl);
     this.root = buildLayoutTree((this.previewDoc ?? this.doc).root, `r`, 0, this.previewCollapsed ?? this.collapsed);
     this.list = flatten(this.root);
+    this.links = parseLinks(this.previewDoc ?? this.doc!, this.callbacks.getFileName?.() ?? `Note.md`);
+    if (this.selectedLink && !this.links.some((l) => this.linkId(l) === this.selectedLink)) this.selectedLink = null;
     this.els.clear();
     this.eyes.clear();
     for (const n of this.list) {
@@ -424,6 +448,15 @@ export class MapRenderer {
         box.appendChild(chip);
       }
       el.appendChild(box);
+    }
+
+    const externals = this.links.filter((l) => l.from === n.key && l.external);
+    if (externals.length > 0) {
+      const mark = document.createElement(`span`);
+      mark.className = `mmw-link-mark`;
+      mark.innerHTML = LINK_ICON;
+      mark.title = externals.map((l) => `${l.note} › ${l.heading}`).join(`\n`);
+      el.appendChild(mark);
     }
 
     const tip: string[] = [];
@@ -543,6 +576,172 @@ export class MapRenderer {
       }
       chain(tx, y0, trunkEnd, `trunk${n.key}`, st);
     }
+    this.drawLinks(s);
+  }
+
+  private linkId(l: MapLink): string {
+    return `${l.from}:${l.line}`;
+  }
+
+  // Case visible d'un titre : le titre lui-meme, ou son plus proche parent visible s'il est replie.
+  private visibleNode(key: string): LNode | null {
+    for (let k = key; k.includes(`.`); k = k.slice(0, k.lastIndexOf(`.`))) {
+      const n = this.list.find((x) => x.key === k);
+      if (n) return n;
+    }
+    return null;
+  }
+
+  // Fleches en pointille entre les titres relies. Le trait est de la couleur du texte du theme.
+  private drawLinks(s: MmSettings): void {
+    const defs = document.createElementNS(SVG_NS, `defs`);
+    defs.innerHTML = `<marker id="mmw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" class="mmw-link-head"/></marker>`;
+    this.svgEl.appendChild(defs);
+    for (const l of this.links) {
+      if (l.external || !l.to) continue;
+      const a = this.visibleNode(l.from);
+      const b = this.visibleNode(l.to);
+      if (!a || !b || a === b) continue;
+      const d = linkPath(a, b, s.branchStyle === `curve`);
+      const id = this.linkId(l);
+      const on = id === this.selectedLink;
+      const path = document.createElementNS(SVG_NS, `path`);
+      path.setAttribute(`d`, d);
+      path.setAttribute(`class`, `mmw-link` + (on ? ` mmw-link-on` : ``));
+      path.setAttribute(`marker-end`, `url(#mmw-arrow)`);
+      path.setAttribute(`data-linkpath`, id);
+      this.svgEl.appendChild(path);
+      const hit = document.createElementNS(SVG_NS, `path`);
+      hit.setAttribute(`d`, d);
+      hit.setAttribute(`class`, `mmw-link-hit`);
+      hit.setAttribute(`data-link`, id);
+      const tip = document.createElementNS(SVG_NS, `title`);
+      tip.textContent = `Lien vers ${l.heading} (cliquer puis Suppr pour le retirer)`;
+      hit.appendChild(tip);
+      this.svgEl.appendChild(hit);
+    }
+    this.updateLinkPreview(null);
+  }
+
+  // Met la fleche en evidence sans refaire le dessin (l'element clique doit rester en place pour garder le focus).
+  private selectLink(id: string | null): void {
+    this.selectedLink = id;
+    for (const p of Array.from(this.svgEl.querySelectorAll(`[data-linkpath]`))) p.classList.toggle(`mmw-link-on`, p.getAttribute(`data-linkpath`) === id);
+  }
+
+  // ---------------------------------------------------------------- creation d'un lien
+
+  startLinking(): void {
+    if (!this.doc || this.linking) return;
+    this.commitRename(true, false);
+    this.closeDialog(true);
+    this.linking = { from: null, pressed: false };
+    this.mapEl.classList.add(`mmw-linking`);
+    this.controls.setLinking(true);
+    this.showLinkHint();
+  }
+
+  stopLinking(): void {
+    if (!this.linking) return;
+    this.linking = null;
+    this.mapEl.classList.remove(`mmw-linking`);
+    this.controls.setLinking(false);
+    this.linkHint?.remove();
+    this.linkHint = null;
+    this.updateLinkPreview(null);
+  }
+
+  private showLinkHint(): void {
+    const L = this.linking;
+    if (!L) return;
+    if (!this.linkHint) {
+      this.linkHint = document.createElement(`div`);
+      this.linkHint.className = `mmw-link-hint`;
+      this.mapEl.appendChild(this.linkHint);
+    }
+    const hint = this.linkHint;
+    hint.replaceChildren();
+    const text = document.createElement(`span`);
+    text.textContent = L.from === null ? `Lien : cliquez sur le titre de départ. Échap pour annuler.` : `Cliquez sur le titre d'arrivée, ou`;
+    hint.appendChild(text);
+    if (L.from !== null) {
+      const from = L.from;
+      const other = document.createElement(`button`);
+      other.type = `button`;
+      other.className = `mmw-link-other`;
+      other.textContent = `Autre note…`;
+      other.addEventListener(`click`, () => {
+        this.stopLinking();
+        this.callbacks.onLinkExternal?.(from);
+      });
+      hint.appendChild(other);
+    }
+  }
+
+  // Trait qui suit la souris entre le titre de depart et le pointeur.
+  private updateLinkPreview(e: PointerEvent | null): void {
+    this.svgEl.querySelector(`.mmw-link-temp`)?.remove();
+    const L = this.linking;
+    if (!L || L.from === null || !e) return;
+    const a = this.list.find((n) => n.key === L.from);
+    if (!a) return;
+    const box = this.mapEl.getBoundingClientRect();
+    const x = (e.clientX - box.left - this.tx) / this.scale;
+    const y = (e.clientY - box.top - this.ty) / this.scale;
+    const path = document.createElementNS(SVG_NS, `path`);
+    path.setAttribute(`d`, linkPath(a, { x, y, w: 0, h: 0 }, false));
+    path.setAttribute(`class`, `mmw-link mmw-link-temp`);
+    path.setAttribute(`marker-end`, `url(#mmw-arrow)`);
+    this.svgEl.appendChild(path);
+  }
+
+  private nodeAt(e: PointerEvent): string | null {
+    const el = this.mapEl.ownerDocument.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    return (el?.closest(`.mmw-node`) as HTMLElement | null)?.dataset.key ?? null;
+  }
+
+  private onLinkPointerDown(e: PointerEvent): void {
+    const L = this.linking!;
+    const key = this.nodeAt(e);
+    if (!key) {
+      this.stopLinking();
+      return;
+    }
+    if (L.from === null) {
+      if (key === `r`) {
+        this.callbacks.onMessage?.(`Le nom de la note ne peut pas être le départ d'un lien.`);
+        return;
+      }
+      L.from = key;
+      L.pressed = true;
+      this.showLinkHint();
+      this.updateLinkPreview(e);
+    } else if (key !== L.from) this.finishLink(key);
+  }
+
+  private onLinkPointerUp(e: PointerEvent): void {
+    const L = this.linking;
+    if (!L || !L.pressed) return;
+    L.pressed = false;
+    const key = this.nodeAt(e);
+    // Glisser-deposer d'un titre a l'autre.
+    if (key && L.from !== null && key !== L.from) this.finishLink(key);
+  }
+
+  private finishLink(to: string): void {
+    const from = this.linking?.from;
+    this.stopLinking();
+    if (!from) return;
+    if (to === `r`) {
+      this.callbacks.onMessage?.(`Le lien doit viser un titre de la note, pas son nom.`);
+      return;
+    }
+    this.callbacks.onLinkCreate?.(from, to);
+  }
+
+  // Le bouton Retour n'est visible que si une carte precedente est memorisee.
+  setBackAvailable(available: boolean): void {
+    this.controls.setBack(available);
   }
 
   // ---------------------------------------------------------------- pliage, selection
@@ -586,6 +785,7 @@ export class MapRenderer {
   select(key: string | null, notify = true): void {
     const previous = this.selected;
     const before = this.selectedKeys.size;
+    if (this.selectedLink) this.selectLink(null);
     this.selected = key && this.els.has(key) ? key : null;
     this.selectedKeys = this.selected ? new Set([this.selected]) : new Set();
     if (this.selected) {
@@ -710,8 +910,26 @@ export class MapRenderer {
     const target = e.target as HTMLElement;
     if (this.controls.contains(target)) return;
     if (target.closest(`.mmw-rename, .mmw-dialog`)) return;
+    if (target.closest(`.mmw-link-hint`)) return;
     this.controls.closePopup();
     this.mapEl.focus();
+    const mark = target.closest(`.mmw-link-mark`) as HTMLElement | null;
+    if (mark && !this.linking) {
+      e.preventDefault();
+      const key = (mark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
+      this.callbacks.onLinkOpen?.(this.links.filter((l) => l.from === key && l.external), e);
+      return;
+    }
+    const hit = target.closest(`[data-link]`) as Element | null;
+    if (hit && !this.linking) {
+      this.selectLink(hit.getAttribute(`data-link`)!);
+      return;
+    }
+    if (this.linking) {
+      e.preventDefault();
+      this.onLinkPointerDown(e);
+      return;
+    }
     const eye = target.closest(`.mmw-eye`) as HTMLElement | null;
     if (eye) {
       e.preventDefault();
@@ -768,6 +986,10 @@ export class MapRenderer {
   }
 
   private onPointerMove(e: PointerEvent): void {
+    if (this.linking) {
+      this.updateLinkPreview(e);
+      return;
+    }
     if (this.nodeDrag) {
       this.updateNodeDrag(e);
       return;
@@ -787,6 +1009,10 @@ export class MapRenderer {
   }
 
   private onPointerUp(e: PointerEvent): void {
+    if (this.linking) {
+      this.onLinkPointerUp(e);
+      return;
+    }
     if (this.nodeDrag) {
       const { started } = this.nodeDrag;
       this.finishNodeDrag(false);
@@ -846,6 +1072,18 @@ export class MapRenderer {
     if (t && (t.tagName === `INPUT` || t.tagName === `TEXTAREA`)) return;
     // Une touche entre deux clics : ce n'est pas un double clic.
     this.lastDown = null;
+    if (e.key === `Escape` && this.linking) {
+      e.preventDefault();
+      this.stopLinking();
+      return;
+    }
+    if ((e.key === `Delete` || e.key === `Backspace`) && this.selectedLink && !this.linking) {
+      const link = this.links.find((l) => this.linkId(l) === this.selectedLink);
+      e.preventDefault();
+      this.selectLink(null);
+      if (link) this.callbacks.onLinkDelete?.(link);
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === `a`) {
       e.preventDefault();
       this.selectAll();

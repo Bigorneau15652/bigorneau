@@ -21,6 +21,9 @@ export interface ControlActions {
   // Style montre dans le panneau et libelle de la portee de la modification.
   currentStyle: () => NodeStyle;
   scopeLabel: (individual: boolean) => string;
+  // Bouton Lien (relier deux titres) et bouton Retour (revenir a la carte precedente).
+  toggleLink: () => void;
+  back: () => void;
 }
 
 type PopupKind = `menu` | `style` | `tags` | null;
@@ -46,6 +49,8 @@ const ICONS: Record<string, string> = {
   compact: svg(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/>`),
   check: svg(`<path d="m5 12 5 5 9-10"/>`, 14),
   tag: svg(`<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V4h9l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="8.5" r="1.2"/>`),
+  link: svg(`<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>`),
+  back: svg(`<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>`),
   trash: svg(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`, 16),
 };
 
@@ -123,6 +128,8 @@ export class MapControls {
   private tipEl: HTMLElement;
   private menuBtn: HTMLButtonElement;
   private styleBtn: HTMLButtonElement;
+  private linkBtn: HTMLButtonElement;
+  private backBtn: HTMLButtonElement;
   private zoomLabel: HTMLElement;
   private slider: HTMLInputElement;
   private scopeEl: HTMLElement | null = null;
@@ -144,7 +151,10 @@ export class MapControls {
     const dock = h(`div`, `mmw-dock`);
     this.menuBtn = iconButton(ICONS.menu, `Menu et réglages`, () => this.toggle(`menu`));
     this.styleBtn = iconButton(ICONS.palette, `Apparence de la carte`, () => this.toggle(`style`));
-    dock.append(this.menuBtn, this.styleBtn);
+    this.linkBtn = iconButton(ICONS.link, `Relier deux titres par un lien`, () => this.actions.toggleLink());
+    this.backBtn = iconButton(ICONS.back, `Revenir à la carte précédente`, () => this.actions.back());
+    this.backBtn.style.display = `none`;
+    dock.append(this.menuBtn, this.styleBtn, this.linkBtn, this.backBtn);
 
     const zoom = h(`div`, `mmw-dock mmw-zoom`);
     this.zoomLabel = h(`span`, `mmw-zoom-label`, `100 %`);
@@ -206,6 +216,17 @@ export class MapControls {
     this.listen(doc, `keyup`, (e) => this.setModifier((e as KeyboardEvent).metaKey || (e as KeyboardEvent).ctrlKey), true);
 
     this.refresh();
+  }
+
+  // Le bouton Lien est enfonce tant qu'un lien est en cours de creation.
+  setLinking(on: boolean): void {
+    this.linkBtn.classList.toggle(`mmw-active`, on);
+    this.linkBtn.setAttribute(`aria-pressed`, String(on));
+  }
+
+  // Le bouton Retour n'apparait qu'apres l'ouverture de la carte d'une autre note par un lien.
+  setBack(visible: boolean): void {
+    this.backBtn.style.display = visible ? `` : `none`;
   }
 
   private listen(target: EventTarget, type: string, fn: (e: Event) => void, capture = false): void {

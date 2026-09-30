@@ -4,6 +4,7 @@ import { addNode, arrowTarget, cleanTitle, deleteNodes, duplicateNodes, EditResu
 import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings, TagDef } from "../../src/settings";
 import type { MmMeta } from "../../src/style";
 import { metaEditsFor, planReset, planStyle } from "../../src/style-edit";
+import { insertLink, removeLink } from "../../src/links";
 
 // Etiquettes de demonstration (parametre tags=demo).
 const DEMO_TAGS: TagDef[] = [
@@ -81,6 +82,25 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
   onEnter: () => calls.push(`enter`),
   onMessage: (m) => calls.push(`message:${m}`),
   onContextMenu: (k) => calls.push(`menu:${k}`),
+  getFileName: () => `Nom de la note.md`,
+  onLinkCreate: (from, to) => {
+    calls.push(`link:${from}>${to}`);
+    const name = `Nom de la note.md`;
+    const doc = parseNote(text, name);
+    const target = nodeByKey(doc, to);
+    if (!target) return;
+    const next = insertLink(text, doc, from, `Nom de la note`, target.title);
+    if (next) text = next;
+    renderer.setDoc(parseNote(text, name), `sample.md`, true);
+  },
+  onLinkExternal: (from) => calls.push(`external:${from}`),
+  onLinkOpen: (links) => calls.push(`open:${links.map((l) => l.note + `#` + l.heading).join(`,`)}`),
+  onLinkDelete: (link) => {
+    calls.push(`unlink:${link.from}:${link.line}`);
+    const name = `Nom de la note.md`;
+    text = removeLink(text, parseNote(text, name), link);
+    renderer.setDoc(parseNote(text, name), `sample.md`, true);
+  },
   onToggleHidden: (key) => {
     calls.push(`hidden:${key}`);
     const name = `Nom de la note.md`;
