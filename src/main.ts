@@ -188,6 +188,8 @@ export default class MindmapWritingPlugin extends Plugin {
 
   // Texte actuel d'une note ouverte dans un editeur (y compris les modifications pas encore enregistrees).
   getOpenText(file: TFile): string | null {
+    const linked = this.linkedNoteView(file);
+    if (linked) return linked.getViewData();
     let text: string | null = null;
     this.app.workspace.iterateAllLeaves((leaf) => {
       const v = leaf.view;
@@ -198,6 +200,8 @@ export default class MindmapWritingPlugin extends Plugin {
 
   // Editeur (mode Edition ou Aperçu en direct) dans lequel la note est ouverte, s'il existe.
   getOpenEditor(file: TFile): Editor | null {
+    const linked = this.linkedNoteView(file);
+    if (linked && linked.getMode() === `source`) return linked.editor;
     let editor: Editor | null = null;
     this.app.workspace.iterateAllLeaves((leaf) => {
       const v = leaf.view;
@@ -206,15 +210,41 @@ export default class MindmapWritingPlugin extends Plugin {
     return editor;
   }
 
+  // Vue de note ouverte a cote d'une carte pour ce fichier : c'est elle qui sert aux modifications.
+  private linkedNoteView(file: TFile): MarkdownView | null {
+    let found: MarkdownView | null = null;
+    this.forEachView((v) => {
+      const nv = v.getNoteView();
+      if (nv && nv.file && nv.file.path === file.path) found = nv;
+    });
+    return found;
+  }
+
+  // Ouvre la carte de la note active. La note active devient le volet de rédaction, a la place reglee
+  // (a gauche par defaut) : elle ne reste pas cachee derriere la carte.
   async activateView() {
     const { workspace } = this.app;
+    const active = workspace.getActiveViewOfType(MarkdownView);
     this.rememberFile(workspace.getActiveFile());
     let leaf: WorkspaceLeaf | null = workspace.getLeavesOfType(VIEW_TYPE_MINDMAP)[0] ?? null;
+    let adopted: WorkspaceLeaf | null = null;
     if (!leaf) {
-      leaf = workspace.getLeaf(`tab`);
+      if (active && active.file) {
+        const pos = this.settings.panePosition;
+        const direction = pos === `right` || pos === `left` ? `vertical` : `horizontal`;
+        leaf = workspace.createLeafBySplit(active.leaf, direction, pos === `right` || pos === `bottom`);
+        adopted = active.leaf;
+      } else {
+        leaf = workspace.getLeaf(`tab`);
+      }
       await leaf.setViewState({ type: VIEW_TYPE_MINDMAP, active: true });
     }
     workspace.revealLeaf(leaf);
-    this.refreshViews();
+    const view = leaf.view;
+    if (view instanceof MindmapView) {
+      if (adopted) view.adoptNoteLeaf(adopted);
+      await view.refresh();
+      await view.showNote();
+    }
   }
 }

@@ -111,6 +111,8 @@ export class MapRenderer {
     started: boolean;
     grabX: number;
     grabY: number;
+    // La case etait deja la seule selectionnee : un clic simple ouvre alors la saisie du titre.
+    wasSelected: boolean;
     ghost: HTMLElement | null;
     keyOf: Map<MmNode, string>;
     targetId: string;
@@ -171,7 +173,7 @@ export class MapRenderer {
     const ro = new ResizeObserver(() => {
       if (this.mapEl.clientWidth === 0) return;
       if (this.needsRebuild) this.rebuild();
-      else if (this.fitPending) this.fit();
+      else this.fit();
     });
     ro.observe(this.mapEl);
     this.cleanups.push(() => ro.disconnect());
@@ -561,7 +563,8 @@ export class MapRenderer {
     const sc = Math.min(1, (vw - 80) / w, Math.max(0.5, (vh - 60) / h));
     this.scale = Math.max(MIN_SCALE, sc);
     this.tx = (vw - w * this.scale) / 2 - b.minX * this.scale;
-    this.ty = Math.max(30, (vh - h * this.scale) / 2) - b.minY * this.scale;
+    // Le titre reste en haut : la carte grandit vers le bas quand on ajoute des titres.
+    this.ty = 30 - b.minY * this.scale;
     this.fitPending = false;
     this.applyTransform();
   }
@@ -609,7 +612,7 @@ export class MapRenderer {
       const key = node.dataset.key!;
       if (e.shiftKey) this.toggleSelect(key);
       else {
-        if (key !== `r`) {
+        {
           const box = node.getBoundingClientRect();
           this.nodeDrag = {
             key,
@@ -619,6 +622,7 @@ export class MapRenderer {
             started: false,
             grabX: e.clientX - box.left,
             grabY: e.clientY - box.top,
+            wasSelected: this.selected === key && this.selectedKeys.size === 1,
             ghost: null,
             keyOf: new Map(),
             targetId: ``,
@@ -669,9 +673,13 @@ export class MapRenderer {
 
   private onPointerUp(e: PointerEvent): void {
     if (this.nodeDrag) {
-      const started = this.nodeDrag.started;
+      const { started, wasSelected, key } = this.nodeDrag;
       this.finishNodeDrag(false);
       if (started) return;
+      if (wasSelected && !this.dblKey && !e.shiftKey) {
+        window.setTimeout(() => this.startRename(key), 0);
+        return;
+      }
     }
     if (this.dblKey) {
       // Apres le relachement, pour que le focus donne par le navigateur ne retire pas la saisie.
@@ -859,7 +867,8 @@ export class MapRenderer {
   private updateNodeDrag(e: PointerEvent): void {
     const d = this.nodeDrag!;
     if (!d.started) {
-      if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= 5) return;
+      // La racine ne se deplace pas : seul le clic (saisie du titre) lui est utile.
+      if (d.key === `r` || Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= 5) return;
       this.startNodeDrag();
       if (!d.started) return;
     }
@@ -997,10 +1006,6 @@ export class MapRenderer {
     if (!this.doc) return;
     const n = this.list.find((x) => x.key === key);
     if (!n) return;
-    if (n.node.level === 0) {
-      this.callbacks.onMessage?.(`Le titre de la racine est le nom du fichier : renommez la note pour le changer.`);
-      return;
-    }
     if (this.renaming && this.renaming.key === key) return;
     this.commitRename(true, false);
     if (this.selected !== key) this.select(key);

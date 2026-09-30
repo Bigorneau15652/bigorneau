@@ -32,7 +32,8 @@ export function newLevel(doc: MmDoc, key: string, where: `child` | `sibling`): n
   let level: number;
   if (where === `sibling` && !isRoot) level = node.level;
   else if (node.children.length > 0) level = node.children[0].level;
-  else level = isRoot ? (doc.hasGeneralTitle ? 2 : 1) : node.level + 1;
+  // Sous la racine, le premier niveau est le 2 : un titre de niveau 1 deviendrait le titre general de la note.
+  else level = isRoot ? 2 : node.level + 1;
   return level > MAX_LEVEL ? null : level;
 }
 
@@ -45,7 +46,7 @@ export function addNode(text: string, fileName: string, key: string, where: `chi
   if (!node || level === null || node.endLine === undefined) return null;
   const at = branchEnd(node);
   const next = applyLineEdits(text, [{ kind: `insert`, line: at, text: renderHeading(level, ``, ``) }], doc.eol);
-  const created = flattenDoc(parseNote(next, fileName)).find((e) => e.node.line === at);
+  const created = flattenDoc(parseNote(next, fileName)).find((e) => e.key !== `r` && e.node.line === at);
   return { text: next, key: created ? created.key : null };
 }
 
@@ -131,10 +132,17 @@ function isInside(key: string, ancestor: string): boolean {
   return key === ancestor || key.startsWith(`${ancestor}.`);
 }
 
-// Niveau de titre que prend la case deplacee sous ce parent : celui de ses autres enfants, sinon un de plus que le parent.
-function levelUnder(parent: MmNode, moved: MmNode): number {
-  const first = parent.children.find((c) => c !== moved);
-  return first ? first.level : parent.level + 1;
+// Niveau de titre que prend la case deplacee sous ce parent, au rang voulu. Les enfants d'un meme parent ont des
+// niveaux qui ne montent jamais d'un enfant au suivant : la case prend le niveau de l'enfant qui la precede (elle
+// reste ainsi son frere), sinon celui de l'enfant qui la suit, sinon un de plus que le parent. Cela reste juste
+// meme quand la note saute des niveaux (un titre 3 suivi d'un titre 5).
+function levelAt(parent: MmNode, moved: MmNode, rank: number): number {
+  const others = parent.children.filter((c) => c !== moved);
+  const r = Math.max(0, Math.min(rank, others.length));
+  if (r > 0) return others[r - 1].level;
+  if (others.length > 0) return others[0].level;
+  // Racine sans titre general : un titre de niveau 1 deviendrait le titre general, donc on reste au niveau 2 ou plus.
+  return parent.level === 0 ? Math.max(2, moved.level) : parent.level + 1;
 }
 
 function branchMaxLevel(n: MmNode): number {
@@ -203,7 +211,7 @@ export function moveNode(text: string, fileName: string, key: string, parentKey:
 
   const others = parent.children.filter((c) => c !== moved);
   const rank = Math.max(0, Math.min(index, others.length));
-  const level = levelUnder(parent, moved);
+  const level = levelAt(parent, moved, index);
   const delta = level - moved.level;
   if (level < 1 || branchMaxLevel(moved) + delta > MAX_LEVEL) return null;
 
@@ -233,7 +241,7 @@ export function moveNode(text: string, fileName: string, key: string, parentKey:
   // Controle : la case doit se retrouver sous le bon parent, au bon rang, avec la meme descendance.
   const after = parseNote(next, fileName);
   const flat = flattenDoc(after);
-  const entry = flat.find((e) => e.node.line === insertAt);
+  const entry = flat.find((e) => e.key !== `r` && e.node.line === insertAt);
   if (!entry || flat.length !== flattenDoc(doc).length || countNodes(entry.node) !== countNodes(moved)) return null;
   const parts = entry.key.split(`.`);
   const newParent = nodeByKey(after, parts.slice(0, -1).join(`.`));
@@ -264,7 +272,7 @@ export function previewMove(doc: MmDoc, key: string, parentKey: string, index: n
   const moved = nodeByKey(doc, key);
   const parent = nodeByKey(doc, parentKey);
   if (!moved || !parent) return null;
-  const level = levelUnder(parent, moved);
+  const level = levelAt(parent, moved, index);
   const delta = level - moved.level;
   if (level < 1 || branchMaxLevel(moved) + delta > MAX_LEVEL) return null;
 
