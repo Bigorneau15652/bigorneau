@@ -39,13 +39,13 @@ test(`commentaire de style : lecture et ecriture`, () => {
 });
 
 test(`modele : le commentaire de style sous un titre est lu et la note reste identique`, () => {
-  const text = `# Note\n%% mmw {"levels":{"2":{"strokeColor":"#e03131"}}} %%\nintro\n## A\n%% mmw {"style":{"fillColor":"#ffc9c9"}} %%\ntexte\n## B\ntexte\n`;
+  const text = `%% mmw {"levels":{"2":{"strokeColor":"#e03131"}}} %%\nintro\n## A\n%% mmw {"style":{"fillColor":"#ffc9c9"}} %%\ntexte\n## B\ntexte\n`;
   const doc = parseNote(text, `f.md`);
   assert.deepEqual(doc.root.meta?.levels, { "2": { strokeColor: `#e03131` } });
-  assert.equal(doc.root.metaLine, 1);
+  assert.equal(doc.root.metaLine, 0);
   const a = nodeByKey(doc, `r.0`)!;
   assert.deepEqual(a.meta?.style, { fillColor: `#ffc9c9` });
-  assert.equal(a.metaLine, 4);
+  assert.equal(a.metaLine, 3);
   assert.equal(nodeByKey(doc, `r.1`)!.meta, undefined);
   assert.equal(serializeNote(doc), text);
 });
@@ -53,27 +53,26 @@ test(`modele : le commentaire de style sous un titre est lu et la note reste ide
 test(`modele : commentaire de style du noeud racine sans titre general`, () => {
   const text = `---\na: b\n---\n%% mmw {"levels":{"1":{"strokeWidth":3}}} %%\nintro\n# A\n# B\n`;
   const doc = parseNote(text, `f.md`);
-  assert.equal(doc.hasGeneralTitle, false);
   assert.deepEqual(doc.root.meta?.levels, { "1": { strokeWidth: 3 } });
   assert.equal(doc.root.metaLine, 3);
 });
 
 test(`modification de style : insertion, remplacement et suppression dans la note`, () => {
-  const text = `# Note\ntexte\n## A\ntexte A\n## B\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte B\n`;
+  const text = `texte\n## A\ntexte A\n## B\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte B\n`;
   const doc = parseNote(text, `f.md`);
   const insert = planMetaEdit(doc, `r.0`, { style: { fillColor: `#ffc9c9` } })!;
-  assert.deepEqual(insert, { kind: `insert`, line: 3, text: `%% mmw {"style":{"fillColor":"#ffc9c9"}} %%` });
+  assert.deepEqual(insert, { kind: `insert`, line: 2, text: `%% mmw {"style":{"fillColor":"#ffc9c9"}} %%` });
   const replace = planMetaEdit(doc, `r.1`, { style: { strokeColor: `#2f9e44` } })!;
   assert.equal(replace.kind, `replace`);
-  assert.equal(replace.line, 5);
+  assert.equal(replace.line, 4);
   const del = planMetaEdit(doc, `r.1`, null)!;
-  assert.deepEqual(del, { kind: `delete`, line: 5, text: `` });
+  assert.deepEqual(del, { kind: `delete`, line: 4, text: `` });
   assert.equal(planMetaEdit(doc, `r.0`, null), null);
   assert.equal(planMetaEdit(doc, `r.9`, { style: { strokeColor: `#000` } }), null);
 
   const out = applyLineEdits(text, [insert, replace], `\n`);
-  assert.equal(out, `# Note\ntexte\n## A\n%% mmw {"style":{"fillColor":"#ffc9c9"}} %%\ntexte A\n## B\n%% mmw {"style":{"strokeColor":"#2f9e44"}} %%\ntexte B\n`);
-  assert.equal(applyLineEdits(text, [del], `\n`), `# Note\ntexte\n## A\ntexte A\n## B\ntexte B\n`);
+  assert.equal(out, `texte\n## A\n%% mmw {"style":{"fillColor":"#ffc9c9"}} %%\ntexte A\n## B\n%% mmw {"style":{"strokeColor":"#2f9e44"}} %%\ntexte B\n`);
+  assert.equal(applyLineEdits(text, [del], `\n`), `texte\n## A\ntexte A\n## B\ntexte B\n`);
   // La note modifiee est relue avec les nouveaux styles, et le reste du texte est intact.
   const again = parseNote(out, `f.md`);
   assert.deepEqual(nodeByKey(again, `r.0`)!.meta?.style, { fillColor: `#ffc9c9` });
@@ -85,21 +84,20 @@ test(`modification de style : racine sans titre, fin de fichier sans retour, fin
   const e = planMetaEdit(plain, `r`, { levels: { "1": { strokeWidth: 3 } } })!;
   assert.deepEqual([e.kind, e.line], [`insert`, 0]);
   assert.equal(applyLineEdits(`intro\n# A\n# B\n`, [e], `\n`), `%% mmw {"levels":{"1":{"strokeWidth":3}}} %%\nintro\n# A\n# B\n`);
-  // Avec un titre general, le commentaire se place sous ce titre.
-  const general = parseNote(`intro\n# A\n`, `f.md`);
-  assert.equal(planMetaEdit(general, `r`, { style: { strokeColor: `#fff` } })!.line, 2);
-
+  // La racine est toujours le nom de la note : son commentaire se place en tete, meme si la note commence par un titre.
   const bare = `# A`;
   const doc = parseNote(bare, `f.md`);
   const ins = planMetaEdit(doc, `r`, { style: { strokeColor: `#fff` } })!;
-  assert.equal(applyLineEdits(bare, [ins], `\n`), `# A\n%% mmw {"style":{"strokeColor":"#fff"}} %%\n`);
+  assert.deepEqual([ins.kind, ins.line], [`insert`, 0]);
+  assert.equal(applyLineEdits(bare, [ins], `\n`), `%% mmw {"style":{"strokeColor":"#fff"}} %%\n# A`);
 
   const crlf = `# A\r\ntexte\r\n`;
   const d2 = parseNote(crlf, `f.md`);
   const i2 = planMetaEdit(d2, `r`, { style: { strokeColor: `#fff` } })!;
-  assert.equal(applyLineEdits(crlf, [i2], d2.eol), `# A\r\n%% mmw {"style":{"strokeColor":"#fff"}} %%\r\ntexte\r\n`);
-  const rep = planMetaEdit(parseNote(applyLineEdits(crlf, [i2], d2.eol), `f.md`), `r`, { style: { strokeColor: `#000` } })!;
-  assert.equal(applyLineEdits(applyLineEdits(crlf, [i2], d2.eol), [rep], d2.eol), `# A\r\n%% mmw {"style":{"strokeColor":"#000"}} %%\r\ntexte\r\n`);
+  const once = applyLineEdits(crlf, [i2], d2.eol);
+  assert.equal(once, `%% mmw {"style":{"strokeColor":"#fff"}} %%\r\n# A\r\ntexte\r\n`);
+  const rep = planMetaEdit(parseNote(once, `f.md`), `r`, { style: { strokeColor: `#000` } })!;
+  assert.equal(applyLineEdits(once, [rep], d2.eol), `%% mmw {"style":{"strokeColor":"#000"}} %%\r\n# A\r\ntexte\r\n`);
 });
 
 test(`portee d une modification : libelles`, () => {

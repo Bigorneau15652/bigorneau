@@ -66,6 +66,13 @@ export default class MindmapWritingPlugin extends Plugin {
         if (this.lastFile && file.path === this.lastFile.path) refreshLater();
       })
     );
+    // Le titre de la racine est le nom du fichier : la carte le relit des qu'Obsidian signale un renommage,
+    // que le changement vienne de la carte, du titre de la note ou de l'explorateur de fichiers.
+    this.registerEvent(
+      this.app.vault.on(`rename`, (file) => {
+        if (this.lastFile && file === this.lastFile) this.refreshViews();
+      })
+    );
     // La carte suit la frappe dans l'editeur d'Obsidian sans attendre l'enregistrement du fichier.
     this.registerEvent(
       this.app.workspace.on(`editor-change`, (_editor, info) => {

@@ -16,7 +16,6 @@ function titles(nodes: MmNode[]): string[] {
 test(`note simple : structure et reconstruction identique`, () => {
   const text = `Introduction\n\n# Chapitre 1\nTexte 1\n## Section 1.1\nTexte\n# Chapitre 2\nTexte 2\n`;
   const doc = parseNote(text, `Ma note.md`);
-  assert.equal(doc.hasGeneralTitle, false);
   assert.equal(doc.root.title, `Ma note`);
   assert.equal(doc.root.body, `Introduction\n\n`);
   assert.deepEqual(titles(doc.root.children), [`Chapitre 1`, `Chapitre 2`]);
@@ -24,38 +23,36 @@ test(`note simple : structure et reconstruction identique`, () => {
   assert.equal(serializeNote(doc), text);
 });
 
-test(`titre general unique : il devient le noeud racine`, () => {
-  const text = `# Titre general\nIntro\n## A\nx\n### A1\ny\n## B\nz\n`;
+test(`un titre de niveau 1 unique est un chapitre : la racine reste le nom du fichier`, () => {
+  const text = `# Titre\nIntro\n## A\nx\n### A1\ny\n## B\nz\n`;
   const doc = parseNote(text, `f.md`);
-  assert.equal(doc.hasGeneralTitle, true);
-  assert.equal(doc.root.title, `Titre general`);
-  assert.equal(doc.root.body, `Intro\n`);
-  assert.deepEqual(titles(doc.root.children), [`A`, `B`]);
-  assert.deepEqual(titles(doc.root.children[0].children), [`A1`]);
+  assert.equal(doc.root.title, `f`);
+  assert.equal(doc.root.body, ``);
+  assert.deepEqual(titles(doc.root.children), [`Titre`]);
+  assert.deepEqual(titles(doc.root.children[0].children), [`A`, `B`]);
+  assert.deepEqual(titles(doc.root.children[0].children[0].children), [`A1`]);
   assert.equal(serializeNote(doc), text);
 });
 
-test(`texte avant le titre general conserve`, () => {
+test(`texte avant le premier titre : introduction de la racine`, () => {
   const text = `Avant\n\n# Titre\nSuite\n## A\n`;
   const doc = parseNote(text, `f.md`);
-  assert.equal(doc.hasGeneralTitle, true);
-  assert.equal(doc.preamble, `Avant\n\n`);
+  assert.equal(doc.root.body, `Avant\n\n`);
+  assert.deepEqual(titles(doc.root.children), [`Titre`]);
   assert.equal(serializeNote(doc), text);
 });
 
-test(`plusieurs titres de niveau 1 : le nom du fichier est la racine`, () => {
+test(`plusieurs titres de niveau 1 : ce sont des chapitres`, () => {
   const text = `# A\n## A1\n# B\n# C\n`;
   const doc = parseNote(text, `Racine.md`);
-  assert.equal(doc.hasGeneralTitle, false);
   assert.equal(doc.root.title, `Racine`);
   assert.deepEqual(titles(doc.root.children), [`A`, `B`, `C`]);
   assert.equal(serializeNote(doc), text);
 });
 
-test(`un titre de niveau 1 qui n est pas le premier titre n est pas general`, () => {
+test(`un titre de niveau 1 place apres un titre de niveau 2`, () => {
   const text = `## A\n# B\n## C\n`;
   const doc = parseNote(text, `f.md`);
-  assert.equal(doc.hasGeneralTitle, false);
   assert.deepEqual(titles(doc.root.children), [`A`, `B`]);
   assert.equal(serializeNote(doc), text);
 });
@@ -63,9 +60,9 @@ test(`un titre de niveau 1 qui n est pas le premier titre n est pas general`, ()
 test(`niveaux sautes : le niveau reel est conserve`, () => {
   const text = `# A\n### B\ntexte\n## C\n`;
   const doc = parseNote(text, `f.md`);
-  assert.equal(doc.root.title, `A`);
-  assert.deepEqual(titles(doc.root.children), [`B`, `C`]);
-  assert.equal(doc.root.children[0].level, 3);
+  assert.deepEqual(titles(doc.root.children), [`A`]);
+  assert.deepEqual(titles(doc.root.children[0].children), [`B`, `C`]);
+  assert.equal(doc.root.children[0].children[0].level, 3);
   assert.equal(computeStats(doc).skippedLevels, 1);
   assert.equal(serializeNote(doc), text);
 });
@@ -91,8 +88,7 @@ test(`titres dans les blocs de code, callouts et commentaires ignores`, () => {
     ``,
   ].join(`\n`);
   const doc = parseNote(text, `f.md`);
-  const all = [doc.root, ...doc.root.children];
-  assert.deepEqual(titles(all), [`Vrai`, `Vrai 2`]);
+  assert.deepEqual(flattenDoc(doc).map((e) => e.node.title), [`f`, `Vrai`, `Vrai 2`]);
   assert.equal(serializeNote(doc), text);
 });
 
@@ -100,21 +96,21 @@ test(`un bloc de code plus long ne se ferme pas avec un marqueur plus court`, ()
   const long = String.fromCharCode(96).repeat(4);
   const text = `# A\n${long}\n${FENCE}\n# faux\n${long}\n## B\n`;
   const doc = parseNote(text, `f.md`);
-  assert.deepEqual(titles(doc.root.children), [`B`]);
+  assert.deepEqual(flattenDoc(doc).map((e) => e.node.title), [`f`, `A`, `B`]);
   assert.equal(serializeNote(doc), text);
 });
 
 test(`ce qui n est pas un titre : hashtag, sept dieses, retrait`, () => {
   const text = `# A\n#tag\n####### sept\n  # retrait\n## B\n`;
   const doc = parseNote(text, `f.md`);
-  assert.deepEqual(titles(doc.root.children), [`B`]);
+  assert.deepEqual(flattenDoc(doc).map((e) => e.node.title), [`f`, `A`, `B`]);
   assert.equal(serializeNote(doc), text);
 });
 
 test(`titre vide : conserve et compte`, () => {
   const text = `# A\n##\nbloc libre\n## \nautre\n`;
   const doc = parseNote(text, `f.md`);
-  const a = doc.root;
+  const a = doc.root.children[0];
   assert.deepEqual(titles(a.children), [``, ``]);
   assert.equal(a.children[0].body, `bloc libre\n`);
   assert.equal(computeStats(doc).emptyTitles, 2);
@@ -125,7 +121,6 @@ test(`proprietes YAML conservees et non lues comme des titres`, () => {
   const text = `---\ntags: [a]\n# commentaire yaml\n---\n# A\nx\n`;
   const doc = parseNote(text, `f.md`);
   assert.equal(doc.frontmatter, `---\ntags: [a]\n# commentaire yaml\n---\n`);
-  assert.equal(doc.hasGeneralTitle, true);
   assert.equal(serializeNote(doc), text);
 });
 
@@ -138,20 +133,20 @@ test(`fins de ligne Windows et absence de retour final`, () => {
 
 test(`renommer un noeud regenere sa ligne de titre`, () => {
   const doc = parseNote(`# A\n## B  \ntexte\n`, `f.md`);
-  renameNode(doc.root.children[0], `Nouveau`);
+  renameNode(doc.root.children[0].children[0], `Nouveau`);
   assert.equal(serializeNote(doc), `# A\n## Nouveau\ntexte\n`);
 });
 
 test(`ajouter un noeud apres un texte sans retour final insere un retour`, () => {
   const doc = parseNote(`# A\n## B\nfin`, `f.md`);
-  doc.root.children.push({ level: 2, title: `C`, heading: null, body: ``, children: [] });
+  doc.root.children[0].children.push({ level: 2, title: `C`, heading: null, body: ``, children: [] });
   assert.equal(serializeNote(doc), `# A\n## B\nfin\n## C\n`);
 });
 
 test(`deplacer un noeud dans l arbre reconstruit la note dans le nouvel ordre`, () => {
   const doc = parseNote(`# A\n## B\nb\n## C\nc\n`, `f.md`);
-  const [b, c] = doc.root.children;
-  doc.root.children = [c, b];
+  const [b, c] = doc.root.children[0].children;
+  doc.root.children[0].children = [c, b];
   assert.equal(serializeNote(doc), `# A\n## C\nc\n## B\nb\n`);
 });
 
@@ -203,13 +198,13 @@ test(`sections : un titre dans un bloc de code n est pas une section`, () => {
 
 test(`recherche d un noeud par sa cle, chemin et ordre du document`, () => {
   const doc = parseNote(`# A\n## B\n### C\n## D\n`, `f.md`);
-  assert.equal(nodeByKey(doc, `r`)?.title, `A`);
-  assert.equal(nodeByKey(doc, `r.0.0`)?.title, `C`);
-  assert.equal(nodeByKey(doc, `r.1`)?.title, `D`);
+  assert.equal(nodeByKey(doc, `r`)?.title, `f`);
+  assert.equal(nodeByKey(doc, `r.0.0.0`)?.title, `C`);
+  assert.equal(nodeByKey(doc, `r.0.1`)?.title, `D`);
   assert.equal(nodeByKey(doc, `r.5`), null);
   assert.equal(nodeByKey(doc, `x`), null);
-  assert.deepEqual(flattenDoc(doc).map((e) => e.node.title), [`A`, `B`, `C`, `D`]);
-  assert.deepEqual(pathTitles(doc, `r.0.0`), [`A`, `B`, `C`]);
+  assert.deepEqual(flattenDoc(doc).map((e) => e.node.title), [`f`, `A`, `B`, `C`, `D`]);
+  assert.deepEqual(pathTitles(doc, `r.0.0.0`), [`f`, `A`, `B`, `C`]);
 });
 
 test(`texte d un noeud : les lignes vides autour sont conservees`, () => {
@@ -225,7 +220,7 @@ test(`texte d un noeud : les lignes vides autour sont conservees`, () => {
 test(`modifier le texte d un noeud laisse le reste de la note intact`, () => {
   const original = `# A\n\nun\n\n## B\n\ndeux\n\n## C\ntrois\n`;
   const doc = parseNote(original, `f.md`);
-  const b = doc.root.children[0];
+  const b = doc.root.children[0].children[0];
   const parts = splitBody(b.body);
   b.body = joinBody(parts, `deux modifie\nsur deux lignes`);
   assert.equal(serializeNote(doc), `# A\n\nun\n\n## B\n\ndeux modifie\nsur deux lignes\n\n## C\ntrois\n`);
@@ -243,8 +238,11 @@ test(`curseur apres un titre tape : la section suivante est reperee`, () => {
 test(`positions des noeuds dans le fichier : lignes du titre et de fin`, () => {
   const doc = parseNote(`---\na: b\n---\n# T\ntexte\n## S\nx\ny\n`, `f.md`);
   assert.equal(doc.root.line, 3);
-  assert.equal(doc.root.endLine, 5);
-  const s = doc.root.children[0];
+  assert.equal(doc.root.endLine, 3);
+  const t = doc.root.children[0];
+  assert.equal(t.line, 3);
+  assert.equal(t.endLine, 5);
+  const s = t.children[0];
   assert.equal(s.line, 5);
   assert.equal(s.endLine, 8);
   const plain = parseNote(`intro\n\n# A\n# B\n`, `f.md`);
@@ -286,7 +284,6 @@ test(`chapitre actif : la racine se limite a son introduction`, () => {
   const doc = parseNote(CHAPTERS, `f.md`);
   assert.deepEqual(activeLines(doc, `r`, true), { startLine: 0, endLine: 2 });
   const withTitle = parseNote(`---\na: b\n---\navant\n# Titre\nintro\n## S\nx\n`, `f.md`);
-  assert.equal(withTitle.hasGeneralTitle, true);
-  assert.deepEqual(activeLines(withTitle, `r`, true), { startLine: 0, endLine: 6 });
+  assert.deepEqual(activeLines(withTitle, `r`, true), { startLine: 0, endLine: 4 });
   assert.equal(nodeAtLine(withTitle, 1).key, `r`);
 });

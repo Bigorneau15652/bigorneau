@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { addNode, cleanTitle, deleteNodes, describeDeletion, newLevel, renameTitle } from "../src/edit";
 import { parseNote, nodeByKey } from "../src/model";
 
-const NOTE = `# Projet\n\nIntro\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## B\n\ntexte b\n`;
+const NOTE = `Intro\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## B\n\ntexte b\n`;
 
 test(`ajout d'un frere apres la branche entiere`, () => {
   const r = addNode(NOTE, `n.md`, `r.0`, `sibling`)!;
-  assert.equal(r.text, `# Projet\n\nIntro\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n##\n## B\n\ntexte b\n`);
+  assert.equal(r.text, `Intro\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n##\n## B\n\ntexte b\n`);
   assert.equal(r.key, `r.1`);
 });
 
@@ -30,23 +30,31 @@ test(`frere de la racine : devient un enfant`, () => {
 });
 
 test(`ajout en fin de fichier sans retour a la ligne final`, () => {
-  const r = addNode(`# T\n## A\ntexte`, `n.md`, `r.0`, `sibling`)!;
-  assert.equal(r.text, `# T\n## A\ntexte\n##\n`);
+  const r = addNode(`## A\ntexte`, `n.md`, `r.0`, `sibling`)!;
+  assert.equal(r.text, `## A\ntexte\n##\n`);
   assert.equal(r.key, `r.1`);
 });
 
-test(`note sans titre general : les enfants de la racine sont au niveau 2`, () => {
-  assert.equal(newLevel(parseNote(`texte\n`, `n.md`), `r`, `child`), 2);
+test(`note sans titre : les enfants de la racine sont au niveau 1`, () => {
+  assert.equal(newLevel(parseNote(`texte\n`, `n.md`), `r`, `child`), 1);
 });
 
-test(`note vierge : le premier titre cree est selectionne, pas la racine`, () => {
+test(`note vierge : le premier titre cree est de niveau 1 et devient r.0, la racine reste le nom du fichier`, () => {
   const r = addNode(``, `Sans titre.md`, `r`, `child`)!;
-  assert.equal(r.text, `##\n`);
+  assert.equal(r.text, `#\n`);
   assert.equal(r.key, `r.0`);
+  const doc = parseNote(r.text, `Sans titre.md`);
+  assert.equal(doc.root.title, `Sans titre`);
+  const second = addNode(r.text, `Sans titre.md`, `r.0`, `sibling`)!;
+  assert.equal(second.text, `#\n#\n`);
+  assert.equal(second.key, `r.1`);
+  const child = addNode(r.text, `Sans titre.md`, `r.0`, `child`)!;
+  assert.equal(child.text, `#\n##\n`);
+  assert.equal(child.key, `r.0.0`);
 });
 
 test(`niveau 6 : pas d'enfant possible`, () => {
-  assert.equal(addNode(`# T\n###### Six\n`, `n.md`, `r.0`, `child`), null);
+  assert.equal(addNode(`###### Six\n`, `n.md`, `r.0`, `child`), null);
 });
 
 test(`renommer conserve le niveau et le reste de la note`, () => {
@@ -63,20 +71,20 @@ test(`renommer avec un titre vide`, () => {
 
 test(`suppression d'une branche avec descendants`, () => {
   const r = deleteNodes(NOTE, `n.md`, [`r.0`])!;
-  assert.equal(r.text, `# Projet\n\nIntro\n\n## B\n\ntexte b\n`);
+  assert.equal(r.text, `Intro\n\n## B\n\ntexte b\n`);
   assert.equal(r.key, `r`);
 });
 
 test(`suppression : selection sur le frere precedent`, () => {
   const r = deleteNodes(NOTE, `n.md`, [`r.1`])!;
-  assert.equal(r.text, `# Projet\n\nIntro\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n`);
+  assert.equal(r.text, `Intro\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n`);
   assert.equal(r.key, `r.0`);
 });
 
 test(`suppression multiple sans doublon d'ancetre`, () => {
   const r = deleteNodes(NOTE, `n.md`, [`r.0`, `r.0.0`, `r.1`])!;
-  assert.equal(r.text, `# Projet\n\nIntro\n\n`);
-  assert.equal(nodeByKey(parseNote(r.text, `n.md`), r.key!)?.title, `Projet`);
+  assert.equal(r.text, `Intro\n\n`);
+  assert.equal(nodeByKey(parseNote(r.text, `n.md`), r.key!)?.title, `n`);
 });
 
 test(`la racine ne se supprime pas`, () => {
@@ -93,7 +101,7 @@ test(`rapport de suppression`, () => {
 import { arrowTarget, dropToParentIndex, moveNode, previewMove } from "../src/edit";
 import { flattenDoc } from "../src/model";
 
-const TREE = `# Projet\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## B\n\ntexte b\n\n### B1\n\n## C\n`;
+const TREE = `## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## B\n\ntexte b\n\n### B1\n\n## C\n`;
 
 test(`deplacement au clavier : monter et descendre parmi les freres`, () => {
   const doc = parseNote(TREE, `n.md`);
@@ -101,7 +109,7 @@ test(`deplacement au clavier : monter et descendre parmi les freres`, () => {
   assert.equal(arrowTarget(doc, `r.0`, `up`), null);
   assert.equal(arrowTarget(doc, `r.2`, `down`), null);
   const r = moveNode(TREE, `n.md`, `r.1`, `r`, 0)!;
-  assert.equal(r.text, `# Projet\n\n## B\n\ntexte b\n\n### B1\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## C\n`);
+  assert.equal(r.text, `## B\n\ntexte b\n\n### B1\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## C\n`);
   assert.equal(r.key, `r.0`);
 });
 
@@ -109,7 +117,7 @@ test(`entrer dans le frere precedent : les niveaux de la branche s'ajustent`, ()
   const doc = parseNote(TREE, `n.md`);
   assert.deepEqual(arrowTarget(doc, `r.2`, `right`), { parentKey: `r.1`, index: 1 });
   const r = moveNode(TREE, `n.md`, `r.2`, `r.1`, 1)!;
-  assert.equal(r.text, `# Projet\n\n## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## B\n\ntexte b\n\n### B1\n\n### C\n`);
+  assert.equal(r.text, `## A\n\ntexte a\n\n### A1\n\ntexte a1\n\n## B\n\ntexte b\n\n### B1\n\n### C\n`);
   assert.equal(r.key, `r.1.1`);
 });
 
@@ -123,29 +131,29 @@ test(`sortir apres le parent avec sa branche`, () => {
 });
 
 test(`un titre deplace avec ses descendants change de niveau`, () => {
-  const t = `# T\n## A\n### A1\n#### A1a\n## B\n`;
+  const t = `## A\n### A1\n#### A1a\n## B\n`;
   const r = moveNode(t, `n.md`, `r.0`, `r.1`, 0)!;
-  assert.equal(r.text, `# T\n## B\n### A\n#### A1\n##### A1a\n`);
+  assert.equal(r.text, `## B\n### A\n#### A1\n##### A1a\n`);
   assert.equal(r.key, `r.0.0`);
 });
 
 test(`niveau 6 depasse ou destination dans la branche : refuse`, () => {
-  const t = `# T\n## A\n### A1\n#### A1a\n##### A1b\n###### A1c\n## B\n### B1\n`;
+  const t = `## A\n### A1\n#### A1a\n##### A1b\n###### A1c\n## B\n### B1\n`;
   assert.equal(moveNode(t, `n.md`, `r.0`, `r.1`, 1), null);
   assert.equal(moveNode(TREE, `n.md`, `r.0`, `r.0.0`, 0), null);
   assert.equal(moveNode(TREE, `n.md`, `r`, `r.0`, 0), null);
 });
 
 test(`deplacement en fin de fichier sans retour a la ligne`, () => {
-  const t = `# T\n## A\ntexte\n## B\nfin`;
+  const t = `## A\ntexte\n## B\nfin`;
   const r = moveNode(t, `n.md`, `r.1`, `r`, 0)!;
-  assert.equal(r.text, `# T\n## B\nfin\n## A\ntexte\n`);
+  assert.equal(r.text, `## B\nfin\n## A\ntexte\n`);
 });
 
 test(`les commentaires de style suivent la branche`, () => {
-  const t = `# T\n## A\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte\n## B\n`;
+  const t = `## A\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte\n## B\n`;
   const r = moveNode(t, `n.md`, `r.0`, `r`, 1)!;
-  assert.equal(r.text, `# T\n## B\n## A\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte\n`);
+  assert.equal(r.text, `## B\n## A\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte\n`);
 });
 
 test(`position de depot : parent et rang`, () => {
@@ -170,7 +178,7 @@ test(`apercu du deplacement : structure et niveaux, sans modifier l'original`, (
   const p = previewMove(doc, `r.2`, `r.0`, 0)!;
   assert.equal(p.key, `r.0.0`);
   const flat = flattenDoc(p.doc);
-  assert.deepEqual(flat.map((e) => e.node.title), [`Projet`, `A`, `C`, `A1`, `B`, `B1`]);
+  assert.deepEqual(flat.map((e) => e.node.title), [`n`, `A`, `C`, `A1`, `B`, `B1`]);
   assert.equal(flat[2].node.level, 3);
   assert.equal(doc.root.children.length, 3);
   assert.equal(doc.root.children[2].level, 2);
@@ -178,10 +186,10 @@ test(`apercu du deplacement : structure et niveaux, sans modifier l'original`, (
 });
 
 test(`niveaux irreguliers : le titre deplace reste le frere de celui qui le precede`, () => {
-  const t = `# T\n## P\n#### A\n### B\n## Q\n`;
+  const t = `## P\n#### A\n### B\n## Q\n`;
   // Q devient dernier enfant de P : niveau de B (3), pas celui de A (4)
   const r = moveNode(t, `n.md`, `r.1`, `r.0`, 2)!;
-  assert.equal(r.text, `# T\n## P\n#### A\n### B\n### Q\n`);
+  assert.equal(r.text, `## P\n#### A\n### B\n### Q\n`);
   assert.equal(r.key, `r.0.2`);
 });
 
