@@ -1054,6 +1054,8 @@ export class MapRenderer {
       if (e.key === `Enter`) {
         e.preventDefault();
         this.commitRename(true, true);
+        // Cmd ou Ctrl + Entree : valide le titre puis passe dans la note.
+        if (e.ctrlKey || e.metaKey) this.callbacks.onEnter?.();
       } else if (e.key === `Escape`) {
         e.preventDefault();
         this.commitRename(false, true);

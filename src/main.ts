@@ -35,6 +35,12 @@ export default class MindmapWritingPlugin extends Plugin {
         changed: (cm) => {
           if (this.isLinkedEditor(cm)) notifyMoved(cm);
         },
+        click: (cm, event) => {
+          if (!this.isLinkedEditor(cm)) return;
+          this.forEachView((v) => {
+            if (v.ownsEditor(cm)) v.onNoteClick(cm, event);
+          });
+        },
         key: (event, cm) => {
           if (!this.isLinkedEditor(cm)) return false;
           const dir = this.navigationFor(event);

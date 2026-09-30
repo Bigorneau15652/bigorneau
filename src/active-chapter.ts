@@ -44,6 +44,8 @@ export interface NoteHooks {
   changed: (view: EditorView) => void;
   // Une touche est pressee dans l'editeur. Renvoyer vrai si elle a ete traitee.
   key: (event: KeyboardEvent, view: EditorView) => boolean;
+  // Un clic de souris vient d'etre relache dans l'editeur (le curseur est deja place).
+  click?: (view: EditorView, event: MouseEvent) => void;
 }
 
 function buildDecorations(view: EditorView): DecorationSet {
@@ -84,6 +86,10 @@ export function noteExtension(hooks: NoteHooks): Extension[] {
   const keys = Prec.highest(
     EditorView.domEventHandlers({
       keydown: (event, view) => hooks.key(event, view),
+      mouseup: (event, view) => {
+        hooks.click?.(view, event);
+        return false;
+      },
     })
   );
   return [activeRangeField, tempLineField, plugin, keys];
