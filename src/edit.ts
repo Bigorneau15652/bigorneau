@@ -286,3 +286,97 @@ export function previewMove(doc: MmDoc, key: string, parentKey: string, index: n
   const found = flattenDoc(preview).find((e) => e.node === movedCopy);
   return found ? { doc: preview, origin, key: found.key } : null;
 }
+
+// ---------------------------------------------------------------- copier, coller, dupliquer
+
+// Texte Markdown des titres (avec leurs sous-titres, leurs textes et leurs commentaires de style), dans l'ordre de la note.
+// La racine n'en fait pas partie. Renvoie null s'il n'y a rien a copier.
+export function extractBranches(text: string, fileName: string, keys: string[]): string | null {
+  const doc = parseNote(text, fileName);
+  const targets = topLevelTargets(doc, keys);
+  if (targets.length === 0) return null;
+  const lines = splitLines(text);
+  return targets
+    .map((t) => {
+      const chunk = lines.slice(t.node.line ?? 0, branchEnd(t.node)).join(``);
+      return /[\r\n]$/.test(chunk) ? chunk : `${chunk}${doc.eol}`;
+    })
+    .join(``)
+    .replace(/\r\n?/g, `\n`);
+}
+
+// Nombre de titres contenus dans un texte Markdown (pour le message apres une copie).
+export function countHeadings(markdown: string): number {
+  return flattenDoc(parseNote(markdown, `x.md`, { frontmatter: false })).length - 1;
+}
+
+// Insere des titres Markdown (copies avec extractBranches ou venus d'ailleurs) comme enfants du parent, au rang voulu.
+// Les niveaux de titre sont ajustes : chaque titre colle prend le niveau de ses nouveaux freres, avec sa descendance.
+// Renvoie null si le texte ne commence pas par un titre ou si le niveau 6 serait depasse.
+export function insertBranches(text: string, fileName: string, parentKey: string, index: number, markdown: string): EditResult | null {
+  const doc = parseNote(text, fileName);
+  const parent = nodeByKey(doc, parentKey);
+  if (!parent || parent.endLine === undefined) return null;
+  const md = markdown.replace(/\r\n?/g, `\n`);
+  const pasted = parseNote(md, `x.md`, { frontmatter: false });
+  if (pasted.root.children.length === 0 || pasted.root.body.trim() !== ``) return null;
+
+  const siblings = parent.children;
+  const rank = Math.max(0, Math.min(index, siblings.length));
+  const level = levelAt(parent, {} as MmNode, rank);
+  const source = splitLines(md);
+  const block: string[] = [];
+  let total = 0;
+  for (const top of pasted.root.children) {
+    const delta = level - top.level;
+    if (level < 1 || branchMaxLevel(top) + delta > MAX_LEVEL) return null;
+    const part = source.slice(top.line ?? 0, branchEnd(top));
+    for (const n of branchNodes(top)) {
+      const i = (n.line ?? 0) - (top.line ?? 0);
+      part[i] = part[i].replace(/^#{1,6}/, `#`.repeat(n.level + delta));
+    }
+    block.push(...part);
+    total += branchNodes(top).length;
+  }
+  const inserted = block.map((l) => l.replace(/\r?\n$/, ``) + doc.eol);
+
+  let at: number;
+  if (rank < siblings.length) at = siblings[rank].line ?? parent.endLine;
+  else if (siblings.length > 0) at = branchEnd(siblings[siblings.length - 1]);
+  else at = parent.endLine;
+
+  const lines = splitLines(text);
+  if (at >= lines.length && lines.length > 0 && !/[\r\n]$/.test(lines[lines.length - 1])) lines[lines.length - 1] += doc.eol;
+  lines.splice(at, 0, ...inserted);
+  const next = lines.join(``);
+
+  // Controle : les titres collés sont freres, au bon rang, sous le bon parent.
+  const after = parseNote(next, fileName);
+  const flat = flattenDoc(after);
+  const entry = flat.find((e) => e.key !== `r` && e.node.line === at);
+  if (!entry || flat.length !== flattenDoc(doc).length + total) return null;
+  const newParent = nodeByKey(after, entry.key.split(`.`).slice(0, -1).join(`.`));
+  if (!newParent || newParent.children.indexOf(entry.node) !== rank) return null;
+  if (newParent.children.length !== siblings.length + pasted.root.children.length) return null;
+  if (parent === doc.root ? newParent !== after.root : newParent.line !== parent.line) return null;
+  return { text: next, key: entry.key };
+}
+
+// Duplique les titres avec leur descendance, chacun juste apres l'original. La selection passe au double du premier.
+export function duplicateNodes(text: string, fileName: string, keys: string[]): EditResult | null {
+  const targets = topLevelTargets(parseNote(text, fileName), keys);
+  if (targets.length === 0) return null;
+  let current = text;
+  let firstKey: string | null = null;
+  // Du dernier au premier : une insertion ne change pas les cles des titres qui la precedent.
+  for (let i = targets.length - 1; i >= 0; i--) {
+    const parts = targets[i].key.split(`.`);
+    const index = Number(parts.pop());
+    const markdown = extractBranches(current, fileName, [targets[i].key]);
+    const done = markdown === null ? null : insertBranches(current, fileName, parts.join(`.`), index + 1, markdown);
+    if (!done) return null;
+    current = done.text;
+    if (i === 0) firstKey = done.key;
+  }
+  return { text: current, key: firstKey };
+}
