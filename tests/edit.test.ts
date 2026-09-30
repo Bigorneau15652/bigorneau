@@ -245,3 +245,89 @@ test(`deplacements sur des notes aleatoires`, () => {
   assert.equal(refused, 0);
   assert.equal(different, 0);
 });
+
+import { countHeadings, duplicateNodes, extractBranches, insertBranches } from "../src/edit";
+
+const COPY = `intro\n\n## A\n\ntexte a\n\n### A1\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte a1\n\n## B\n\ntexte b\n\n## C\n`;
+
+test(`copie : titre, sous-titres, textes et styles en Markdown`, () => {
+  assert.equal(extractBranches(COPY, `n.md`, [`r.0`]), `## A\n\ntexte a\n\n### A1\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte a1\n\n`);
+  assert.equal(extractBranches(COPY, `n.md`, [`r.1`, `r.0`, `r.0.0`]), `## A\n\ntexte a\n\n### A1\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte a1\n\n## B\n\ntexte b\n\n`);
+  assert.equal(extractBranches(COPY, `n.md`, [`r`]), null);
+  assert.equal(extractBranches(`## A\r\ntexte`, `n.md`, [`r.0`]), `## A\ntexte\n`);
+  assert.equal(countHeadings(extractBranches(COPY, `n.md`, [`r.0`])!), 2);
+});
+
+test(`coller : dernier sous-titre de la case, niveaux ajustes`, () => {
+  const md = extractBranches(COPY, `n.md`, [`r.0`])!;
+  const r = insertBranches(COPY, `n.md`, `r.1`, 99, md)!;
+  assert.equal(r.text, `intro\n\n## A\n\ntexte a\n\n### A1\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte a1\n\n## B\n\ntexte b\n\n### A\n\ntexte a\n\n#### A1\n%% mmw {"style":{"strokeColor":"#e03131"}} %%\ntexte a1\n\n## C\n`);
+  assert.equal(r.key, `r.1.0`);
+});
+
+test(`coller sous la racine, au rang voulu, et en fin de note sans retour a la ligne`, () => {
+  const r = insertBranches(`## A\n## B`, `n.md`, `r`, 1, `### X\ntexte\n`)!;
+  assert.equal(r.text, `## A\n## X\ntexte\n## B`);
+  assert.equal(r.key, `r.1`);
+  const end = insertBranches(`## A\ntexte`, `n.md`, `r`, 5, `## X\n`)!;
+  assert.equal(end.text, `## A\ntexte\n## X\n`);
+});
+
+test(`coller un texte sans titre ou trop profond : refuse`, () => {
+  assert.equal(insertBranches(COPY, `n.md`, `r`, 0, `juste du texte`), null);
+  assert.equal(insertBranches(COPY, `n.md`, `r`, 0, `texte\n## A\n`), null);
+  const deep = `# T\n###### Six\n`;
+  assert.equal(insertBranches(`## P\n#### Q\n`, `n.md`, `r.0.0`, 0, deep), null);
+});
+
+test(`plusieurs titres colles ensemble restent freres`, () => {
+  const r = insertBranches(`## P\n### Q\n`, `n.md`, `r.0`, 0, `## X\n### X1\n## Y\n`)!;
+  assert.equal(r.text, `## P\n### X\n#### X1\n### Y\n### Q\n`);
+});
+
+test(`duplication : juste apres l'original, avec sa descendance`, () => {
+  const r = duplicateNodes(`## A\ntexte\n### A1\n## B\n`, `n.md`, [`r.0`])!;
+  assert.equal(r.text, `## A\ntexte\n### A1\n## A\ntexte\n### A1\n## B\n`);
+  assert.equal(r.key, `r.1`);
+  const many = duplicateNodes(`## A\n## B\n## C\n`, `n.md`, [`r.0`, `r.2`])!;
+  assert.equal(many.text, `## A\n## A\n## B\n## C\n## C\n`);
+  assert.equal(many.key, `r.1`);
+  assert.equal(duplicateNodes(`## A\n`, `n.md`, [`r`]), null);
+});
+
+test(`copier puis coller reproduit la branche sur des notes aleatoires`, () => {
+  let seed = 777;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pick = (n: number) => Math.floor(rnd() * n);
+  let refused = 0;
+  for (let n = 0; n < 120; n++) {
+    const out: string[] = [];
+    if (rnd() < 0.5) out.push(`intro`);
+    for (let i = 0; i < 3 + pick(7); i++) {
+      out.push(`${`#`.repeat(1 + pick(5))} T${i}`);
+      if (rnd() < 0.4) out.push(`%% mmw {"style":{"strokeColor":"#e03131"}} %%`);
+      if (rnd() < 0.6) out.push(`texte ${i}`);
+      if (rnd() < 0.5) out.push(``);
+    }
+    const text = out.join(`\n`) + (rnd() < 0.5 ? `\n` : ``);
+    const doc = parseNote(text, `n.md`);
+    const flat = flattenDoc(doc);
+    for (const x of flat) {
+      if (x.key === `r`) continue;
+      const md = extractBranches(text, `n.md`, [x.key])!;
+      for (const q of flat) {
+        const r = insertBranches(text, `n.md`, q.key, pick(q.node.children.length + 1), md);
+        if (r === null) {
+          // Seul un depassement du niveau 6 peut expliquer un refus.
+          const worst = Math.max(...flattenDoc(parseNote(md, `x.md`, { frontmatter: false })).map((e) => e.node.level));
+          const dest = q.node.children[0]?.level ?? q.node.level + 1;
+          const shallow = Math.min(...parseNote(md, `x.md`, { frontmatter: false }).root.children.map((c) => c.level));
+          if (worst - shallow + dest <= 6) refused++;
+          continue;
+        }
+        assert.equal(flattenDoc(parseNote(r.text, `n.md`)).length, flat.length + countHeadings(md));
+      }
+    }
+  }
+  assert.equal(refused, 0);
+});

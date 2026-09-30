@@ -1,8 +1,8 @@
 import { EditorView } from "@codemirror/view";
 import { setActiveRange } from "./active-chapter";
 import { revealRange } from "./reveal";
-import { Editor, ItemView, MarkdownView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
-import { addNode, arrowTarget, deleteNodes, DeletionReport, describeDeletion, EditResult, moveNode, renameTitle } from "./edit";
+import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
+import { addNode, arrowTarget, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { activeLines, applyLineEdits, flattenDoc, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
@@ -97,6 +97,7 @@ export class MindmapView extends ItemView {
       onEnter: () => this.focusNote(),
       onEdit: (edit) => void this.onEdit(edit),
       onMessage: (text) => new Notice(text),
+      onContextMenu: (key, event) => this.showContextMenu(key, event),
     });
     await this.refresh();
   }
@@ -169,6 +170,25 @@ export class MindmapView extends ItemView {
       return editor ? editor.getValue() : await this.app.vault.read(file);
     };
 
+    // Copier et couper : le presse-papiers recoit les titres en Markdown. Couper supprime ensuite, sans confirmation
+    // (la note garde l'historique d'annulation).
+    if (edit.kind === `copy` || edit.kind === `cut`) {
+      const markdown = extractBranches(await readText(), file.name, edit.keys);
+      if (markdown === null) {
+        new Notice(`Le nom de la note ne se copie pas : sélectionnez un titre.`);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(markdown);
+      } catch {
+        new Notice(`Impossible d'écrire dans le presse-papiers.`);
+        return;
+      }
+      const count = countHeadings(markdown);
+      new Notice(`${count} titre${count > 1 ? `s` : ``} ${edit.kind === `cut` ? `coupé` : `copié`}${count > 1 ? `s` : ``}.`, 1500);
+      if (edit.kind === `copy`) return;
+    }
+
     if (edit.kind === `delete`) {
       const report = describeDeletion(await readText(), file.name, edit.keys);
       if (report.nodes === 0) {
@@ -190,8 +210,28 @@ export class MindmapView extends ItemView {
       return;
     }
     let result: EditResult | null;
-    if (edit.kind === `delete`) result = deleteNodes(before, file.name, edit.keys);
-    else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
+    if (edit.kind === `delete` || edit.kind === `cut`) result = deleteNodes(before, file.name, edit.keys);
+    else if (edit.kind === `duplicate`) {
+      result = duplicateNodes(before, file.name, edit.keys);
+      if (!result) new Notice(`Le nom de la note ne se duplique pas : sélectionnez un titre.`);
+    } else if (edit.kind === `paste` || edit.kind === `pasteAfter`) {
+      let clip = ``;
+      try {
+        clip = await navigator.clipboard.readText();
+      } catch {
+        new Notice(`Impossible de lire le presse-papiers.`);
+        return;
+      }
+      let parentKey = edit.key;
+      let index = Number.MAX_SAFE_INTEGER;
+      if (edit.kind === `pasteAfter`) {
+        const parts = edit.key.split(`.`);
+        index = Number(parts.pop()) + 1;
+        parentKey = parts.join(`.`);
+      }
+      result = edit.kind === `pasteAfter` && edit.key === `r` ? null : insertBranches(before, file.name, parentKey, index, clip);
+      if (!result) new Notice(`Le presse-papiers ne contient pas de titres Markdown à coller ici (ou le niveau 6 serait dépassé).`);
+    } else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
     else if (edit.kind === `move`) {
       const target = edit.dir
         ? arrowTarget(parseNote(before, file.name), edit.key, edit.dir)
@@ -204,7 +244,7 @@ export class MindmapView extends ItemView {
         return;
       }
     } else {
-      result = addNode(before, file.name, edit.key, edit.kind);
+      result = addNode(before, file.name, edit.key, edit.kind === `sibling` ? `sibling` : `child`);
       if (!result) new Notice(`Le niveau de titre maximum (6) est atteint : impossible d'ajouter un sous-titre.`);
     }
     if (!result) {
@@ -224,8 +264,46 @@ export class MindmapView extends ItemView {
       await this.revealInNote(key, false);
       this.updateActiveRange();
     }
-    if (edit.kind === `delete` || edit.kind === `move`) renderer.focus();
-    else if (edit.kind !== `rename` && key) renderer.startRename(key);
+    // Une case creee s'ouvre en saisie ; apres les autres operations, le clavier reste sur la carte.
+    if (edit.kind === `child` || edit.kind === `sibling`) {
+      if (key) renderer.startRename(key);
+    } else if (edit.kind !== `rename`) {
+      renderer.focus();
+    }
+  }
+
+  // Menu du clic droit sur une case : edition, presse-papiers et acces a l'apparence.
+  private showContextMenu(key: string, event: MouseEvent) {
+    const renderer = this.renderer;
+    if (!renderer) return;
+    const isRoot = key === `r`;
+    const selection = renderer.getSelection();
+    const keys = selection.includes(key) ? selection : [key];
+    const mod = Platform.isMacOS ? `Cmd` : `Ctrl`;
+    const menu = new Menu();
+    const add = (title: string, icon: string, action: () => void, opts: { disabled?: boolean; warning?: boolean } = {}) => {
+      menu.addItem((item) => {
+        item.setTitle(title).setIcon(icon).onClick(action);
+        if (opts.disabled) item.setDisabled(true);
+        if (opts.warning) item.setWarning(true);
+      });
+    };
+    const run = (kind: MapEdit[`kind`]) => () => this.onEdit({ kind, key, keys });
+
+    add(isRoot ? `Renommer la note (F2)` : `Renommer (F2)`, `pencil`, () => renderer.startRename(key));
+    add(`Ajouter un sous-titre (Tab)`, `corner-down-right`, run(`child`));
+    add(`Ajouter un titre de même niveau (Entrée)`, `plus`, run(`sibling`), { disabled: isRoot });
+    menu.addSeparator();
+    add(`Dupliquer (${mod} + D)`, `files`, run(`duplicate`), { disabled: isRoot });
+    add(`Copier (${mod} + C)`, `copy`, run(`copy`), { disabled: isRoot });
+    add(`Couper (${mod} + X)`, `scissors`, run(`cut`), { disabled: isRoot });
+    add(`Coller dedans (${mod} + V)`, `clipboard-paste`, run(`paste`));
+    add(`Coller après`, `clipboard-list`, run(`pasteAfter`), { disabled: isRoot });
+    menu.addSeparator();
+    add(`Apparence…`, `palette`, () => renderer.openStylePanel());
+    menu.addSeparator();
+    add(`Supprimer (Suppr)`, `trash-2`, run(`delete`), { disabled: isRoot, warning: true });
+    menu.showAtMouseEvent(event);
   }
 
   private noMoveReason(dir?: `up` | `down` | `left` | `right`): string {

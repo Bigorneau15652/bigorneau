@@ -1,6 +1,6 @@
 import { applyLineEdits, parseNote } from "../../src/model";
 import { MapEdit, MapRenderer } from "../../src/renderer";
-import { addNode, arrowTarget, deleteNodes, EditResult, moveNode, renameTitle } from "../../src/edit";
+import { addNode, arrowTarget, deleteNodes, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "../../src/edit";
 import { appearanceDefaults, DEFAULT_SETTINGS, MmSettings } from "../../src/settings";
 import { metaEditsFor, planReset, planStyle } from "../../src/style-edit";
 
@@ -34,6 +34,7 @@ for (const [k, v] of params) {
 }
 
 const w = window as unknown as Record<string, unknown>;
+let clip = ``;
 const calls: string[] = [];
 const mapHost = document.getElementById(`map`)!;
 
@@ -66,11 +67,27 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
   onSelect: (key) => calls.push(`select:${key}`),
   onEnter: () => calls.push(`enter`),
   onMessage: (m) => calls.push(`message:${m}`),
+  onContextMenu: (k) => calls.push(`menu:${k}`),
   // Reproduit la vue : le nouveau texte est calcule, la note relue, la case creee passe en saisie.
   onEdit: (edit: MapEdit) => {
     calls.push(`edit:${edit.kind}:${edit.key}`);
     let r: EditResult | null;
-    if (edit.kind === `delete`) r = deleteNodes(text, `Nom de la note.md`, edit.keys);
+    if (edit.kind === `copy` || edit.kind === `cut`) {
+      clip = extractBranches(text, `Nom de la note.md`, edit.keys) ?? clip;
+      w.clip = clip;
+      if (edit.kind === `copy`) return;
+      r = deleteNodes(text, `Nom de la note.md`, edit.keys);
+    } else if (edit.kind === `duplicate`) r = duplicateNodes(text, `Nom de la note.md`, edit.keys);
+    else if (edit.kind === `paste` || edit.kind === `pasteAfter`) {
+      let parentKey = edit.key;
+      let index = 999;
+      if (edit.kind === `pasteAfter`) {
+        const parts = edit.key.split(`.`);
+        index = Number(parts.pop()) + 1;
+        parentKey = parts.join(`.`);
+      }
+      r = insertBranches(text, `Nom de la note.md`, parentKey, index, clip);
+    } else if (edit.kind === `delete`) r = deleteNodes(text, `Nom de la note.md`, edit.keys);
     else if (edit.kind === `rename`) r = renameTitle(text, `Nom de la note.md`, edit.key, edit.title ?? ``);
     else if (edit.kind === `move`) {
       const t = edit.dir ? arrowTarget(parseNote(text, `Nom de la note.md`), edit.key, edit.dir) : { parentKey: edit.parentKey ?? `r`, index: edit.index ?? 0 };
@@ -86,7 +103,7 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
     if (edit.kind !== `rename` && r.key) {
       renderer.reveal(r.key);
       renderer.select(r.key, false);
-      if (edit.kind !== `delete` && edit.kind !== `move`) renderer.startRename(r.key);
+      if (edit.kind === `child` || edit.kind === `sibling`) renderer.startRename(r.key);
     }
   },
 });

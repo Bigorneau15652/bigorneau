@@ -10,7 +10,7 @@ import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from 
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
 export interface MapEdit {
-  kind: `child` | `sibling` | `rename` | `delete` | `move`;
+  kind: `child` | `sibling` | `rename` | `delete` | `move` | `copy` | `cut` | `paste` | `pasteAfter` | `duplicate`;
   key: string;
   keys: string[];
   title?: string;
@@ -37,6 +37,8 @@ export interface MapCallbacks {
   onEnter?: () => void;
   onEdit?: (edit: MapEdit) => void;
   onMessage?: (text: string) => void;
+  // Clic droit sur une case (la case fait partie de la selection).
+  onContextMenu?: (key: string, event: MouseEvent) => void;
 }
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
@@ -165,6 +167,14 @@ export class MapRenderer {
     this.on(this.mapEl, `pointerup`, (e) => this.onPointerUp(e as PointerEvent));
     this.on(this.mapEl, `wheel`, (e) => this.onWheel(e as WheelEvent), { passive: false });
     this.on(this.mapEl, `keydown`, (e) => this.onKey(e as KeyboardEvent));
+    this.on(this.mapEl, `contextmenu`, (e) => {
+      const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
+      if (!node || (e.target as HTMLElement).closest(`.mmw-rename`)) return;
+      e.preventDefault();
+      const key = node.dataset.key!;
+      if (!this.selectedKeys.has(key)) this.select(key);
+      this.callbacks.onContextMenu?.(key, e as MouseEvent);
+    });
     this.on(this.mapEl, `dblclick`, (e) => {
       const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
       if (node) this.startRename(node.dataset.key!);
@@ -736,6 +746,17 @@ export class MapRenderer {
       this.selectAll();
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && `cxvd`.includes(e.key.toLowerCase()) && e.key.length === 1) {
+      // Copier, couper, coller et dupliquer. Coller vise la case selectionnee, ou la racine s'il n'y en a pas.
+      const kinds: Record<string, MapEdit[`kind`]> = { c: `copy`, x: `cut`, v: `paste`, d: `duplicate` };
+      const kind = kinds[e.key.toLowerCase()];
+      const key = this.selected ?? (kind === `paste` ? `r` : null);
+      if (key) {
+        e.preventDefault();
+        this.emitEdit(kind, key);
+      }
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === `Enter`) {
       if (this.selected) {
         e.preventDefault();
@@ -996,6 +1017,11 @@ export class MapRenderer {
   }
 
   // ---------------------------------------------------------------- modification depuis la carte
+
+  // Ouvre le panneau d'apparence pour la selection (menu contextuel).
+  openStylePanel(): void {
+    this.controls.openStyle();
+  }
 
   private emitEdit(kind: MapEdit[`kind`], key: string): void {
     const keys = this.getSelection();

@@ -233,6 +233,12 @@ export class MapControls {
     return this.open !== null;
   }
 
+  // Ouvre le panneau d'apparence (raccourci du menu contextuel d'une case).
+  openStyle(): void {
+    this.open = `style`;
+    this.refresh();
+  }
+
   private toggle(kind: Exclude<PopupKind, null>): void {
     this.open = this.open === kind ? null : kind;
     this.refresh();
