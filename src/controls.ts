@@ -1,7 +1,7 @@
 // Commandes de la carte, inspirees d'Excalidraw : en bas a gauche, le menu burger (reglages), la palette
 // (apparence de la carte, des niveaux de titre ou d'une case), puis le zoom, l'annulation et la compacite.
 // N'utilise que le DOM standard.
-import { MmSettings, newTagId, PanePosition, TagDef } from "./settings";
+import { MmSettings, makeTag, PanePosition, TagDef } from "./settings";
 import type { NodeStyle, StylePatch } from "./style";
 
 export interface ControlActions {
@@ -377,7 +377,7 @@ export class MapControls {
     add.type = `button`;
     add.addEventListener(`click`, () => {
       this.focusTagIndex = tags.length;
-      save([...tags, { id: newTagId(tags), name: ``, bg: `#ffe8cc`, fg: `#7c3a00` }]);
+      save([...tags, makeTag(tags, ``)]);
     });
     panel.append(add);
     return panel;

@@ -6,7 +6,7 @@ import { buildLayoutTree, Bounds, childIndent, computeLayout, flatten, LNode, se
 import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
-import type { MmSettings } from "./settings";
+import { makeTag, MmSettings } from "./settings";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
@@ -280,6 +280,11 @@ export class MapRenderer {
     const s = this.getSettings();
     this.mapEl.style.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
     this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
+    // Contraste de la case selectionnee : 0 (discret) a 100 (tres marque).
+    const c = Math.max(0, Math.min(100, s.selectionContrast ?? 50));
+    this.mapEl.style.setProperty(`--mmw-sel-bg`, `${Math.round(8 + c * 0.42)}%`);
+    this.mapEl.style.setProperty(`--mmw-sel-ring`, `${Math.round(25 + c * 0.7)}%`);
+    this.mapEl.style.setProperty(`--mmw-sel-halo`, `${(1 + c * 0.05).toFixed(1)}px`);
 
     if (!this.doc) {
       this.worldEl.replaceChildren();
@@ -1089,6 +1094,12 @@ export class MapRenderer {
       defs: this.getSettings().tags,
       isRoot: n.node.level === 0,
       anchor: { left: box.left - host.left, top: box.top - host.top, bottom: box.bottom - host.top },
+      onCreateTag: (name) => {
+        const tags = this.getSettings().tags;
+        const def = makeTag(tags, name);
+        this.callbacks.onChange?.({ tags: [...tags, def] });
+        return def;
+      },
       onSubmit: (values) => {
         this.dialog = null;
         this.mapEl.focus();

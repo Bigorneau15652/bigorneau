@@ -92,6 +92,20 @@ export class MmSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(`Contraste de la case sélectionnée`)
+      .setDesc(`Force de la mise en évidence du titre sélectionné : discrète quand vous écrivez dans la note, marquée avec un halo quand la carte a le focus.`)
+      .addSlider((sl) =>
+        sl
+          .setLimits(0, 100, 5)
+          .setValue(s.selectionContrast)
+          .setDynamicTooltip()
+          .onChange(async (v) => {
+            s.selectionContrast = v;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName(`Afficher le préfixe Markdown`)
       .setDesc(`Affiche les dièses (#, ##, ###) devant chaque titre de la carte.`)
       .addToggle((t) =>

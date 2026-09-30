@@ -137,16 +137,16 @@
 
 /* Carte inactive (le curseur est dans la note) : la selection reste visible mais discrete. */
 .mmw-node.mmw-selected {
-  background: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) var(--mmw-sel-bg, 29%), transparent);
   color: var(--text-normal);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--interactive-accent) 55%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--interactive-accent) var(--mmw-sel-ring, 60%), transparent);
 }
 
 /* Carte active (elle a le focus) : contraste fort et halo autour de la selection. */
 .mmw-map:focus-within .mmw-node.mmw-selected {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 40%, transparent);
+  box-shadow: 0 0 0 var(--mmw-sel-halo, 3.5px) color-mix(in srgb, var(--interactive-accent) 40%, transparent);
 }
 
 .mmw-node.mmw-depth-0 .mmw-title {
@@ -745,4 +745,24 @@
 .mmw-btn-small {
   width: 28px;
   height: 28px;
+}
+
+/* Question Oui ou Non pour creer une etiquette depuis la fenetre de titre. */
+.mmw-dlg-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--background-modifier-hover);
+  font-size: var(--font-ui-small);
+}
+
+.mmw-dlg-confirm-text {
+  flex: 1 1 auto;
+}
+
+.mmw-dlg-confirm[hidden] {
+  display: none;
 }

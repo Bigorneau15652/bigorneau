@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyLineEdits, nodeByKey, parseNote, serializeNote } from "../src/model";
-import { migrateSettings, newTagId, sanitizeTags, SETTINGS_VERSION } from "../src/settings";
+import { makeTag, migrateSettings, newTagId, nextTagColors, sanitizeTags, SETTINGS_VERSION, TAG_DEFAULT_COLORS, TAG_PALETTE } from "../src/settings";
 import { detailsOnly, formatMetaLine, isEmptyMeta, parseMetaLine, sanitizeMeta } from "../src/style";
 import { metaEditsFor, planReset, planStyle } from "../src/style-edit";
 
@@ -87,4 +87,16 @@ test(`migration : les reglages de la version 3 recoivent une liste d'etiquettes 
   assert.equal(s.settingsVersion, SETTINGS_VERSION);
   const kept = migrateSettings({ settingsVersion: 4, tags: [{ id: `k1`, name: `P1`, bg: `#ffc9c9`, fg: `#c92a2a` }] });
   assert.equal(kept.tags.length, 1);
+});
+
+test(`couleurs proposees : vert, bleu, rouge, jaune, puis gris`, () => {
+  let tags: ReturnType<typeof sanitizeTags> = [];
+  for (let i = 0; i < 6; i++) tags = [...tags, makeTag(tags, `T${i}`)];
+  assert.deepEqual(tags.slice(0, 4).map((t) => t.bg), TAG_PALETTE.map((c) => c.bg));
+  assert.equal(tags[4].bg, TAG_DEFAULT_COLORS.bg);
+  assert.equal(tags[5].fg, TAG_DEFAULT_COLORS.fg);
+  // Une couleur liberee par la suppression d'une etiquette est reproposee.
+  assert.equal(nextTagColors(tags.filter((t) => t.name !== `T1`)).bg, TAG_PALETTE[1].bg);
+  assert.equal(makeTag([], `  Etude   fine \n`).name, `Etude   fine`);
+  assert.equal(migrateSettings({}).selectionContrast, 50);
 });

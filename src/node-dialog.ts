@@ -17,6 +17,8 @@ export interface DialogOptions {
   isRoot: boolean;
   // Position de la case dans le conteneur, en pixels.
   anchor: { left: number; top: number; bottom: number };
+  // Ajoute une etiquette a la liste du plugin (couleurs proposees) et la renvoie.
+  onCreateTag: (name: string) => TagDef | null;
   onSubmit: (values: DialogValues) => void;
   onCancel: () => void;
 }
@@ -40,8 +42,14 @@ export class NodeDialog {
   private commentInput: HTMLTextAreaElement | null = null;
   private filterInput: HTMLInputElement | null = null;
   private chips: { def: TagDef; button: HTMLButtonElement }[] = [];
+  private chipList: HTMLElement | null = null;
+  private emptyNote: HTMLElement | null = null;
+  private confirmBar: HTMLElement | null = null;
+  private pendingName = ``;
 
   constructor(private host: HTMLElement, private opts: DialogOptions) {
+    // Copie de la liste : les etiquettes creees ici passent par onCreateTag, pas par cette liste.
+    this.opts = { ...opts, defs: [...opts.defs] };
     this.selected = new Set(opts.values.tags);
     this.root = el(`div`, `mmw-dialog`);
     this.root.setAttribute(`role`, `dialog`);
@@ -113,29 +121,79 @@ export class NodeDialog {
     const wrap = el(`div`, `mmw-dlg-field`);
     wrap.append(el(`span`, `mmw-dlg-label`, `Étiquettes`));
     const box = el(`div`, `mmw-dlg-tagbox`);
-    if (this.opts.defs.length === 0) {
-      box.append(el(`p`, `mmw-dlg-empty`, `Aucune étiquette n'existe encore. Créez-en dans le menu de la carte, entrée « Étiquettes ».`));
-    } else {
-      const filter = el(`input`, `mmw-dlg-input mmw-dlg-filter`);
-      filter.type = `text`;
-      filter.placeholder = `Écrire pour chercher, Entrée pour choisir`;
-      filter.addEventListener(`input`, () => this.applyFilter());
-      this.filterInput = filter;
-      const list = el(`div`, `mmw-dlg-chips`);
-      for (const def of this.opts.defs) {
-        const button = el(`button`, `mmw-dlg-chip`, def.name === `` ? `(sans nom)` : def.name);
-        button.type = `button`;
-        button.style.background = def.bg;
-        button.style.color = def.fg;
-        button.addEventListener(`click`, () => this.toggle(def.id));
-        this.chips.push({ def, button });
-        list.append(button);
-      }
-      box.append(filter, list);
-      this.refreshChips();
-    }
+    const filter = el(`input`, `mmw-dlg-input mmw-dlg-filter`);
+    filter.type = `text`;
+    filter.placeholder = `Écrire pour chercher ou créer, Entrée pour choisir`;
+    filter.addEventListener(`input`, () => {
+      this.dismissConfirm(false);
+      this.applyFilter();
+    });
+    this.filterInput = filter;
+    const list = el(`div`, `mmw-dlg-chips`);
+    this.chipList = list;
+    this.emptyNote = el(`p`, `mmw-dlg-empty`, `Aucune étiquette n'existe encore. Écrivez un nom ci-dessus pour en créer une.`);
+    for (const def of this.opts.defs) this.addChip(def);
+    this.confirmBar = el(`div`, `mmw-dlg-confirm`);
+    this.confirmBar.hidden = true;
+    box.append(filter, this.confirmBar, this.emptyNote, list);
+    this.emptyNote.hidden = this.opts.defs.length > 0;
+    this.refreshChips();
     wrap.append(box);
     this.root.append(wrap);
+  }
+
+  private addChip(def: TagDef): void {
+    const button = el(`button`, `mmw-dlg-chip`, def.name === `` ? `(sans nom)` : def.name);
+    button.type = `button`;
+    button.style.background = def.bg;
+    button.style.color = def.fg;
+    button.addEventListener(`click`, () => this.toggle(def.id));
+    this.chips.push({ def, button });
+    this.chipList?.append(button);
+  }
+
+  // Le nom saisi n'existe pas : propose de l'ajouter (Oui ou Non) sans quitter la fenetre.
+  private askCreate(name: string): void {
+    const bar = this.confirmBar;
+    if (!bar) return;
+    this.pendingName = name;
+    bar.replaceChildren();
+    bar.append(el(`span`, `mmw-dlg-confirm-text`, `Ajouter l'étiquette « ${name} » ?`));
+    const yes = el(`button`, `mmw-dlg-btn mod-cta mmw-dlg-yes`, `Oui`);
+    yes.type = `button`;
+    yes.addEventListener(`click`, () => this.confirmCreate());
+    const no = el(`button`, `mmw-dlg-btn mmw-dlg-no`, `Non`);
+    no.type = `button`;
+    no.addEventListener(`click`, () => this.dismissConfirm(true));
+    bar.append(yes, no);
+    bar.hidden = false;
+    yes.focus();
+    this.place();
+  }
+
+  private confirmCreate(): void {
+    const name = this.pendingName;
+    const def = name === `` ? null : this.opts.onCreateTag(name);
+    this.dismissConfirm(false);
+    if (def) {
+      this.opts.defs.push(def);
+      this.addChip(def);
+      this.selected.add(def.id);
+      if (this.emptyNote) this.emptyNote.hidden = true;
+      this.refreshChips();
+    }
+    if (this.filterInput) this.filterInput.value = ``;
+    this.applyFilter();
+    this.filterInput?.focus();
+  }
+
+  private dismissConfirm(refocus: boolean): void {
+    if (!this.confirmBar || this.confirmBar.hidden) return;
+    this.confirmBar.hidden = true;
+    this.confirmBar.replaceChildren();
+    this.pendingName = ``;
+    if (refocus) this.filterInput?.focus();
+    this.place();
   }
 
   private toggle(id: string): void {
@@ -167,7 +225,9 @@ export class NodeDialog {
     e.stopPropagation();
     if (e.key === `Escape`) {
       e.preventDefault();
-      this.close(false);
+      // Echap ferme d'abord la question Oui ou Non, puis la fenetre.
+      if (this.confirmBar && !this.confirmBar.hidden) this.dismissConfirm(true);
+      else this.close(false);
       return;
     }
     if (e.key !== `Enter`) return;
@@ -176,10 +236,14 @@ export class NodeDialog {
     if (target === this.filterInput && !mod) {
       // Entree dans la recherche : choisit la premiere etiquette correspondante.
       e.preventDefault();
-      const first = this.visibleChips()[0];
-      if (first) this.toggle(first.def.id);
-      if (this.filterInput) this.filterInput.value = ``;
-      this.applyFilter();
+      const text = this.filterInput?.value.trim() ?? ``;
+      const exact = this.chips.find((c) => c.def.name.toLowerCase() === text.toLowerCase());
+      const first = exact ?? this.visibleChips()[0];
+      if (first) {
+        this.toggle(first.def.id);
+        if (this.filterInput) this.filterInput.value = ``;
+        this.applyFilter();
+      } else if (text !== ``) this.askCreate(text);
       return;
     }
     if (target.tagName === `TEXTAREA` && !mod) return;
