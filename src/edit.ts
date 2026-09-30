@@ -37,13 +37,14 @@ export function newLevel(doc: MmDoc, key: string, where: `child` | `sibling`): n
 }
 
 // Ajoute un titre vide a la fin de la branche du noeud : comme dernier enfant, ou comme frere juste apres.
-// La racine n'a pas de frere : un frere de la racine devient son dernier enfant.
+// La racine (le nom de la note) n'a pas de frere : depuis elle, le nouveau titre est cree au debut de la note, juste
+// apres le texte d'introduction, et devient le premier titre de premier niveau.
 export function addNode(text: string, fileName: string, key: string, where: `child` | `sibling`): EditResult | null {
   const doc = parseNote(text, fileName);
   const node = nodeByKey(doc, key);
   const level = newLevel(doc, key, where);
   if (!node || level === null || node.endLine === undefined) return null;
-  const at = branchEnd(node);
+  const at = node === doc.root ? node.endLine : branchEnd(node);
   const next = applyLineEdits(text, [{ kind: `insert`, line: at, text: renderHeading(level, ``, ``) }], doc.eol);
   const created = flattenDoc(parseNote(next, fileName)).find((e) => e.key !== `r` && e.node.line === at);
   return { text: next, key: created ? created.key : null };

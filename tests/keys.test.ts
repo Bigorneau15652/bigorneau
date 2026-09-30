@@ -40,11 +40,12 @@ test(`touches : libelles lisibles`, () => {
 
 import { isModEnter } from "../src/keys";
 
-test(`Cmd ou Ctrl + Entree : sans autre modificateur`, () => {
+test(`Cmd ou Ctrl + Entree, avec ou sans Maj`, () => {
   const base = { key: `Enter`, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
   assert.equal(isModEnter({ ...base, metaKey: true }), true);
   assert.equal(isModEnter({ ...base, ctrlKey: true }), true);
   assert.equal(isModEnter(base), false);
-  assert.equal(isModEnter({ ...base, metaKey: true, shiftKey: true }), false);
+  assert.equal(isModEnter({ ...base, metaKey: true, shiftKey: true }), true);
+  assert.equal(isModEnter({ ...base, ctrlKey: true, altKey: true }), false);
   assert.equal(isModEnter({ ...base, key: `a`, metaKey: true }), false);
 });
