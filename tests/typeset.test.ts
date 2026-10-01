@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildExportDoc } from "../src/export/doc-tree";
-import { A4_SETUP, languageOf, typesetDoc } from "../src/export/typeset";
+import { A4_SETUP, DEFAULT_PAGE_STYLE, languageOf, typesetDoc } from "../src/export/typeset";
 
 const PARA = `Le bâtiment a été construit en 1972 et sa consommation d'énergie finale reste aujourd'hui supérieure à 180 kWh/m².an ; une rénovation globale suppose d'abord une analyse précise : isolation des murs et de la toiture, remplacement des menuiseries, régulation du chauffage et ventilation double flux.`;
 
@@ -12,11 +12,11 @@ function note(paragraphs: number): string {
 }
 
 test(`le document compose commence par son titre et contient tous les blocs`, () => {
-  const t = typesetDoc(buildExportDoc(note(2), `Audit.md`));
+  const t = typesetDoc(buildExportDoc(note(2), `Audit.md`), A4_SETUP, undefined, { ...DEFAULT_PAGE_STYLE, floats: `inline` });
   assert.equal(t.rows[0].kind, `title`);
   assert.equal(t.rows[0].text, `Audit`);
   const kinds = new Set(t.rows.map((r) => r.kind));
-  for (const k of [`title`, `heading`, `text`, `list`, `quote`, `figure`, `code`, `space`]) assert.ok(kinds.has(k as never), k);
+  for (const k of [`title`, `heading`, `text`, `list`, `quote`, `figure`, `table`, `space`]) assert.ok(kinds.has(k as never), k);
   assert.ok(t.stats.lines > 10);
   assert.ok(t.stats.wordCount > 80);
   assert.deepEqual(t.missing, []);

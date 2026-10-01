@@ -6,7 +6,7 @@
 // Reimplementation d'apres la these de Plass (1981) et le constructeur de pages de TeX, sans reprise de code.
 import { badness } from "./line-break";
 import { INF_PENALTY } from "./tex-params";
-import { FootnoteBlock, PageSetup, PageStyle, Row, TypesetDoc } from "./typeset";
+import { FloatBlock, FootnoteBlock, PageSetup, PageStyle, Row, TypesetDoc } from "./typeset";
 
 export interface Page {
   number: number;
@@ -14,6 +14,10 @@ export interface Page {
   rows: Row[];
   // Lignes des notes de bas de page de la page, a placer en bas, sous un filet de separation.
   footnotes: Row[];
+  // Figures et tableaux flottants : en haut de la page, avant le corps, ou en bas, juste au-dessus des notes. Chaque liste
+  // comprend l'espace qui la separe du texte.
+  topFloats?: Row[];
+  bottomFloats?: Row[];
   header?: string;
   footer?: string;
 }
@@ -21,6 +25,26 @@ export interface Page {
 // Hauteur reservee au filet de separation des notes (filet et espaces autour).
 export const FOOTNOTE_RULE_HEIGHT = 12;
 const EPS = 1e-6;
+// Part de la page que les flottants peuvent occuper (sauf le premier, qui est toujours place).
+const FLOAT_FRACTION = 0.75;
+
+interface PlacedFloat {
+  float: FloatBlock;
+  position: `top` | `bottom`;
+}
+
+const floatRows = (p: PlacedFloat, gapRow: (h: number) => Row): Row[] => (p.position === `top` ? [...p.float.rows, gapRow(p.float.gap)] : [gapRow(p.float.gap), ...p.float.rows]);
+
+// Numero de la page (a partir de 1) ou se trouve chaque ancre (titres, blocs avec identifiant, figures, tableaux).
+export function anchorPages(pages: Page[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const p of pages) {
+    for (const list of [p.topFloats ?? [], p.rows, p.bottomFloats ?? []]) {
+      for (const r of list) if (r.anchor !== undefined && !out.has(r.anchor)) out.set(r.anchor, p.number);
+    }
+  }
+  return out;
+}
 
 export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title`>, setup: PageSetup, style: PageStyle): Page[] {
   const rows = typeset.rows;
@@ -29,7 +53,7 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
   const n = rows.length;
   const pages: Page[] = [];
   // Notes deja imprimees (un appel repete ne reserve pas de place une seconde fois) et lignes de notes reportees.
-  const placed = new Set<number>();
+  const printed = new Set<number>();
   let carry: Row[] = [];
   const sum = (rs: Row[]): number => rs.reduce((a, r) => a + r.height, 0);
 
@@ -40,30 +64,81 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
     return h > 0 ? h + FOOTNOTE_RULE_HEIGHT : 0;
   };
   const newKeys = (r: Row, into: number[]): void => {
-    for (const k of r.notes ?? []) if (!placed.has(k) && !into.includes(k)) into.push(k);
+    for (const k of r.notes ?? []) if (!printed.has(k) && !into.includes(k)) into.push(k);
   };
 
+  const gapRow = (h: number): Row => ({ kind: `space`, text: ``, x: 0, width: 0, fontSize: setup.fontSize, height: h, wordSpacing: 0, breakAfter: 0, align: `left` });
+  const floatHeight = (list: PlacedFloat[]): number => list.reduce((a, p) => a + p.float.height, 0);
+  // Flottants qui attendent une place, dans l'ordre ou ils ont ete ecrits.
+  let deferred: FloatBlock[] = [];
+
   let i = 0;
-  while (i < n) {
-    while (i < n && rows[i].kind === `space`) i++;
-    if (i >= n) break;
+  while (i < n || deferred.length > 0) {
+    if (i < n && rows[i].kind === `space`) {
+      i++;
+      continue;
+    }
+    // Page de flottants seuls, apres la derniere ligne du texte.
+    const bodyDone = i >= n;
+
+    // Tableau coupe par la page precedente : son en-tete est repete en haut de celle-ci.
+    const prefix: Row[] = !bodyDone && i > 0 && rows[i].table && rows[i - 1].table?.id === rows[i].table?.id ? (rows[i].table as { header: Row[] }).header : [];
+    const prefixHeight = sum(prefix);
 
     const carriedHeight = sum(carry);
-    let height = 0;
-    let stretch = 0;
     const keys: number[] = [];
+    // Flottants en attente : en haut de cette page, tant qu'ils y tiennent.
+    const placed: PlacedFloat[] = [];
+    let floatH = 0;
+    const queue = deferred;
+    deferred = [];
+    while (queue.length > 0) {
+      const f = queue[0];
+      const fits = placed.length === 0 || (floatH + f.height <= available * FLOAT_FRACTION + EPS && prefixHeight + floatH + f.height + footArea(keys, carriedHeight) <= available + EPS);
+      if (!fits) break;
+      queue.shift();
+      placed.push({ float: f, position: `top` });
+      floatH += f.height;
+      for (const r of f.rows) newKeys(r, keys);
+    }
+    const deferredNew: FloatBlock[] = [...queue];
+
+    let height = prefixHeight;
+    let stretch = 0;
     let best = -1;
     let bestCost = Infinity;
     let lastFit = -1;
-    for (let j = i; j < n; j++) {
+    let bestSnap = { p: placed.length, d: deferredNew.length };
+    let lastSnap = bestSnap;
+    for (let j = i; j < n && !bodyDone; j++) {
       const r = rows[j];
       height += r.height;
       stretch += r.stretch ?? 0;
       newKeys(r, keys);
-      if (r.kind === `space`) continue;
-      const total = height + footArea(keys, carriedHeight);
+      if (r.float) {
+        // Un flottant se place sur cette page s'il y tient et si aucun flottant precedent n'attend : en haut, ou en bas si la
+        // page est deja bien remplie. Sinon il attend la page suivante.
+        const f = r.float;
+        const before = height - prefixHeight;
+        const atStart = placed.length === 0 && before === 0;
+        const room = height + floatH + f.height + footArea(keys, carriedHeight) <= available + EPS;
+        const fits = floatH + f.height <= available * FLOAT_FRACTION + EPS && room;
+        // Repere pres du haut de la page : le flottant se place en haut ; pres du bas : en bas ; entre les deux, il attend le haut
+        // de la page suivante pour ne pas passer avant du texte qui le precede de loin.
+        const position = before <= available * 0.25 ? `top` : before >= available * 0.6 ? `bottom` : undefined;
+        if (deferredNew.length === 0 && (atStart || (position && fits))) {
+          placed.push({ float: f, position: position ?? `top` });
+          floatH += f.height;
+          for (const fr of f.rows) newKeys(fr, keys);
+        } else {
+          deferredNew.push(f);
+        }
+      }
+      if (r.kind === `space` || r.float) continue;
+      const total = height + floatH + footArea(keys, carriedHeight);
       if (total > available + EPS) break;
       lastFit = j;
+      lastSnap = { p: placed.length, d: deferredNew.length };
       const forced = j === n - 1 || rows[j + 1].breakBefore === true;
       const penalty = forced ? -INF_PENALTY : r.breakAfter;
       // Une penalite infinie interdit la coupure ici.
@@ -76,24 +151,45 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
       if (bad + penalty <= bestCost) {
         best = j;
         bestCost = bad + penalty;
+        bestSnap = lastSnap;
       }
       if (forced) break;
     }
-    // Aucune coupure permise : on coupe apres la derniere ligne qui tient, ou on laisse une ligne trop haute seule.
-    const fallback = best < 0;
-    if (fallback) best = lastFit >= 0 ? lastFit : i;
+    let snap = bestSnap;
+    if (!bodyDone) {
+      // Aucune coupure permise : on coupe apres la derniere ligne qui tient, ou on laisse une ligne trop haute seule.
+      if (best < 0) {
+        best = lastFit >= 0 ? lastFit : i;
+        snap = lastFit >= 0 ? lastSnap : { p: placed.length, d: deferredNew.length };
+        // Marqueurs de flottants passes en revue au-dela de la derniere ligne gardee : ils sont reexamines a la page suivante.
+      }
+    } else {
+      best = i - 1;
+    }
+    // Flottants deja traites : ceux de la page jusqu'a la coupure, et les reportes.
+    const pagePlaced = placed.slice(0, snap.p);
+    deferred = deferredNew.slice(0, snap.d);
+    // Quand la ligne trop haute reste seule, les flottants rencontres avant elle ont pu etre comptes : ils le sont dans snap.
 
-    const body = rows.slice(i, best + 1);
+    const bodyOnly = bodyDone ? [] : rows.slice(i, best + 1);
+    let body = [...prefix, ...bodyOnly];
+    if (!bodyDone && rows[best + 1]?.table && rows[best]?.table && rows[best].table?.id === rows[best + 1].table?.id && body.length > 0) {
+      // Tableau coupe ici : filet de fermeture sous la derniere ligne de la page.
+      const last = body[body.length - 1];
+      body = [...body.slice(0, -1), { ...last, rules: { ...last.rules, bottom: true } }];
+    }
     const bodyKeys: number[] = [];
     for (const r of body) newKeys(r, bodyKeys);
+    for (const p of pagePlaced) for (const r of p.float.rows) newKeys(r, bodyKeys);
     let foot: Row[] = [...carry];
     for (const k of bodyKeys) {
       foot.push(...(blocks.get(k) as FootnoteBlock).rows);
-      placed.add(k);
+      printed.add(k);
     }
     carry = [];
     // Notes trop longues pour la page : la fin se prolonge sur la page suivante.
-    const bodyHeight = sum(body);
+    const pageFloatH = floatHeight(pagePlaced);
+    const bodyHeight = sum(body) + pageFloatH;
     if (foot.length > 0 && bodyHeight + FOOTNOTE_RULE_HEIGHT + sum(foot) > available + EPS) {
       const room = available - bodyHeight - FOOTNOTE_RULE_HEIGHT;
       let used = 0;
@@ -104,7 +200,7 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
     }
 
     let pageRows = body;
-    if (style.flushBottom && best < n - 1 && rows[best + 1].breakBefore !== true) {
+    if (style.flushBottom && !bodyDone && best < n - 1 && rows[best + 1].breakBefore !== true) {
       const footHeight = foot.length > 0 ? sum(foot) + FOOTNOTE_RULE_HEIGHT : 0;
       const slack = available - bodyHeight - footHeight;
       const room = body.reduce((a, r) => a + (r.stretch ?? 0), 0);
@@ -114,8 +210,10 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
         pageRows = body.map((r) => (r.stretch ? { ...r, height: r.height + r.stretch * factor } : r));
       }
     }
-    pages.push({ number: pages.length + 1, rows: pageRows, footnotes: foot });
-    i = best + 1;
+    const top = pagePlaced.filter((p) => p.position === `top`).flatMap((p) => floatRows(p, gapRow));
+    const bottom = pagePlaced.filter((p) => p.position === `bottom`).flatMap((p) => floatRows(p, gapRow));
+    pages.push({ number: pages.length + 1, rows: pageRows, footnotes: foot, ...(top.length > 0 ? { topFloats: top } : {}), ...(bottom.length > 0 ? { bottomFloats: bottom } : {}) });
+    i = bodyDone ? n : best + 1;
   }
   // Notes reportees apres la derniere ligne : elles occupent des pages sans corps.
   while (carry.length > 0) {

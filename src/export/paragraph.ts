@@ -77,6 +77,11 @@ export const NOTE_CALL = /(\d+),(\d+)/g;
 // Taille d'un numero d'appel, en fraction du corps du texte.
 export const SUP_SCALE = 0.7;
 
+// Vrai si le mot a autre chose que des reperes de style (et le numero qui suit un repere de lien) a afficher.
+function hasContent(w: string): boolean {
+  return w.replace(/\uE014\d*\uE015/g, ``).replace(/[\uE010-\uE016]/g, ``) !== ``;
+}
+
 const WORD_RUN = /[\p{L}\x27’]+/gu;
 const APOSTROPHE = /[\x27’]/;
 
@@ -218,12 +223,12 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
   const source = o.language === `fr` ? frenchSpacing(input.text) : input.text;
   const words = source.split(/[ \t\r\n]+/).filter((w) => w !== ``);
   // Un paragraphe qui ne contient que des reperes n'a rien a afficher.
-  if (words.every((w) => /^[-\d]*$/.test(w))) return { items: [], missing };
+  if (words.every((w) => !hasContent(w))) return { items: [], missing };
   if (o.indent > 0) items.push({ type: `box`, width: o.indent, text: `` });
   const lastIndex = (() => {
     let k = -1;
     words.forEach((w, i) => {
-      if (/[^-\d]/.test(w)) k = i;
+      if (hasContent(w)) k = i;
     });
     return k;
   })();

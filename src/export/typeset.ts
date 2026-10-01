@@ -5,8 +5,10 @@
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
 import { FontStyle, measureText } from "./font-metrics";
 import { LanguageCode } from "./hyphenate";
-import { parseInline, plainOf } from "./inline";
+import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget } from "./image";
+import { InlineContext, InlineText, normalizeHeading, parseInline, plainOf } from "./inline";
 import { LineRun, typesetParagraph, TypesetLine } from "./paragraph";
+import { layoutTable } from "./table";
 import { DEFAULT_TEX_PARAMS, INF_PENALTY, TexParams } from "./tex-params";
 
 export interface PageSetup {
@@ -52,6 +54,11 @@ export interface PageStyle {
   chapterBreak: `none` | `level1`;
   // Numerotation des notes : continue sur tout le document, ou repartant de 1 a chaque chapitre.
   footnoteNumbering: `continuous` | `perChapter`;
+  // Figures et tableaux : flottants (en haut ou en bas de la page ou ils tiennent, comme en LaTeX) ou places la ou ils sont
+  // ecrits.
+  floats: `float` | `inline`;
+  // Renvois vers un titre, une figure ou un tableau : ajoutent « (page N) » apres le texte du renvoi.
+  pageRefs: boolean;
 }
 
 export const DEFAULT_PAGE_STYLE: PageStyle = {
@@ -60,9 +67,11 @@ export const DEFAULT_PAGE_STYLE: PageStyle = {
   flushBottom: false,
   chapterBreak: `none`,
   footnoteNumbering: `continuous`,
+  floats: `float`,
+  pageRefs: false,
 };
 
-export type RowKind = `title` | `heading` | `text` | `list` | `quote` | `code` | `figure` | `space` | `footnote`;
+export type RowKind = `title` | `heading` | `text` | `list` | `quote` | `code` | `figure` | `caption` | `table` | `toc` | `float` | `space` | `footnote`;
 
 export interface RowQuality {
   badness: number;
@@ -71,6 +80,22 @@ export interface RowQuality {
   // Ligne dont les espaces sont tres etires (laideur de plus de 99) ou comprimes (de plus de 12).
   loose: boolean;
   tight: boolean;
+}
+
+// Cellule d'une ligne de tableau : position a partir du bord gauche du tableau, largeur, texte et morceaux.
+export interface RowCell {
+  x: number;
+  width: number;
+  text: string;
+  runs: LineRun[];
+}
+
+// Figure ou tableau flottant : lignes a placer ensemble, et espace qui les separe du texte.
+export interface FloatBlock {
+  rows: Row[];
+  gap: number;
+  // Hauteur totale, espace compris.
+  height: number;
 }
 
 export interface Row {
@@ -104,6 +129,20 @@ export interface Row {
   runs?: LineRun[];
   // Titre dont la ligne est la premiere : sert au plan de navigation du PDF.
   heading?: { level: number; title: string };
+  // Ligne de tableau : cellules, marges interieures haute et basse (comprises dans la hauteur) et filets horizontaux sur
+  // toute la largeur du tableau. `table` relie la ligne a son tableau et garde son en-tete, repete apres un saut de page.
+  cells?: RowCell[];
+  inset?: { top: number; bottom: number };
+  rules?: { top?: boolean; bottom?: boolean };
+  table?: { id: number; header: Row[] };
+  // Image d'une figure, centree dans la ligne.
+  image?: { target: string; width: number; height: number };
+  // Repere de la ligne pour les renvois (titre : hid:N, bloc avec identifiant : b:identifiant).
+  anchor?: string;
+  // Ligne de la table des matieres : repere du titre, numero de sa page (inconnu a la premiere composition).
+  toc?: { anchor: string; page: number };
+  // Repere de flottant : la figure ou le tableau se place a la page, pas ici.
+  float?: FloatBlock;
 }
 
 // Note de bas de page composee : ses lignes et leur hauteur totale.
@@ -134,9 +173,58 @@ export interface TypesetDoc {
   stats: TypesetStats;
   // Caracteres absents de la police, a signaler dans le rapport d'export.
   missing: number[];
-  // Problemes a signaler a l'utilisateur (note de bas de page sans definition, par exemple).
+  // Problemes a signaler a l'utilisateur (note de bas de page sans definition, image introuvable, renvoi sans cible).
   warnings: string[];
   title: string;
+}
+
+// Informations qui viennent d'Obsidian ou d'une composition precedente.
+export interface TypesetOptions {
+  // Images des figures, par cible (nom ecrit dans la note).
+  images?: Map<string, ImageAsset>;
+  // Numero de page d'une ancre, connu apres une premiere mise en page (table des matieres, renvois avec page).
+  pageOf?: (anchor: string) => number | undefined;
+}
+
+// Repere des titres et des blocs, et numero des figures et tableaux, calcules avant la composition pour que les renvois
+// puissent viser un endroit situe plus loin dans la note.
+interface Anchors {
+  sections: Map<DocSection, string>;
+  headings: Map<string, string>;
+  blocks: Map<string, { anchor: string; label?: string }>;
+  labels: Map<DocBlock, string>;
+}
+
+function labelWords(language: LanguageCode): { figure: string; table: string } {
+  return language === `en` ? { figure: `Figure`, table: `Table` } : { figure: `Figure`, table: `Tableau` };
+}
+
+function collectAnchors(doc: ExportDoc, language: LanguageCode): Anchors {
+  const words = labelWords(language);
+  const a: Anchors = { sections: new Map(), headings: new Map(), blocks: new Map(), labels: new Map() };
+  let figures = 0;
+  let tables = 0;
+  let sections = 0;
+  const blocks = (list: DocBlock[]): void => {
+    for (const b of list) {
+      let label: string | undefined;
+      if (b.type === `figure` && (isImageTarget(b.target) || isWebTarget(b.target))) label = `${words.figure} ${++figures}`;
+      else if (b.type === `table` && b.caption) label = `${words.table} ${++tables}`;
+      if (label) a.labels.set(b, label);
+      if ((b.type === `paragraph` || b.type === `quote` || b.type === `table` || b.type === `figure`) && b.id) a.blocks.set(b.id, { anchor: `b:${b.id}`, ...(label ? { label } : {}) });
+    }
+  };
+  const walk = (s: DocSection): void => {
+    const anchor = `hid:${++sections}`;
+    a.sections.set(s, anchor);
+    const key = normalizeHeading(s.title);
+    if (!a.headings.has(key)) a.headings.set(key, anchor);
+    blocks(s.blocks);
+    s.sections.forEach(walk);
+  };
+  blocks(doc.blocks);
+  doc.sections.forEach(walk);
+  return a;
 }
 
 // Langue de composition : les proprietes de la note indiquent fr ou en ; le francais est la langue principale.
@@ -150,6 +238,8 @@ const NOTE_INDENT = 14;
 
 class Typesetter {
   rows: Row[] = [];
+  // Liste ou vont les lignes composees : le corps du document, ou un bloc en cours de preparation (figure, tableau).
+  private sink: Row[] = this.rows;
   footnotes = new Map<number, FootnoteBlock>();
   stats: TypesetStats = { paragraphs: 0, lines: 0, hyphenatedLines: 0, consecutiveHyphens: 0, looseLines: 0, tightLines: 0, overfullLines: 0, passes: [0, 0, 0], wordCount: 0, footnotes: 0 };
   missing: number[] = [];
@@ -163,8 +253,24 @@ class Typesetter {
   private ids = new Map<string, { key: number; label: string }>();
   private firstChapter = true;
 
-  constructor(private setup: PageSetup, private params: TexParams, private style: PageStyle, private language: LanguageCode, private defs: Record<string, string>) {
+  private tableCount = 0;
+  private inlineCtx: InlineContext;
+
+  constructor(private setup: PageSetup, private params: TexParams, private style: PageStyle, private language: LanguageCode, private defs: Record<string, string>, private anchors: Anchors, private opts: TypesetOptions, noteName: string) {
     this.textWidth = setup.width - setup.marginLeft - setup.marginRight;
+    this.inlineCtx = {
+      noteName,
+      headingAnchor: (title) => this.anchors.headings.get(normalizeHeading(title)),
+      block: (id) => this.anchors.blocks.get(id),
+      pageOf: (anchor) => this.opts.pageOf?.(anchor),
+      pageRefs: style.pageRefs,
+      warn: (m) => this.warnings.push(m),
+    };
+  }
+
+  // Texte d'un paragraphe prepare pour la composition : appels de notes, renvois internes, gras, italique, liens.
+  private inline(text: string): InlineText {
+    return parseInline(this.withNoteCalls(text), this.inlineCtx);
   }
 
   setChapterLevel(level: number): void {
@@ -173,7 +279,7 @@ class Typesetter {
 
   private push(row: Omit<Row, `breakAfter` | `chapter`> & { breakAfter?: number }): Row {
     const full: Row = { breakAfter: 0, ...(this.chapter !== undefined ? { chapter: this.chapter } : {}), ...row };
-    this.rows.push(full);
+    this.sink.push(full);
     return full;
   }
 
@@ -286,9 +392,7 @@ class Typesetter {
 
   // Compose un texte en lignes et les ajoute ; renvoie le nombre de lignes ajoutees.
   private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle }): number {
-    // Le Markdown en ligne (gras, liens, code) est reduit a du texte brut ; les styles viendront plus tard.
-    const prepared = opts.notes === false ? text : this.withNoteCalls(text);
-    const r = typesetParagraph(parseInline(prepared), {
+    const r = typesetParagraph(opts.notes === false ? parseInline(text) : this.inline(text), {
       language: this.language,
       fontSize: opts.fontSize,
       lineWidth: width,
@@ -306,12 +410,12 @@ class Typesetter {
   }
 
   title(text: string): void {
-    const first = this.rows.length;
+    const first = this.sink.length;
     this.paragraph(text, `title`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0], keep: true, notes: false, style: `bold` });
-    if (this.rows.length > first) this.rows[first].heading = { level: 0, title: plainOf(parseInline(text).text) };
+    if (this.sink.length > first) this.sink[first].heading = { level: 0, title: plainOf(parseInline(text).text) };
     this.space(this.setup.leading * 1.2);
     // L'espace qui suit le titre reste avec lui.
-    this.rows[this.rows.length - 1].breakAfter = INF_PENALTY;
+    this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
   }
 
   heading(section: DocSection): void {
@@ -325,22 +429,31 @@ class Typesetter {
     const breakBefore = isChapter && this.style.chapterBreak === `level1` && !this.firstChapter;
     if (isChapter) this.firstChapter = false;
     this.space(lead * (section.level <= 1 ? 1.6 : section.level === 2 ? 1.2 : 0.8), { breakBefore });
-    const before = this.rows.length;
+    const before = this.sink.length;
     this.paragraph(section.title || `(sans titre)`, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: `bold` });
-    if (this.rows.length > before) {
-      this.rows[before].heading = { level: section.level, title: plainOf(parseInline(section.title).text) || `(sans titre)` };
-      if (isChapter) this.rows[before].chapterStart = true;
+    if (this.sink.length > before) {
+      this.sink[before].heading = { level: section.level, title: plainOf(parseInline(section.title).text) || `(sans titre)` };
+      const anchor = this.anchors.sections.get(section);
+      if (anchor) this.sink[before].anchor = anchor;
+      if (isChapter) this.sink[before].chapterStart = true;
     }
     this.space(lead * 0.5);
-    this.rows[this.rows.length - 1].breakAfter = INF_PENALTY;
+    this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+  }
+
+  // Repere de renvoi pose sur la premiere ligne ajoutee depuis `from`.
+  private anchorFrom(from: number, id: string | undefined): void {
+    if (id !== undefined && this.sink[from]) this.sink[from].anchor = `b:${id}`;
   }
 
   block(b: DocBlock): void {
     const lead = this.setup.leading;
     const size = this.setup.fontSize;
+    const from = this.sink.length;
     switch (b.type) {
       case `paragraph`:
         this.paragraph(b.text, `text`, 0, this.textWidth, { indent: size * this.params.parIndent, justify: true, hyphenate: true, fontSize: size });
+        this.anchorFrom(from, b.id);
         break;
       case `list`: {
         const counters: number[] = [];
@@ -356,23 +469,146 @@ class Typesetter {
       }
       case `quote`:
         for (const para of b.text.split(/\n{2,}/)) this.paragraph(para, `quote`, 24, this.textWidth - 36, { indent: 0, justify: true, hyphenate: true, fontSize: size });
+        this.anchorFrom(from, b.id);
         this.space(lead * 0.5);
         break;
       case `code`:
         this.codeRows(b.text.split(`\n`));
         break;
       case `table`:
-        this.codeRows(b.rows.map((r) => r.map((c) => plainOf(parseInline(c).text)).join(` | `)));
+        this.table(b);
         break;
       case `figure`:
-        this.stats.lines++;
-        this.push({ kind: `figure`, text: `[Figure : ${plainOf(parseInline(b.caption).text) || b.target}]`, x: 0, width: this.textWidth, fontSize: size, height: lead * 1.5, wordSpacing: 0, align: `center` });
-        this.space(lead * 0.5);
+        this.figure(b);
         break;
     }
   }
 
-  // Code et tableaux : provisoirement en chasse fixe, coupes a la largeur de la colonne, sans composition.
+  // Legende « Figure 1 : texte » ou « Tableau 2 : texte » : etiquette en gras, centree si elle tient sur une ligne.
+  private caption(label: string, text: string): void {
+    const sep = this.language === `en` ? `:` : ` :`;
+    const body = text.trim();
+    const source = `**${label}**${sep}${body === `` ? `` : ` ${body}`}`;
+    const size = this.setup.fontSize - 1;
+    const first = this.sink.length;
+    this.paragraph(source, `caption`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: true, fontSize: size });
+    const lines = this.sink.length - first;
+    if (lines === 1) this.sink[first].align = `center`;
+    if (lines > 1) for (let k = first; k < this.sink.length - 1; k++) this.sink[k].breakAfter = INF_PENALTY;
+  }
+
+  // Prepare un bloc (figure, tableau) : lignes ecrites dans une liste a part.
+  private collect(build: () => void): Row[] {
+    const saved = this.sink;
+    this.sink = [];
+    build();
+    const out = this.sink;
+    this.sink = saved;
+    return out;
+  }
+
+  // Place un bloc : flottant (un repere dans le texte, la page est choisie ensuite) ou a l'endroit ou il est ecrit.
+  private emit(block: Row[], anchorId: string | undefined, floatable: boolean): void {
+    if (block.length === 0) return;
+    if (anchorId !== undefined) block[0].anchor = `b:${anchorId}`;
+    const lead = this.setup.leading;
+    if (floatable && this.style.floats === `float`) {
+      const gap = lead * 0.9;
+      const height = block.reduce((a, r) => a + r.height, 0) + gap;
+      this.push({ kind: `float`, text: ``, x: 0, width: this.textWidth, fontSize: this.setup.fontSize, height: 0, wordSpacing: 0, align: `left`, float: { rows: block, gap, height } });
+      return;
+    }
+    // Ecrit a sa place : un peu d'air avant, et le bloc reste d'un seul tenant tant qu'il tient sur la page.
+    this.space(lead * 0.4);
+    for (const r of block) this.sink.push(r);
+    this.space(lead * 0.5);
+  }
+
+  private figure(b: Extract<DocBlock, { type: `figure` }>): void {
+    const lead = this.setup.leading;
+    const size = this.setup.fontSize;
+    const label = this.anchors.labels.get(b);
+    const image = isImageTarget(b.target) || isWebTarget(b.target);
+    const asset = this.opts.images?.get(b.target);
+    const caption = plainOf(parseInline(b.caption).text);
+    const block = this.collect(() => {
+      this.stats.lines++;
+      if (image && asset && !isWebTarget(b.target)) {
+        const bounds = figureBounds(this.setup);
+        const d = displaySize(asset.naturalWidth, asset.naturalHeight, b.width, bounds.maxWidth, bounds.maxHeight);
+        this.push({ kind: `figure`, text: ``, x: (this.textWidth - d.width) / 2, width: d.width, fontSize: size, height: d.height, wordSpacing: 0, align: `left`, breakAfter: INF_PENALTY, image: { target: b.target, width: d.width, height: d.height } });
+      } else {
+        // Image introuvable, image du web (non telechargee) ou autre media : un repere a la place.
+        let text: string;
+        if (image && isWebTarget(b.target)) {
+          text = this.language === `en` ? `[Web image: ${b.target}]` : `[Image du web : ${b.target}]`;
+          this.warnings.push(`webimage:${b.target}`);
+        } else if (image) {
+          text = this.language === `en` ? `[Image not found: ${b.target}]` : `[Image introuvable : ${b.target}]`;
+          this.warnings.push(`image:${b.target}`);
+        } else {
+          text = `[Figure : ${caption || b.target}]`;
+        }
+        this.push({ kind: `figure`, text, x: 0, width: this.textWidth, fontSize: size, height: lead * 1.5, wordSpacing: 0, align: `center`, runs: [{ text, style: `regular` }], breakAfter: label ? INF_PENALTY : 0 });
+      }
+      if (label) {
+        this.space(lead * 0.4);
+        this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+        this.caption(label, caption);
+      }
+    });
+    this.emit(block, b.id, label !== undefined);
+  }
+
+  private table(b: Extract<DocBlock, { type: `table` }>): void {
+    const lead = this.setup.leading;
+    const size = this.setup.fontSize;
+    const label = this.anchors.labels.get(b);
+    const id = ++this.tableCount;
+    const layout = layoutTable(
+      b.rows,
+      b.align,
+      {
+        textWidth: this.textWidth,
+        fontSize: size,
+        leading: lead,
+        prepare: (text) => this.inline(text),
+        typeset: (text, width, style) => {
+          const r = typesetParagraph(text, { language: this.language, fontSize: size, lineWidth: width, indent: 0, align: `left`, hyphenate: true, style, params: this.params });
+          this.missing.push(...r.missing);
+          if (r.pass > 0) {
+            this.stats.passes[r.pass - 1]++;
+            this.stats.paragraphs++;
+          }
+          this.stats.lines += r.lines.length;
+          return r;
+        },
+      },
+      id
+    );
+    const block = this.collect(() => {
+      if (label) {
+        const first = this.sink.length;
+        this.caption(label, plainOf(parseInline(b.caption ?? ``).text));
+        for (let k = first; k < this.sink.length; k++) this.sink[k].breakAfter = INF_PENALTY;
+        this.space(lead * 0.4);
+        this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+      }
+      for (const r of layout.rows) this.sink.push(r);
+    });
+    // Un tableau flotte seulement s'il porte une legende et ne depasse pas 60 % de la hauteur de la page.
+    const textHeight = this.setup.height - this.setup.marginTop - this.setup.marginBottom;
+    const floatable = label !== undefined && layout.height < textHeight * 0.6;
+    if (label === undefined && b.id === undefined) {
+      this.space(lead * 0.4);
+      for (const r of block) this.sink.push(r);
+      this.space(lead * 0.5);
+    } else {
+      this.emit(block, b.id, floatable);
+    }
+  }
+
+  // Code : provisoirement en chasse fixe, coupe a la largeur de la colonne, sans composition.
   private codeRows(lines: string[]): void {
     const columns = Math.max(10, Math.floor(this.textWidth / measureText(`0`, 9, `mono`).width));
     for (const line of lines) {
@@ -382,6 +618,38 @@ class Typesetter {
       }
     }
     this.space(this.setup.leading * 0.5);
+  }
+
+  // Table des matieres : un titre par ligne (ou plusieurs), le numero de page a droite, relies par des points de conduite.
+  tableOfContents(doc: ExportDoc, depth: number): void {
+    const entries: { level: number; title: string; anchor: string }[] = [];
+    const walk = (s: DocSection): void => {
+      const anchor = this.anchors.sections.get(s);
+      if (anchor && s.level <= depth) entries.push({ level: s.level, title: s.title || `(sans titre)`, anchor });
+      s.sections.forEach(walk);
+    };
+    doc.sections.forEach(walk);
+    if (entries.length === 0) return;
+    const lead = this.setup.leading;
+    const size = this.setup.fontSize;
+    const top = Math.min(...entries.map((e) => e.level));
+    const heading = this.language === `en` ? `Contents` : `Table des matières`;
+    this.space(lead * 0.8);
+    this.paragraph(heading, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[1], keep: true, notes: false, style: `bold` });
+    this.space(lead * 0.5);
+    this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+    const numberWidth = 26;
+    for (const e of entries) {
+      const x = (e.level - top) * 16;
+      const first = this.sink.length;
+      this.paragraph(e.title, `toc`, x, this.textWidth - x - numberWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false, style: e.level === top ? `bold` : `regular` });
+      const last = this.sink[this.sink.length - 1];
+      for (let k = first; k < this.sink.length - 1; k++) this.sink[k].breakAfter = INF_PENALTY;
+      // Le titre peut etre sur plusieurs lignes : la zone cliquable et le numero sont sur la derniere.
+      for (let k = first; k < this.sink.length; k++) this.sink[k].toc = { anchor: e.anchor, page: k === this.sink.length - 1 ? (this.opts.pageOf?.(e.anchor) ?? 0) : -1 };
+      last.width = this.textWidth - x;
+    }
+    this.space(lead);
   }
 
   section(s: DocSection): void {
@@ -418,10 +686,12 @@ function topLevel(sections: DocSection[]): number {
 }
 
 // Compose le document en lignes (sans les repartir en pages).
-export function typesetDoc(doc: ExportDoc, setup: PageSetup = A4_SETUP, params: TexParams = DEFAULT_TEX_PARAMS, style: PageStyle = DEFAULT_PAGE_STYLE): TypesetDoc {
-  const t = new Typesetter(setup, params, style, languageOf(doc.language), doc.footnotes);
+export function typesetDoc(doc: ExportDoc, setup: PageSetup = A4_SETUP, params: TexParams = DEFAULT_TEX_PARAMS, style: PageStyle = DEFAULT_PAGE_STYLE, opts: TypesetOptions = {}): TypesetDoc {
+  const language = languageOf(doc.language);
+  const t = new Typesetter(setup, params, style, language, doc.footnotes, collectAnchors(doc, language), opts, doc.title);
   t.setChapterLevel(topLevel(doc.sections));
   t.title(doc.title);
+  if (doc.toc) t.tableOfContents(doc, doc.toc.depth);
   for (const b of doc.blocks) t.block(b);
   for (const s of doc.sections) t.section(s);
   t.stats.wordCount = countWords(doc.blocks) + doc.sections.reduce((a, s) => a + sectionWords(s), 0);
