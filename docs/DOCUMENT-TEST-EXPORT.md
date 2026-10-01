@@ -1,7 +1,7 @@
-Cette note sert de contrôle visuel pour l'export (voir docs/POLITIQUE-EXPORT.md). Copiez-la dans votre coffre Obsidian pour ouvrir l'aperçu de l'export. Elle contient volontairement des mots longs comme anticonstitutionnellement ou électroencéphalographiquement, des listes, une citation, un tableau, un titre masqué et un sujet flottant, qui ne doivent pas apparaître dans l'export.
+Cette note sert de contrôle visuel pour l'export (voir docs/POLITIQUE-EXPORT.md). Copiez-la dans votre coffre Obsidian pour ouvrir l'aperçu de l'export. Elle contient volontairement des mots longs comme anticonstitutionnellement ou électroencéphalographiquement, des listes, une citation, un tableau, deux notes de bas de page, un titre masqué et un sujet flottant, qui ne doivent pas apparaître dans l'export. Pour tester la pagination, dupliquez plusieurs fois le chapitre Contexte : les en-têtes courants, les notes et les coupures de pages se répartissent alors sur plusieurs pages.
 
 # Contexte
-Le bâtiment a été construit en 1972. Sa consommation d'énergie finale est aujourd'hui supérieure à 180 kWh/m².an, soit **près du double** de l'objectif fixé par le décret tertiaire pour 2030. Les résultats détaillés figurent dans [[Audit énergétique#Résultats|le rapport d'audit]].
+Le bâtiment a été construit en 1972. Sa consommation d'énergie finale est aujourd'hui supérieure à 180 kWh/m².an, soit **près du double** de l'objectif fixé par le décret tertiaire pour 2030[^dec]. Les résultats détaillés figurent dans [[Audit énergétique#Résultats|le rapport d'audit]]^[Rapport établi par un bureau d'études indépendant, version de l'année précédente.].
 
 ## Constats
 - Isolation des murs
@@ -29,6 +29,8 @@ Ce chapitre est masqué : il ne doit pas apparaître dans l'export.
 | Éclairage | 25 | 10 |
 
 ![[plan-masse.png|Plan de masse du site]]
+
+[^dec]: Le décret tertiaire fixe des objectifs de réduction de la consommation d'énergie finale pour 2030, 2040 et 2050, par rapport à une année de référence choisie par l'exploitant. Cette note est volontairement assez longue pour tenir sur plusieurs lignes en bas de page.
 
 %% mmw-float {"x":120,"y":40} %%
 ## Idée en vrac

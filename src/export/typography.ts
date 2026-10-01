@@ -14,7 +14,7 @@ const UNITS = /(\d)[ ]+(?=(?:kWh|MWh|GWh|kW|MW|W|Wh|m²|m³|m2|m3|%|€|°C|°|k
 export function frenchSpacing(text: string): string {
   let out = text;
   // Fine insecable avant ; ! ? (suites comme ?! comprises), si la ponctuation termine un mot ou une expression.
-  out = out.replace(new RegExp(`([^${SPACES}\\s])[${SPACES}]*([;!?]+)(?=[\\s)\\]»”"]|$)`, `g`), `$1${FINE_SPACE}$2`);
+  out = out.replace(new RegExp(`([^${SPACES}\\s])[${SPACES}]*([;!?]+)(?=[\\s)\\]»”"\uE000]|$)`, `g`), `$1${FINE_SPACE}$2`);
   // Insecable avant les deux-points, sauf dans une heure (10:30) ou une adresse (http://).
   out = out.replace(new RegExp(`([^${SPACES}\\s:])[${SPACES}]*:(?=\\s|$)`, `g`), `$1${NO_BREAK_SPACE}:`);
   // Guillemets francais : insecable a l'interieur.

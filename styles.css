@@ -1487,6 +1487,41 @@
   background: linear-gradient(#999, #999) 12pt 0 / 2px 100% no-repeat;
 }
 
+.mmw-sup {
+  position: relative;
+  top: -0.38em;
+  font-size: 70%;
+}
+
+.mmw-row-note-marker {
+  font-size: 70%;
+  top: -0.3em;
+}
+
+.mmw-export-header {
+  position: absolute;
+  padding-bottom: 3pt;
+  border-bottom: 0.4pt solid #999;
+  font-size: 9pt;
+  color: #555;
+}
+
+.mmw-export-notes {
+  position: absolute;
+}
+
+/* Filet de separation des notes : un tiers de la largeur, au haut de la zone qui lui est reservee. */
+.mmw-export-rule {
+  box-sizing: border-box;
+  width: 33%;
+  padding-top: 3pt;
+  border-top: 0.4pt solid #444;
+}
+
+.mmw-export-notes .mmw-row {
+  position: relative;
+}
+
 .mmw-export-number {
   position: absolute;
   right: 0;

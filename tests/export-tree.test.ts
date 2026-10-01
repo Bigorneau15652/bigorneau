@@ -148,3 +148,17 @@ test(`une ligne de tableau sans cellule remplie est ignoree`, () => {
   const blocks = parseBlocks([`| a | b |`, `| --- | --- |`, `| 1 | 2 |`, `|  |  |`].join(`\n`));
   assert.deepEqual(blocks, [{ type: `table`, rows: [[`a`, `b`], [`1`, `2`]] }]);
 });
+
+test(`les definitions de notes de bas de page sont retirees du texte et rassemblees`, () => {
+  const doc = buildExportDoc([`# A`, `Un appel[^1] et un autre[^deux].`, ``, `[^1]: Premiere note,`, `    suite sur la ligne suivante.`, `[^deux]: Seconde note.`, ``, `Fin du texte.`].join(`\n`), `N.md`);
+  assert.deepEqual(doc.footnotes, { "1": `Premiere note, suite sur la ligne suivante.`, deux: `Seconde note.` });
+  assert.deepEqual(doc.sections[0].blocks, [
+    { type: `paragraph`, text: `Un appel[^1] et un autre[^deux].` },
+    { type: `paragraph`, text: `Fin du texte.` },
+  ]);
+});
+
+test(`une definition ecrite dans un bloc de code reste du code`, () => {
+  const blocks = parseBlocks([`\`\`\``, `[^1]: pas une note`, `\`\`\``].join(`\n`));
+  assert.deepEqual(blocks, [{ type: `code`, lang: ``, text: `[^1]: pas une note` }]);
+});

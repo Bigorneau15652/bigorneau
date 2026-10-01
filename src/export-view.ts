@@ -2,7 +2,8 @@
 // Phase 2 : coupure de lignes de Knuth et Plass avec cesure ; la pagination definitive et le PDF arrivent aux phases suivantes.
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { buildExportDoc } from "./export/doc-tree";
-import { A4_SETUP, paginateRows, Row, typesetDoc } from "./export/typeset";
+import { FOOTNOTE_RULE_HEIGHT, paginate } from "./export/paginate";
+import { A4_SETUP, DEFAULT_PAGE_STYLE, Row, typesetDoc } from "./export/typeset";
 import { EXPORT_FONT_FAMILY, loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
@@ -76,10 +77,17 @@ export class ExportPreviewView extends ItemView {
     if (row.quality?.overfull) el.addClass(`mmw-q-over`);
     if (row.quality?.hyphenated) el.addClass(`mmw-q-hyph`);
     if (row.marker !== undefined) {
-      const m = el.createSpan({ cls: `mmw-row-marker`, text: row.marker });
-      m.style.left = `${row.x - 16}pt`;
+      const m = el.createSpan({ cls: row.kind === `footnote` ? `mmw-row-marker mmw-row-note-marker` : `mmw-row-marker`, text: row.marker });
+      m.style.left = `${row.kind === `footnote` ? 0 : row.x - 16}pt`;
     }
-    el.appendChild(document.createTextNode(row.text));
+    // Les appels de notes de bas de page sont des numeros en exposant, a 70 % du corps du texte comme dans le calcul.
+    let at = 0;
+    for (const [from, to] of row.sups ?? []) {
+      if (from > at) el.appendChild(document.createTextNode(row.text.slice(at, from)));
+      el.createSpan({ cls: `mmw-sup`, text: row.text.slice(from, to) });
+      at = to;
+    }
+    if (at < row.text.length) el.appendChild(document.createTextNode(row.text.slice(at)));
   }
 
   async refresh() {
@@ -102,23 +110,26 @@ export class ExportPreviewView extends ItemView {
     if (token !== this.token) return;
 
     const typeset = typesetDoc(buildExportDoc(text, file.name));
-    const pages = paginateRows(typeset.rows);
+    const pages = paginate(typeset, A4_SETUP, DEFAULT_PAGE_STYLE);
     const s = typeset.stats;
     root.empty();
     root.toggleClass(`mmw-show-quality`, this.showQuality);
 
     const head = root.createDiv({ cls: `mmw-export-head` });
     head.createDiv({ cls: `mmw-export-title`, text: t(`Aperçu de l'export : {0}`, file.basename) });
-    head.createDiv({ cls: `mmw-export-stats`, text: t(`{0} pages, {1} mots`, pages.length, s.wordCount) });
+    head.createDiv({ cls: `mmw-export-stats`, text: t(`{0} pages, {1} mots, {2} notes de bas de page`, pages.length, s.wordCount, s.footnotes) });
     head.createDiv({
       cls: `mmw-export-stats`,
       text: t(`{0} lignes, dont {1} avec césure ({2} consécutives) ; {3} lâches, {4} serrées, {5} débordantes`, s.lines, s.hyphenatedLines, s.consecutiveHyphens, s.looseLines, s.tightLines, s.overfullLines),
     });
+    for (const w of typeset.warnings) {
+      if (w.startsWith(`note:`)) head.createDiv({ cls: `mmw-export-stats`, text: t(`Note de bas de page sans définition : {0}`, w.slice(5)) });
+    }
     if (typeset.missing.length > 0) {
       head.createDiv({ cls: `mmw-export-stats`, text: t(`Caractères absents de la police : {0}`, typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)) });
     }
     if (!fontOk) head.createDiv({ cls: `mmw-export-stats`, text: t(`Police de l'export indisponible : l'aperçu utilise une autre police.`) });
-    head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de la phase 2 : coupure de lignes de Knuth et Plass avec césure. Les titres masqués et les sujets flottants ne sont pas exportés.`) });
+    head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de la phase 3 : pagination, notes de bas de page et en-têtes courants. Les titres masqués et les sujets flottants ne sont pas exportés.`) });
     const toggle = head.createEl(`label`, { cls: `mmw-export-toggle` });
     const box = toggle.createEl(`input`, { type: `checkbox` });
     box.checked = this.showQuality;
@@ -130,18 +141,34 @@ export class ExportPreviewView extends ItemView {
 
     const host = root.createDiv({ cls: `mmw-export-pages` });
     this.sheets = [];
-    pages.forEach((rows, index) => {
+    pages.forEach((pg) => {
       const sheet = host.createDiv({ cls: `mmw-export-sheet` });
       const page = sheet.createDiv({ cls: `mmw-export-page` });
       page.style.width = `${A4_SETUP.width}pt`;
       page.style.height = `${A4_SETUP.height}pt`;
       page.style.fontFamily = `"${EXPORT_FONT_FAMILY}", serif`;
+      const textWidth = A4_SETUP.width - A4_SETUP.marginLeft - A4_SETUP.marginRight;
+      if (pg.header) {
+        const h = page.createDiv({ cls: `mmw-export-header`, text: pg.header });
+        h.style.left = `${A4_SETUP.marginLeft}pt`;
+        h.style.top = `${A4_SETUP.marginTop - 34}pt`;
+        h.style.width = `${textWidth}pt`;
+      }
       const body = page.createDiv({ cls: `mmw-export-body` });
       body.style.left = `${A4_SETUP.marginLeft}pt`;
       body.style.top = `${A4_SETUP.marginTop}pt`;
-      body.style.width = `${A4_SETUP.width - A4_SETUP.marginLeft - A4_SETUP.marginRight}pt`;
-      for (const row of rows) this.renderRow(body, row);
-      page.createDiv({ cls: `mmw-export-number`, text: String(index + 1) });
+      body.style.width = `${textWidth}pt`;
+      for (const row of pg.rows) this.renderRow(body, row);
+      if (pg.footnotes.length > 0) {
+        const notes = page.createDiv({ cls: `mmw-export-notes` });
+        notes.style.left = `${A4_SETUP.marginLeft}pt`;
+        notes.style.bottom = `${A4_SETUP.marginBottom}pt`;
+        notes.style.width = `${textWidth}pt`;
+        const rule = notes.createDiv({ cls: `mmw-export-rule` });
+        rule.style.height = `${FOOTNOTE_RULE_HEIGHT}pt`;
+        for (const row of pg.footnotes) this.renderRow(notes, row);
+      }
+      if (pg.footer) page.createDiv({ cls: `mmw-export-number`, text: pg.footer });
       this.sheets.push(sheet);
     });
     this.applyScale();
