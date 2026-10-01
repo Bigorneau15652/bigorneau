@@ -51,6 +51,20 @@ if (params.get(`doc`) === `web`) {
     ``,
   ].join(`\n`);
 }
+if (params.get(`doc`) === `links`) {
+  text = [
+    `Intro`,
+    ``,
+    `## Depart`,
+    `%% mmw {"tags":["dmg"],"comment":"un commentaire"} %%`,
+    `[[Projets/Alpha|Lien vers Alpha]]`,
+    `[[Nom de la note#Arrivee|Lien vers Arrivee]]`,
+    `Voir https://exemple.org/page.`,
+    `## Milieu`,
+    `## Arrivee`,
+    ``,
+  ].join(`\n`);
+}
 const settings: MmSettings = { ...DEFAULT_SETTINGS };
 for (const [k, v] of params) {
   if (k === `select` || k === `collapse` || k === `doc`) continue;
@@ -127,6 +141,10 @@ const renderer: MapRenderer = new MapRenderer(mapHost, () => settings, {
     const next = replace ? replaceLink(text, doc, replace, note, heading) : insertLink(text, doc, from, note, heading);
     if (next) text = next;
     renderer.setDoc(parseNote(text, name), `sample.md`, true);
+  },
+  onInternalLinks: (links) => {
+    calls.push(`goto:${links.map((l) => l.to).join(`,`)}`);
+    if (links[0]?.to) renderer.select(links[0].to);
   },
   onWebOpen: (links) => calls.push(`web:${links.map((l) => l.url).join(`,`)}`),
   onLinkOpen: (links) => calls.push(`open:${links.map((l) => l.note + `#` + l.heading).join(`,`)}`),

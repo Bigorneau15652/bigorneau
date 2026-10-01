@@ -129,6 +129,7 @@ export class MindmapView extends ItemView {
       onWebOpen: (links, event) => this.openWeb(links, event),
       onLinkDelete: (link) => this.queue(() => this.deleteLink(link)),
       onLinkOpen: (links, event) => this.openLinks(links, event),
+      onInternalLinks: (links, event) => this.goToLinks(links, event),
       onBack: () => void this.goBack(),
     });
     await this.refresh();
@@ -545,6 +546,24 @@ export class MindmapView extends ItemView {
     }
     const menu = new Menu();
     for (const l of links) menu.addItem((item) => item.setTitle(l.heading ? `${l.note} › ${l.heading}` : l.note).setIcon(`link`).onClick(() => void this.openLink(l, tab)));
+    menu.showAtMouseEvent(event as unknown as MouseEvent);
+  }
+
+  // Repere d'un titre dont les fleches sont repliees : va au titre vise, ou propose le choix.
+  private goToLinks(links: MapLink[], event: PointerEvent) {
+    const renderer = this.renderer;
+    if (!renderer || links.length === 0) return;
+    const go = (l: MapLink) => {
+      if (!l.to) return;
+      renderer.reveal(l.to);
+      renderer.select(l.to);
+    };
+    if (links.length === 1) {
+      go(links[0]);
+      return;
+    }
+    const menu = new Menu();
+    for (const l of links) menu.addItem((item) => item.setTitle(l.heading ?? ``).setIcon(`corner-down-right`).onClick(() => go(l)));
     menu.showAtMouseEvent(event as unknown as MouseEvent);
   }
 
