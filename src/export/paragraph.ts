@@ -43,6 +43,9 @@ export interface TypesetLine {
   overfull: boolean;
   // Derniere ligne du paragraphe.
   last: boolean;
+  // Appels de notes de bas de page de la ligne : cles des notes, et intervalles du texte a afficher en exposant.
+  notes: number[];
+  sups: [number, number][];
 }
 
 export interface TypesetParagraph {
@@ -52,6 +55,11 @@ export interface TypesetParagraph {
   // Caracteres absents de la police.
   missing: number[];
 }
+
+// Appel de note de bas de page prepare par la composition du document : cle de la note, numero affiche.
+export const NOTE_CALL = /\uE000(\d+),(\d+)\uE001/g;
+// Taille d'un numero d'appel, en fraction du corps du texte.
+export const SUP_SCALE = 0.7;
 
 const WORD_RUN = /[\p{L}\x27\u2019]+/gu;
 const APOSTROPHE = /[\x27\u2019]/;
@@ -99,6 +107,12 @@ function buildItems(text: string, o: ParagraphOptions, p: TexParams, lang: Hyphe
     pushBox(seg.slice(last));
   };
 
+  // Appel de note de bas de page : numero en exposant, colle au mot qui precede.
+  const pushCall = (key: number, label: string): void => {
+    const m = measureText(label, size * SUP_SCALE);
+    items.push({ type: `box`, width: m.width, text: label, sup: true, note: key });
+  };
+
   // Un morceau est un mot sans espace : on le coupe aux tirets explicites, qui sont des points de coupure sans largeur.
   const pushPiece = (piece: string, hyphenOk: boolean): void => {
     let start = 0;
@@ -110,6 +124,16 @@ function buildItems(text: string, o: ParagraphOptions, p: TexParams, lang: Hyphe
       }
     }
     pushSegment(piece.slice(start), hyphenOk);
+  };
+
+  const pushPieceWithCalls = (piece: string, hyphenOk: boolean): void => {
+    let last = 0;
+    for (const m of piece.matchAll(NOTE_CALL)) {
+      pushPiece(piece.slice(last, m.index), hyphenOk);
+      pushCall(Number(m[1]), m[2]);
+      last = (m.index ?? 0) + m[0].length;
+    }
+    pushPiece(piece.slice(last), hyphenOk);
   };
 
   const source = o.language === `fr` ? frenchSpacing(text) : text;
@@ -129,7 +153,7 @@ function buildItems(text: string, o: ParagraphOptions, p: TexParams, lang: Hyphe
         pushBox(FINE_SPACE);
       } else {
         const lastPart = lastWord && pi === parts.length - 1;
-        pushPiece(part, o.hyphenateLastWord === true || !lastPart);
+        pushPieceWithCalls(part, o.hyphenateLastWord === true || !lastPart);
       }
     });
   });
@@ -163,10 +187,16 @@ export function typesetParagraph(text: string, o: ParagraphOptions): TypesetPara
     let width = 0;
     let stretch = 0;
     let shrink = 0;
+    const notes: number[] = [];
+    const sups: [number, number][] = [];
     for (let i = bl.from; i < bl.to; i++) {
       const it = items[i];
       if (it.type === `penalty`) continue;
       width += it.width;
+      if (it.type === `box` && it.sup) {
+        sups.push([shown.length, shown.length + it.text.length]);
+        if (it.note !== undefined) notes.push(it.note);
+      }
       shown += it.text;
       if (it.type === `glue` && !it.fil) {
         stretch += it.stretch;
@@ -197,6 +227,8 @@ export function typesetParagraph(text: string, o: ParagraphOptions): TypesetPara
       hyphenated: bl.hyphenated,
       overfull: bl.overfull,
       last,
+      notes,
+      sups,
     };
   });
   return { lines, pass: result.pass, demerits: result.demerits, missing };
@@ -209,7 +241,7 @@ function greedyLines(items: Item[], o: ParagraphOptions): TypesetLine[] {
   let width = 0;
   let pendingGlue: Item | null = null;
   const flush = (last: boolean): void => {
-    lines.push({ text: Array.from(shown).map(displayChar).join(``), offset: 0, wordSpacing: 0, width, ratio: 0, badness: 0, fitness: DECENT, hyphenated: false, overfull: width > o.lineWidth, last });
+    lines.push({ text: Array.from(shown).map(displayChar).join(``), offset: 0, wordSpacing: 0, width, ratio: 0, badness: 0, fitness: DECENT, hyphenated: false, overfull: width > o.lineWidth, last, notes: [], sups: [] });
     shown = ``;
     width = 0;
   };

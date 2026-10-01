@@ -8,7 +8,8 @@ import { AWFUL_DEMERITS, DECENT, Fitness, INF_BAD, INF_PENALTY, LOOSE, TexParams
 
 export type Item =
   // Mot ou morceau de mot, de largeur fixe.
-  | { type: `box`; width: number; text: string }
+  // `sup` : appel de note de bas de page en exposant ; `note` : cle de la note appelee.
+  | { type: `box`; width: number; text: string; sup?: boolean; note?: number }
   // Espace : largeur naturelle, etirement et compression. `fil` indique un etirement infini (fin de paragraphe).
   | { type: `glue`; width: number; stretch: number; shrink: number; fil?: boolean; text: string }
   // Endroit de coupure possible. `width` est la largeur ajoutee a la ligne si l'on coupe ici (le tiret d'une cesure).

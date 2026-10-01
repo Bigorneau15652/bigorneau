@@ -33,6 +33,9 @@ export interface ExportDoc {
   // Texte place avant le premier titre.
   blocks: DocBlock[];
   sections: DocSection[];
+  // Texte des notes de bas de page, par identifiant. Les definitions sont reprises de toute la note, y compris des chapitres
+  // masques : un appel d'un chapitre exporte peut renvoyer a une definition ecrite ailleurs.
+  footnotes: Record<string, string>;
 }
 
 export interface ExtractOptions {
@@ -112,6 +115,55 @@ export function stripComments(text: string): string {
   return out.join(`\n`);
 }
 
+// Appel de note de bas de page : [^id] dans le texte, ou ^[texte] ecrit directement dans la phrase.
+export const FOOTNOTE_CALL_RE = /\[\^([^\]\s]+)\]|\^\[([^\]]*)\]/g;
+const FOOTNOTE_DEF_RE = /^ {0,3}\[\^([^\]\s]+)\]:[ \t]*(.*)$/;
+
+// Separe les definitions de notes de bas de page ([^id]: texte, avec suite indentee) du reste du texte. Le texte a deja
+// perdu ses commentaires.
+export function splitFootnoteDefinitions(text: string): { text: string; defs: Record<string, string> } {
+  const out: string[] = [];
+  const defs: Record<string, string> = {};
+  let fence: { ch: string; len: number } | null = null;
+  let cur: { id: string; parts: string[] } | null = null;
+  let blank = false;
+  const finish = (): void => {
+    if (cur && !(cur.id in defs)) defs[cur.id] = cur.parts.filter((p) => p !== ``).join(` `);
+    cur = null;
+  };
+  for (const line of text.split(`\n`)) {
+    if (fence) {
+      out.push(line);
+      if (fenceCloses(line, fence)) fence = null;
+      continue;
+    }
+    if (cur) {
+      if (/^[ \t]+\S/.test(line)) {
+        cur.parts.push(line.trim());
+        blank = false;
+        continue;
+      }
+      if (line.trim() === ``) {
+        blank = true;
+        continue;
+      }
+      finish();
+      if (blank) out.push(``);
+      blank = false;
+    }
+    const m = FOOTNOTE_DEF_RE.exec(line);
+    if (m) {
+      cur = { id: m[1], parts: [m[2].trim()] };
+      continue;
+    }
+    const opened = fenceOpen(line);
+    if (opened) fence = opened;
+    out.push(line);
+  }
+  finish();
+  return { text: out.join(`\n`), defs };
+}
+
 function splitRow(line: string): string[] {
   let s = line.trim();
   if (s.startsWith(`|`)) s = s.slice(1);
@@ -127,7 +179,7 @@ function indentWidth(s: string): number {
 
 // Decoupe le texte situe sous un titre en blocs.
 export function parseBlocks(text: string): DocBlock[] {
-  const lines = stripComments(text).split(`\n`);
+  const lines = splitFootnoteDefinitions(stripComments(text)).text.split(`\n`);
   const blocks: DocBlock[] = [];
   let para: string[] = [];
   const flushPara = (): void => {
@@ -272,6 +324,13 @@ export function buildExportDoc(text: string, fileName: string, opts: ExtractOpti
   if (opts.includeFloats) {
     for (const f of doc.floats) if (opts.includeHidden || !f.meta?.hidden) sections.push(buildSection(f, opts));
   }
+  const footnotes: Record<string, string> = {};
+  const collect = (n: MmNode): void => {
+    for (const [id, text] of Object.entries(splitFootnoteDefinitions(stripComments(n.body)).defs)) if (!(id in footnotes)) footnotes[id] = text;
+    n.children.forEach(collect);
+  };
+  collect(doc.root);
+  doc.floats.forEach(collect);
   const lang = /^(?:lang|langue|language)[ \t]*:[ \t]*[\x22\x27\x60]?([A-Za-z]{2}(?:-[A-Za-z]+)?)/m.exec(doc.frontmatter);
-  return { title: doc.root.title, ...(lang ? { language: lang[1] } : {}), blocks: parseBlocks(doc.root.body), sections };
+  return { title: doc.root.title, ...(lang ? { language: lang[1] } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
 }

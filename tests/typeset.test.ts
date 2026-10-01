@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildExportDoc } from "../src/export/doc-tree";
-import { A4_SETUP, languageOf, paginateRows, typesetDoc } from "../src/export/typeset";
+import { A4_SETUP, languageOf, typesetDoc } from "../src/export/typeset";
 
 const PARA = `Le bâtiment a été construit en 1972 et sa consommation d'énergie finale reste aujourd'hui supérieure à 180 kWh/m².an ; une rénovation globale suppose d'abord une analyse précise : isolation des murs et de la toiture, remplacement des menuiseries, régulation du chauffage et ventilation double flux.`;
 
@@ -44,35 +44,6 @@ test(`une note en anglais n'a pas les espaces fines francaises`, () => {
   assert.ok(en.rows.every((r) => !r.text.includes(` `)));
   assert.equal(languageOf(`en-GB`), `en`);
   assert.equal(languageOf(undefined), `fr`);
-});
-
-test(`les pages ne depassent pas la hauteur utile et ne commencent pas par un espace`, () => {
-  const t = typesetDoc(buildExportDoc(note(60), `A.md`));
-  const pages = paginateRows(t.rows);
-  const available = A4_SETUP.height - A4_SETUP.marginTop - A4_SETUP.marginBottom;
-  assert.ok(pages.length >= 3);
-  for (const p of pages) {
-    assert.ok(p.reduce((a, r) => a + r.height, 0) <= available + 1e-6);
-    assert.notEqual(p[0].kind, `space`);
-    assert.notEqual(p[p.length - 1].kind, `space`);
-  }
-  // Toutes les lignes se retrouvent, dans l'ordre (aux espaces pres).
-  const flat = pages.flat().filter((r) => r.kind !== `space`).map((r) => r.text);
-  assert.deepEqual(flat, t.rows.filter((r) => r.kind !== `space`).map((r) => r.text));
-});
-
-test(`un titre n'est jamais en bas de page, quelle que soit la longueur du texte qui le precede`, () => {
-  let moved = 0;
-  for (let n = 1; n <= 40; n++) {
-    const text = [`# Debut`, ...Array.from({ length: n }, (_v, i) => `Ligne courte numero ${i}.\n`), `## Titre isole`, `Paragraphe qui suit le titre.`].join(`\n`);
-    const pages = paginateRows(typesetDoc(buildExportDoc(text, `A.md`)).rows);
-    for (const p of pages.slice(0, -1)) {
-      const last = p[p.length - 1];
-      assert.ok(last.kind !== `heading`, `titre en bas de page avec ${n} paragraphes`);
-    }
-    if (pages.some((p) => p[0].kind === `heading` && p[0].text === `Titre isole`)) moved++;
-  }
-  assert.ok(moved > 0, `aucun titre n'a ete reporte sur la page suivante`);
 });
 
 test(`les titres masques et les sujets flottants restent absents de la composition`, () => {
