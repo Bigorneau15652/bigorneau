@@ -5,6 +5,7 @@ import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
+import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
 
@@ -76,6 +77,7 @@ export default class MindmapWritingPlugin extends Plugin {
     );
 
     this.registerView(VIEW_TYPE_MINDMAP, (leaf) => new MindmapView(leaf, this));
+    this.registerView(VIEW_TYPE_EXPORT, (leaf) => new ExportPreviewView(leaf, this));
 
     this.registerEvent(this.app.workspace.on(`layout-change`, () => this.syncFixed()));
     this.registerEvent(this.app.workspace.on(`active-leaf-change`, (leaf) => void this.swapIfFixed(leaf)));
@@ -187,6 +189,17 @@ export default class MindmapWritingPlugin extends Plugin {
       callback: () => this.forEachView((v) => v.focusMap()),
     });
 
+    // L'export de haute qualite est reserve a l'ordinateur : sur tablette et telephone, la commande n'est pas proposee.
+    this.addCommand({
+      id: `export-preview`,
+      name: t(`Aperçu de l'export de la note`),
+      checkCallback: (checking) => {
+        if (!Platform.isDesktop) return false;
+        if (!checking) void this.openExportPreview();
+        return true;
+      },
+    });
+
     this.addCommand({
       id: `open-mindmap-view`,
       name: t(`Ouvrir la carte de la note active`),
@@ -201,6 +214,7 @@ export default class MindmapWritingPlugin extends Plugin {
     this.forEachView((v) => v.clearActive());
     for (const cm of this.editorViews) if (this.fixedFor(cm)) clearFixedState(cm);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MINDMAP);
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_EXPORT);
     document.body.style.removeProperty(`--mmw-inactive-opacity`);
   }
 
@@ -402,6 +416,31 @@ export default class MindmapWritingPlugin extends Plugin {
 
   private refreshViews() {
     this.forEachView((view) => void view.refresh());
+    this.refreshExportPreviews();
+  }
+
+  private refreshExportPreviews() {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_EXPORT)) {
+      if (leaf.view instanceof ExportPreviewView) void leaf.view.refresh();
+    }
+  }
+
+  // Ouvre l'apercu de l'export a cote de la note (ou le montre s'il est deja ouvert).
+  async openExportPreview() {
+    if (!Platform.isDesktop) return;
+    const { workspace } = this.app;
+    this.rememberFile(workspace.getActiveFile());
+    if (!this.lastFile) {
+      new Notice(t(`Ouvrez d'abord une note.`));
+      return;
+    }
+    let leaf: WorkspaceLeaf | null = workspace.getLeavesOfType(VIEW_TYPE_EXPORT)[0] ?? null;
+    if (!leaf) {
+      leaf = workspace.getLeaf(`split`, `vertical`);
+      await leaf.setViewState({ type: VIEW_TYPE_EXPORT, active: true });
+    }
+    workspace.revealLeaf(leaf);
+    if (leaf.view instanceof ExportPreviewView) await leaf.view.refresh();
   }
 
   // Texte actuel d'une note ouverte dans un editeur (y compris les modifications pas encore enregistrees).
