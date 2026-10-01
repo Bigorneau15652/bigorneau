@@ -2,11 +2,11 @@
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
 import { computeStats, flattenDoc, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
 import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
-import { buildLayoutTree, Bounds, childIndent, computeLayout, flatten, LNode, sequential, trunkX } from "./layout";
+import { buildLayoutTree, Bounds, childIndent, computeLayout, computeListLayout, flatten, listIndent, LNode, sequential, trunkX } from "./layout";
 import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
-import { makeTag, MmSettings } from "./settings";
+import { makeTag, MmSettings, ViewMode } from "./settings";
 import { linkPath, loopPath, sidePath } from "./link-geom";
 import { MapLink, parseLinks, WebLink, webLinks } from "./links";
 import { HeadingItem, VaultPicker } from "./vault-picker";
@@ -84,6 +84,9 @@ const OPEN_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" s
 const LINK_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-.7.7"/><path d="M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l.7-.7"/></svg>`;
 const INT_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5a3 3 0 0 0 3 3h7"/><path d="m10 8 3 3-3 3"/></svg>`;
 
+// Triangle de repli de la vue Liste.
+const FOLD_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>`;
+
 // Mappemonde affichee sur un titre qui contient des liens web ou des videos integrees.
 const WEB_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2.2 2.2 9.8 0 12M8 2c-2.2 2.2-2.2 9.8 0 12"/></svg>`;
 
@@ -158,6 +161,11 @@ export class MapRenderer {
   private linkDrag: { link: MapLink; box: { link: MapLink; el: HTMLElement; x: number; y: number; w: number; h: number }; sy: number; started: boolean; dy: number } | null = null;
   private webDialog: WebDialog | null = null;
   private picker: VaultPicker | null = null;
+  // Vue Liste : largeur d'une ligne, derniere vue affichee (pour recadrer au changement), trait de depot d'un glisser.
+  private listWidth = 0;
+  private lastView: ViewMode | null = null;
+  private dropLineEl: HTMLElement | null = null;
+  private dropLine: { x: number; y: number } | null = null;
   private webByKey = new Map<string, WebLink[]>();
   private extBoxes: { link: MapLink; el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
   private linkHint: HTMLElement | null = null;
@@ -218,6 +226,7 @@ export class MapRenderer {
       scopeLabel: (individual) => this.scopeLabel(individual),
       toggleLink: () => (this.linking ? this.stopLinking() : this.startLinking()),
       back: () => this.callbacks.onBack?.(),
+      toggleView: () => this.callbacks.onChange({ viewMode: this.isList() ? `map` : `list` }),
     });
 
     this.statusEl = document.createElement(`div`);
@@ -261,7 +270,7 @@ export class MapRenderer {
 
     const ro = new ResizeObserver(() => {
       if (this.mapEl.clientWidth === 0) return;
-      if (this.needsRebuild) this.rebuild();
+      if (this.needsRebuild || this.isList()) this.rebuild();
       else this.fit();
     });
     ro.observe(this.mapEl);
@@ -350,8 +359,18 @@ export class MapRenderer {
 
   // ---------------------------------------------------------------- construction
 
+  private isList(): boolean {
+    return this.getSettings().viewMode === `list`;
+  }
+
   rebuild(): void {
     const s = this.getSettings();
+    const list = s.viewMode === `list`;
+    this.mapEl.classList.toggle(`mmw-list`, list);
+    this.mapEl.classList.toggle(`mmw-stripes`, list && s.listStripes);
+    // Au changement de vue, la carte ou la liste est recadree.
+    if (this.lastView !== null && this.lastView !== s.viewMode) this.fitPending = true;
+    this.lastView = s.viewMode;
     this.mapEl.style.setProperty(`--mmw-max-w`, `${s.maxWidth}px`);
     this.mapEl.classList.toggle(`mmw-wrap`, s.longTitles === `wrap`);
     // Menu de l'oeil : elements masques et vue en noir et blanc.
@@ -404,22 +423,30 @@ export class MapRenderer {
     }
     this.els.clear();
     this.eyes.clear();
-    for (const n of this.list) {
+    this.dropLineEl = null;
+    // Vue Liste : les lignes occupent toute la largeur disponible ; chaque niveau est decale de `indent`.
+    const indent = listIndent(s.compactness);
+    this.listWidth = Math.max(260, (this.mapEl.clientWidth - 32) / this.scale);
+    this.list.forEach((n, i) => {
       const el = this.createNodeEl(n, s);
+      if (list) {
+        el.style.width = `${Math.max(40, this.listWidth - n.depth * indent)}px`;
+        if (i % 2 === 1) el.classList.add(`mmw-odd`);
+      }
       this.worldEl.appendChild(el);
       this.els.set(n.key, el);
-    }
+    });
     for (const n of this.list) {
       const el = this.els.get(n.key)!;
       n.w = el.offsetWidth;
       n.h = el.offsetHeight;
     }
-    this.bounds = computeLayout(this.root, s.compactness);
+    this.bounds = list ? computeListLayout(this.root, indent, this.listWidth) : computeLayout(this.root, s.compactness);
     for (const n of this.list) {
       const el = this.els.get(n.key)!;
       el.style.left = `${n.x}px`;
       el.style.top = `${n.y}px`;
-      if (n.hasChildren && n.depth >= 1) this.worldEl.appendChild(this.createFold(n));
+      if (n.hasChildren && n.depth >= 1) this.worldEl.appendChild(list ? this.createListFold(n) : this.createFold(n));
       const eye = this.createEye(n);
       if (eye) {
         this.worldEl.appendChild(eye);
@@ -467,11 +494,13 @@ export class MapRenderer {
     if (this.isHidden(n)) el.classList.add(`mmw-hidden`);
     const st = this.styleOf(n);
     el.style.setProperty(`--mmw-node-color`, st.strokeColor || `var(--text-normal)`);
-    el.style.setProperty(`--mmw-node-font`, FONT_CSS[st.fontFamily] ?? `inherit`);
-    el.style.setProperty(`--mmw-node-size`, `${BASE_EM[Math.min(n.depth, 2)] * st.fontScale}em`);
-    el.style.setProperty(`--mmw-node-align`, st.textAlign);
-    el.style.setProperty(`--mmw-pad`, String(padFactor(s.compactness, st.showFrames)));
-    el.style.setProperty(`--mmw-node-justify`, st.textAlign === `left` ? `flex-start` : st.textAlign === `right` ? `flex-end` : `center`);
+    const list = s.viewMode === `list`;
+    // Vue Liste : police du theme (ou celle de la carte si on le demande), taille uniforme, texte a gauche.
+    el.style.setProperty(`--mmw-node-font`, list && !s.listMapFont ? `inherit` : FONT_CSS[st.fontFamily] ?? `inherit`);
+    el.style.setProperty(`--mmw-node-size`, list ? `${(n.depth === 0 ? 1.1 : 1) * st.fontScale}em` : `${BASE_EM[Math.min(n.depth, 2)] * st.fontScale}em`);
+    el.style.setProperty(`--mmw-node-align`, list ? `left` : st.textAlign);
+    el.style.setProperty(`--mmw-pad`, list ? String(Math.max(0.3, s.compactness)) : String(padFactor(s.compactness, st.showFrames)));
+    el.style.setProperty(`--mmw-node-justify`, list || st.textAlign === `left` ? `flex-start` : st.textAlign === `right` ? `flex-end` : `center`);
     const meta = n.node.meta;
     const title = n.node.title;
     // Le titre court remplace le titre sur la carte ; la note garde le titre complet.
@@ -498,17 +527,18 @@ export class MapRenderer {
     }
 
     // Liens replies (menu de l'oeil) : un repere colore par sorte de lien, a la place des cases et des fleches.
-    if (!s.showExternalLinks) {
+    // Carte : repere seulement si les cases sont repliees ; liste : repere si les liens sont affiches.
+    if (list ? s.showExternalLinks : !s.showExternalLinks) {
       const ext = this.links.filter((l) => l.from === n.key && l.external);
       if (ext.length > 0) {
         const mark = document.createElement(`span`);
         mark.className = `mmw-link-mark`;
-        mark.innerHTML = LINK_ICON;
+        mark.innerHTML = list ? OPEN_ICON : LINK_ICON;
         mark.title = ext.map((l) => (l.heading ? `${l.note} › ${l.heading}` : l.note)).join(`\n`);
         el.appendChild(mark);
       }
     }
-    if (!s.showInternalLinks) {
+    if (list ? s.showInternalLinks : !s.showInternalLinks) {
       const inner = this.links.filter((l) => l.from === n.key && !l.external && l.to);
       if (inner.length > 0) {
         const mark = document.createElement(`span`);
@@ -565,8 +595,14 @@ export class MapRenderer {
     el.dataset.eye = n.key;
     el.innerHTML = own ? EYE_OFF_ICON : EYE_ICON;
     el.title = own ? `Afficher ce titre dans la note` : `Masquer ce titre dans la note`;
-    el.style.left = `${n.x + n.w - 10}px`;
-    el.style.top = `${n.y - 9}px`;
+    if (this.isList()) {
+      // Vue Liste : l'oeil est a l'extremite droite de la ligne.
+      el.style.left = `${n.x + n.w - 28}px`;
+      el.style.top = `${n.y + n.h / 2 - 10}px`;
+    } else {
+      el.style.left = `${n.x + n.w - 10}px`;
+      el.style.top = `${n.y - 9}px`;
+    }
     return el;
   }
 
@@ -575,6 +611,18 @@ export class MapRenderer {
     if (this.eyeHover) this.eyes.get(this.eyeHover)?.classList.remove(`mmw-eye-show`);
     this.eyeHover = key;
     if (key) this.eyes.get(key)?.classList.add(`mmw-eye-show`);
+  }
+
+  // Vue Liste : petit triangle a gauche du titre, qui replie ou deplie ses enfants.
+  private createListFold(n: LNode): HTMLElement {
+    const el = document.createElement(`div`);
+    el.className = `mmw-lfold` + (n.collapsed ? ` mmw-lfold-collapsed` : ``);
+    el.dataset.fold = n.key;
+    el.innerHTML = FOLD_ICON;
+    el.title = n.collapsed ? `Déplier` : `Replier`;
+    el.style.left = `${n.x + 6}px`;
+    el.style.top = `${n.y + n.h / 2 - 9}px`;
+    return el;
   }
 
   private createFold(n: LNode): HTMLElement {
@@ -599,6 +647,12 @@ export class MapRenderer {
   private draw(s: MmSettings): void {
     this.svgEl.replaceChildren();
     if (!this.root) return;
+    if (s.viewMode === `list`) {
+      // Vue Liste : ni cadre, ni trait, ni fleche ; seules les pointes de fleche du trait de creation de lien existent.
+      this.svgEl.appendChild(this.markerDefs());
+      this.updateLinkPreview(null);
+      return;
+    }
     const styles = new Map<string, NodeStyle>(this.list.map((n) => [n.key, this.styleOf(n)]));
     const styleOf = (n: LNode): NodeStyle => styles.get(n.key)!;
 
@@ -673,7 +727,8 @@ export class MapRenderer {
   private layoutExternals(): void {
     for (const b of this.extBoxes) b.el.remove();
     this.extBoxes = [];
-    if (!this.bounds) return;
+    // Vue Liste : pas de cases a gauche, les liens vers d'autres notes sont des reperes sur la ligne.
+    if (!this.bounds || this.isList()) return;
     const made: { link: MapLink; el: HTMLElement }[] = [];
     const showExternal = this.getSettings().showExternalLinks;
     for (const l of this.links) {
@@ -718,12 +773,17 @@ export class MapRenderer {
   // Fleches en pointille entre les titres relies, du bord droit au bord droit ; vers une note exterieure, du bord gauche
   // a sa case. Elles sont neutres, ou bleues (couleur des liens du theme) selon le reglage ; toujours bleues quand elles
   // sont selectionnees, et pour les notes exterieures.
-  private drawLinks(s: MmSettings): void {
+  // Pointes de fleche, neutre et bleue.
+  private markerDefs(): SVGElement {
     const defs = document.createElementNS(SVG_NS, `defs`);
     const marker = (id: string, cls: string): string =>
       `<marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" class="${cls}"/></marker>`;
     defs.innerHTML = marker(`mmw-arrow`, `mmw-link-head`) + marker(`mmw-arrow-blue`, `mmw-link-head mmw-link-head-blue`);
-    this.svgEl.appendChild(defs);
+    return defs;
+  }
+
+  private drawLinks(s: MmSettings): void {
+    this.svgEl.appendChild(this.markerDefs());
     const curved = s.branchStyle === `curve`;
     const add = (l: MapLink, d: string, blue: boolean): void => {
       const id = this.linkId(l);
@@ -1076,6 +1136,15 @@ export class MapRenderer {
   fit(): void {
     if (!this.bounds || this.mapEl.clientWidth === 0) return;
     const b = this.bounds;
+    if (this.isList()) {
+      // Vue Liste : taille normale, en haut a gauche ; la liste se parcourt en la faisant defiler.
+      this.scale = 1;
+      this.tx = 16;
+      this.ty = 16;
+      this.fitPending = false;
+      this.applyTransform();
+      return;
+    }
     const vw = this.mapEl.clientWidth;
     const vh = this.mapEl.clientHeight - 60;
     const w = b.maxX - b.minX;
@@ -1101,6 +1170,8 @@ export class MapRenderer {
     this.scale = next;
     this.fitPending = false;
     this.applyTransform();
+    // Vue Liste : les lignes gardent la largeur de la fenetre, quel que soit le zoom.
+    if (this.isList()) this.rebuild();
   }
 
   private onWheel(e: WheelEvent): void {
@@ -1173,7 +1244,7 @@ export class MapRenderer {
       this.callbacks.onToggleHidden?.(eye.dataset.eye!);
       return;
     }
-    const fold = target.closest(`.mmw-fold`) as HTMLElement | null;
+    const fold = target.closest(`.mmw-fold, .mmw-lfold`) as HTMLElement | null;
     if (fold) {
       this.toggleFold(fold.dataset.fold!);
       return;
@@ -1537,7 +1608,7 @@ export class MapRenderer {
       d.ghost.style.left = `${left - rect.left}px`;
       d.ghost.style.top = `${e.clientY - d.grabY - rect.top}px`;
     }
-    const target = this.dropTarget(e.clientY, left, rect);
+    const target = this.isList() ? this.dropTargetList(e.clientY, left, rect) : this.dropTarget(e.clientY, left, rect);
     const id = target ? `${target.parentKey}|${target.index}` : `none`;
     if (id === d.targetId) return;
     d.targetId = id;
@@ -1584,9 +1655,62 @@ export class MapRenderer {
     return dropToParentIndex(this.doc, d.key, afterKey, depth, above.collapsed);
   }
 
+  // Vue Liste : meme choix que pour la carte (la hauteur donne l'intervalle entre deux lignes, la position horizontale de
+  // la ligne glissee donne le niveau), avec un trait pour montrer ou le titre sera depose.
+  private dropTargetList(clientY: number, leftScreen: number, rect: DOMRect): MoveTarget | null {
+    const d = this.nodeDrag!;
+    this.dropLine = null;
+    if (!this.doc || !this.root) return null;
+    const rows = this.list.filter((n) => n.key !== d.key && !n.key.startsWith(`${d.key}.`));
+    if (rows.length === 0) return null;
+    const wy = (clientY - rect.top - this.ty) / this.scale;
+    let index = 0;
+    rows.forEach((n, i) => {
+      if (n.y + n.h / 2 <= wy) index = i;
+    });
+    const above = rows[index];
+    const below = rows[index + 1];
+    const minDepth = Math.min(below ? below.depth : 1, above.depth + 1);
+    const maxDepth = above.depth + 1;
+    const indent = listIndent(this.getSettings().compactness);
+    const wx = (leftScreen - rect.left - this.tx) / this.scale;
+    let depth = maxDepth;
+    let best = Infinity;
+    for (let dd = minDepth; dd <= maxDepth; dd++) {
+      if (Math.abs(dd * indent - wx) < best) {
+        best = Math.abs(dd * indent - wx);
+        depth = dd;
+      }
+    }
+    const afterKey = d.keyOf.get(above.node);
+    if (!afterKey) return null;
+    const target = dropToParentIndex(this.doc, d.key, afterKey, depth, above.collapsed);
+    if (target) this.dropLine = { x: depth * indent, y: above.y + above.h };
+    return target;
+  }
+
+  // Trait de depot de la vue Liste (null : aucun).
+  private showDropLine(): void {
+    this.dropLineEl?.remove();
+    this.dropLineEl = null;
+    if (!this.dropLine) return;
+    const el = document.createElement(`div`);
+    el.className = `mmw-drop-line`;
+    el.style.left = `${this.dropLine.x}px`;
+    el.style.top = `${this.dropLine.y}px`;
+    el.style.width = `${Math.max(40, this.listWidth - this.dropLine.x)}px`;
+    this.worldEl.appendChild(el);
+    this.dropLineEl = el;
+  }
+
   // Affiche la carte telle qu'elle serait apres le deplacement (les autres cases s'ecartent), ou la carte normale.
   private showPreview(target: MoveTarget | null): void {
     const d = this.nodeDrag!;
+    if (this.isList()) {
+      d.target = target;
+      this.showDropLine();
+      return;
+    }
     const moved = target && this.doc ? previewMove(this.doc, d.key, target.parentKey, target.index) : null;
     if (!target || !moved || !this.doc) {
       d.target = null;
@@ -1625,9 +1749,14 @@ export class MapRenderer {
     if (this.mapEl.hasPointerCapture(d.pointerId)) this.mapEl.releasePointerCapture(d.pointerId);
     d.ghost?.remove();
     this.mapEl.classList.remove(`mmw-dragging`);
+    this.dropLine = null;
+    this.dropLineEl?.remove();
+    this.dropLineEl = null;
     if (!d.started) return;
     const target = cancel ? null : d.target;
-    if (target && this.previewDoc) {
+    if (target && this.isList()) {
+      this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: [d.key], parentKey: target.parentKey, index: target.index });
+    } else if (target && this.previewDoc) {
       // L'apercu reste affiche jusqu'a ce que la note ait ete modifiee et la carte relue.
       if (this.settleTimer !== null) window.clearTimeout(this.settleTimer);
       this.settleTimer = window.setTimeout(() => this.resetPreview(), 2500);

@@ -1108,3 +1108,89 @@
 .mmw-int-mark:hover {
   filter: brightness(1.25);
 }
+
+/* Vue Liste : un titre par ligne, decale selon son niveau, sans trait ni cadre. */
+.mmw-map.mmw-list .mmw-node {
+  max-width: none;
+  padding: calc(5px * var(--mmw-pad, 1)) 12px calc(5px * var(--mmw-pad, 1)) 30px;
+  border-radius: 6px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.mmw-map.mmw-list .mmw-node.mmw-depth-0 {
+  padding-left: 12px;
+  font-weight: 700;
+}
+
+.mmw-map.mmw-list .mmw-node.mmw-depth-1,
+.mmw-map.mmw-list .mmw-node.mmw-depth-2,
+.mmw-map.mmw-list .mmw-node.mmw-depth-3 {
+  padding: calc(5px * var(--mmw-pad, 1)) 12px calc(5px * var(--mmw-pad, 1)) 30px;
+  font-weight: 500;
+}
+
+.mmw-map.mmw-list .mmw-title {
+  max-width: none;
+  flex: 0 1 auto;
+}
+
+.mmw-map.mmw-list .mmw-node.mmw-depth-0 .mmw-title {
+  max-width: none;
+}
+
+/* Une ligne sur deux plus foncee (option de l'apparence). */
+.mmw-map.mmw-stripes .mmw-node.mmw-odd:not(.mmw-selected) {
+  background: var(--background-modifier-hover);
+}
+
+.mmw-map.mmw-list .mmw-node:not(.mmw-selected):hover {
+  background: var(--background-modifier-hover);
+}
+
+/* Triangle de repli de la vue Liste. */
+.mmw-lfold {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.mmw-lfold:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.mmw-lfold.mmw-lfold-collapsed svg {
+  transform: rotate(-90deg);
+}
+
+/* Trait qui montre ou le titre glisse sera depose. */
+.mmw-drop-line {
+  position: absolute;
+  z-index: 4;
+  height: 3px;
+  margin-top: -1px;
+  border-radius: 2px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+}
+
+/* Griser et Dependances cote a cote dans le menu de l'oeil. */
+.mmw-menu-pair {
+  display: flex;
+  gap: 2px;
+}
+
+.mmw-menu-pair .mmw-menu-item {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 6px;
+  padding: 7px 6px;
+}

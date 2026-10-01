@@ -24,6 +24,8 @@ export interface ControlActions {
   // Bouton Lien (relier deux titres) et bouton Retour (revenir a la carte precedente).
   toggleLink: () => void;
   back: () => void;
+  // Bascule entre la vue Mindmap et la vue Liste.
+  toggleView: () => void;
 }
 
 type PopupKind = `menu` | `style` | `view` | `tags` | null;
@@ -51,6 +53,8 @@ const ICONS: Record<string, string> = {
   tag: svg(`<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V4h9l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="8.5" r="1.2"/>`),
   link: svg(`<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>`),
   back: svg(`<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>`),
+  list: svg(`<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>`),
+  network: svg(`<rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="5" rx="1"/><rect x="14" y="17" width="7" height="4" rx="1"/><path d="M6 8v10a1 1 0 0 0 1 1h7M6 12h8"/>`),
   eye: svg(`<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`),
   trash: svg(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`, 16),
 };
@@ -130,6 +134,7 @@ export class MapControls {
   private menuBtn: HTMLButtonElement;
   private styleBtn: HTMLButtonElement;
   private viewBtn: HTMLButtonElement;
+  private modeBtn: HTMLButtonElement;
   private linkBtn: HTMLButtonElement;
   private backBtn: HTMLButtonElement;
   private zoomLabel: HTMLElement;
@@ -157,7 +162,8 @@ export class MapControls {
     this.backBtn = iconButton(ICONS.back, `Revenir à la carte précédente`, () => this.actions.back());
     this.backBtn.style.display = `none`;
     this.viewBtn = iconButton(ICONS.eye, `Affichage : éléments visibles et vue`, () => this.toggle(`view`));
-    dock.append(this.menuBtn, this.styleBtn, this.viewBtn, this.linkBtn, this.backBtn);
+    this.modeBtn = iconButton(ICONS.list, `Passer à la vue Liste`, () => this.actions.toggleView());
+    dock.append(this.menuBtn, this.styleBtn, this.viewBtn, this.linkBtn, this.modeBtn, this.backBtn);
 
     const zoom = h(`div`, `mmw-dock mmw-zoom`);
     this.zoomLabel = h(`span`, `mmw-zoom-label`, `100 %`);
@@ -316,6 +322,11 @@ export class MapControls {
     this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu` || this.open === `tags`);
     this.styleBtn.classList.toggle(`mmw-active`, this.open === `style`);
     this.viewBtn.classList.toggle(`mmw-active`, this.open === `view`);
+    // Le bouton montre la vue vers laquelle il bascule.
+    const toList = this.getSettings().viewMode !== `list`;
+    this.modeBtn.innerHTML = toList ? ICONS.list : ICONS.network;
+    this.modeBtn.setAttribute(`aria-label`, toList ? `Passer à la vue Liste` : `Passer à la vue Mindmap`);
+    this.modeBtn.dataset.tip = toList ? `Passer à la vue Liste` : `Passer à la vue Mindmap`;
     this.scopeEl = null;
     if (this.open === null) {
       this.popup.style.display = `none`;
@@ -437,7 +448,7 @@ export class MapControls {
     const a = this.actions;
     const menu = h(`div`, `mmw-menu`);
     menu.append(
-      this.menuItem(ICONS.locate, `Recentrer la carte`, () => a.recenter()),
+      ...(s.viewMode === `list` ? [] : [this.menuItem(ICONS.locate, `Recentrer la carte`, () => a.recenter())]),
       this.menuItem(ICONS.collapse, `Tout replier`, () => a.collapseAll()),
       this.menuItem(ICONS.expand, `Tout déplier`, () => a.expandAll()),
       h(`div`, `mmw-menu-sep`),
@@ -479,18 +490,23 @@ export class MapControls {
       this.menuToggle(`Étiquettes`, s.showTags, (v) => a.change({ showTags: v })),
       this.menuToggle(`Bulles de commentaire`, s.showComments, (v) => a.change({ showComments: v })),
       this.menuToggle(`Liens web (mappemonde)`, s.showWebLinks, (v) => a.change({ showWebLinks: v })),
-      this.menuToggle(`Liens vers d'autres notes`, s.showExternalLinks, (v) => a.change({ showExternalLinks: v })),
-      this.menuToggle(`Liens dans la note (flèches)`, s.showInternalLinks, (v) => a.change({ showInternalLinks: v })),
+      this.menuToggle(s.viewMode === `list` ? `Repère : autres notes` : `Liens vers d'autres notes`, s.showExternalLinks, (v) => a.change({ showExternalLinks: v })),
+      this.menuToggle(s.viewMode === `list` ? `Repère : liens dans la note` : `Liens dans la note (flèches)`, s.showInternalLinks, (v) => a.change({ showInternalLinks: v })),
       h(`div`, `mmw-menu-sep`),
       heading(`Couleurs`),
       this.menuToggle(`Vue noir et blanc`, s.blackWhite, (v) => a.change({ blackWhite: v })),
-      this.menuToggle(`Flèches toujours en bleu`, s.linkColored, (v) => a.change({ linkColored: v })),
+      ...(s.viewMode === `list` ? [] : [this.menuToggle(`Flèches toujours en bleu`, s.linkColored, (v) => a.change({ linkColored: v }))]),
       h(`div`, `mmw-menu-sep`),
-      heading(`Dans la note`),
-      this.menuToggle(`Griser les chapitres inactifs`, s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
-      this.menuToggle(`Masquer les chapitres inactifs`, s.hideInactive, (v) => a.change({ hideInactive: v })),
-      this.menuToggle(`Inclure les sous-titres`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
+      heading(`Chapitres inactifs de la note`)
     );
+    // Griser et inclure les dependances cote a cote, puis masquer.
+    const pair = h(`div`, `mmw-menu-pair`);
+    pair.append(
+      this.menuToggle(`Griser`, s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
+      this.menuToggle(`Dépendances`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
+    );
+    pair.title = `Dépendances : le chapitre actif comprend aussi ses sous-titres, qui ne sont alors ni grisés ni masqués.`;
+    menu.append(pair, this.menuToggle(`Masquer les chapitres inactifs`, s.hideInactive, (v) => a.change({ hideInactive: v })));
 
     const contrast = h(`div`, `mmw-menu-row`);
     contrast.append(h(`div`, `mmw-menu-title`, `Contraste des chapitres grisés`));
@@ -529,6 +545,52 @@ export class MapControls {
       sec.append(h(`div`, `mmw-section-title`, title), ...content);
       panel.append(sec);
     };
+
+    if (this.getSettings().viewMode === `list`) {
+      // Vue Liste : seuls la couleur du texte, la police et la taille ont un sens, plus les options propres a la liste.
+      const s = this.getSettings();
+      section(`Couleur du texte`, this.swatches(STROKE_COLORS, st.strokeColor, (v) => apply({ strokeColor: v }), `#1e1e1e`));
+      section(
+        `Police`,
+        this.options(
+          [
+            { value: `default`, text: `Aa`, title: `Police de l'interface` },
+            { value: `handwritten`, text: `Aa`, title: `Écriture manuscrite`, font: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` },
+            { value: `mono`, text: `</>`, title: `Code`, font: `var(--font-monospace, monospace)` },
+          ],
+          s.listMapFont ? st.fontFamily : `default`,
+          (v) => {
+            apply({ fontFamily: v as NodeStyle[`fontFamily`] });
+            a.change({ listMapFont: v !== `default` });
+          }
+        )
+      );
+      section(
+        `Taille de la police`,
+        this.options(
+          FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label, title: `Taille ${f.label}` })),
+          String(st.fontScale),
+          (v) => apply({ fontScale: Number(v) })
+        )
+      );
+      section(
+        `Lignes`,
+        this.options(
+          [
+            { value: `plain`, text: `Unies` },
+            { value: `striped`, text: `Une sur deux foncée` },
+          ],
+          s.listStripes ? `striped` : `plain`,
+          (v) => a.change({ listStripes: v === `striped` }),
+          true
+        )
+      );
+      const resetList = h(`button`, `mmw-reset`, `Réinitialiser l'apparence`);
+      resetList.type = `button`;
+      resetList.addEventListener(`click`, () => a.resetStyle(this.mod));
+      panel.append(resetList);
+      return panel;
+    }
 
     section(`Trait`, this.swatches(STROKE_COLORS, st.strokeColor, (v) => apply({ strokeColor: v }), `#1e1e1e`));
     section(`Arrière-plan`, this.swatches(FILL_COLORS, st.fillColor, (v) => apply({ fillColor: v }), `#ffffff`));

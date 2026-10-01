@@ -10,6 +10,7 @@ export type FontFamily = `default` | `handwritten` | `mono`;
 export type TextAlign = `left` | `center` | `right`;
 // 0 : trait net, 1 : trait de crayon leger, 2 : trait tres irregulier.
 export type Roughness = 0 | 1 | 2;
+export type ViewMode = `map` | `list`;
 
 // Numero de la version du format des reglages enregistres.
 export const SETTINGS_VERSION = 4;
@@ -118,6 +119,11 @@ export interface MmSettings {
   showExternalLinks: boolean;
   showInternalLinks: boolean;
   blackWhite: boolean;
+  // Type de vue : carte mentale ou liste condensee. Reglages propres a la liste : une ligne sur deux plus foncee, et
+  // police manuscrite de la carte.
+  viewMode: ViewMode;
+  listStripes: boolean;
+  listMapFont: boolean;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -158,6 +164,9 @@ export const DEFAULT_SETTINGS: MmSettings = {
   showExternalLinks: true,
   showInternalLinks: true,
   blackWhite: false,
+  viewMode: `map`,
+  listStripes: false,
+  listMapFont: false,
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).

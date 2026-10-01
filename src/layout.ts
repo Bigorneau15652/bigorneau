@@ -112,6 +112,28 @@ export function computeLayout(root: LNode, compact: number): Bounds {
   return b;
 }
 
+// Retrait d'un niveau dans la vue Liste (en pixels, multiplie par la compacite), et ecart entre deux lignes.
+export const LIST_INDENT = 22;
+
+export function listIndent(compact: number): number {
+  return Math.round(LIST_INDENT * Math.max(0.6, compact));
+}
+
+// Vue Liste : les titres visibles sont empiles, un par ligne, decales vers la droite selon leur niveau, sans trait. Les
+// hauteurs (h) doivent etre renseignees avant l'appel ; la largeur est celle de la ligne.
+export function computeListLayout(root: LNode, indent: number, width: number, gap = 2): Bounds {
+  let y = 0;
+  const b: Bounds = { minX: 0, minY: 0, maxX: width, maxY: 0 };
+  for (const n of flatten(root)) {
+    n.x = n.depth * indent;
+    n.y = y;
+    n.w = Math.max(40, width - n.x);
+    y += n.h + gap;
+    b.maxY = n.y + n.h;
+  }
+  return b;
+}
+
 // Noeud precedent ou suivant dans l'ordre d'affichage (racine comprise).
 export function sequential(list: LNode[], cur: LNode, dir: `up` | `down`): LNode | null {
   const i = list.indexOf(cur) + (dir === `up` ? -1 : 1);

@@ -171,7 +171,7 @@ export class MmSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(`Inclure les sous-titres dans le chapitre actif`)
+      .setName(`Inclure les dépendances dans le chapitre actif`)
       .setDesc(`Désactivé (par défaut) : seul le titre où se trouve le curseur et son texte sont actifs. Activé : ses sous-titres le sont aussi.`)
       .addToggle((t) =>
         t.setValue(s.includeSubtitles).onChange(async (v) => {
