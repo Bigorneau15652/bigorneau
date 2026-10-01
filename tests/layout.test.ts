@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNote } from "../src/model";
-import { buildLayoutTree, computeLayout, flatten, sequential, trunkX, LNode } from "../src/layout";
+import { buildLayoutTree, computeLayout, computeListLayout, flatten, listIndent, sequential, trunkX, LNode } from "../src/layout";
 import { elbowPoints, framePath, resample, rng, trunkBranch, trunkLine, trunkRadius } from "../src/sketch";
 
 const NOTE = `## A\n### A1\n### A2\n#### A2a\n## B\n## C\n### C1\n`;
@@ -132,4 +132,21 @@ test(`outils de trace : nombres valides et formes attendues`, () => {
   assert.equal(framePath(0, 0, 80, 30, `k`, false, `round`, 1).kind, `path`);
   const sharpPath = framePath(0, 0, 80, 30, `k`, false, `sharp`, 2);
   assert.ok(sharpPath.kind === `path` && sharpPath.d.endsWith(`Z`));
+});
+
+test(`vue Liste : une ligne par titre visible, decalee selon le niveau`, () => {
+  const doc = parseNote(NOTE, `f.md`);
+  const root = buildLayoutTree(doc.root, `r`, 0, new Set([`r.0.1`]));
+  for (const n of flatten(root)) n.h = 20;
+  const indent = listIndent(1);
+  const b = computeListLayout(root, indent, 400);
+  const rows = flatten(root);
+  // Une ligne par titre visible : r, A, A1, A2 (replie : A2a absent), B, C, C1.
+  assert.deepEqual(rows.map((n) => n.key), [`r`, `r.0`, `r.0.0`, `r.0.1`, `r.1`, `r.2`, `r.2.0`]);
+  assert.deepEqual(rows.map((n) => n.y), [0, 22, 44, 66, 88, 110, 132]);
+  assert.deepEqual(rows.map((n) => n.x), [0, indent, indent * 2, indent * 2, indent, indent, indent * 2]);
+  assert.equal(rows[2].w, 400 - indent * 2);
+  assert.equal(b.maxY, 152);
+  assert.equal(b.maxX, 400);
+  assert.ok(listIndent(0.1) >= 13);
 });

@@ -136,6 +136,15 @@ export default class MindmapWritingPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: `toggle-view-mode`,
+      name: `Basculer entre la vue Mindmap et la vue Liste`,
+      callback: async () => {
+        this.settings.viewMode = this.settings.viewMode === `list` ? `map` : `list`;
+        await this.saveSettings();
+      },
+    });
+
+    this.addCommand({
       id: `toggle-hide-inactive`,
       name: `Basculer l'affichage du seul chapitre actif dans la note`,
       callback: async () => {
