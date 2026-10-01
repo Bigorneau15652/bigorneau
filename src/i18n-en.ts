@@ -402,7 +402,6 @@ const PAIRS: [string, string][] = [
   [`{0} lignes, dont {1} avec césure ({2} consécutives) ; {3} lâches, {4} serrées, {5} débordantes`, `{0} lines, {1} hyphenated ({2} consecutive); {3} loose, {4} tight, {5} overfull`],
   [`Caractères absents de la police : {0}`, `Characters missing from the font: {0}`],
   [`Police de l'export indisponible : l'aperçu utilise une autre police.`, `Export font unavailable: the preview uses another font.`],
-  [`Indicateurs de qualité`, `Quality indicators`],
   [`L'export n'est disponible que sur ordinateur.`, `Export is only available on desktop.`],
   [`Ouvrez d'abord une note.`, `Open a note first.`],
   [`Exporter la note en PDF`, `Export the note to PDF`],
