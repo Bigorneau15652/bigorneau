@@ -10,7 +10,7 @@ import type MindmapWritingPlugin from "./main";
 import { resolveFixed } from "./fixed";
 import { branchToFloat, createFloat, floatToBranch, moveFloat } from "./float";
 import { activeLines, applyLineEdits, flattenDoc, isFloatKey, isFloatRoot, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
-import { insertLink, insertWebLink, linkHeading, MapLink, moveLinkTo, parseLinks, removeLink, removeWebLink, replaceLink, replaceWebLink, sameHeading, WebLink, webLinks } from "./links";
+import { insertLink, insertWebLink, linkHeading, MapLink, moveLinkTo, openableUrl, parseLinks, removeLink, removeWebLink, replaceLink, replaceWebLink, sameHeading, WebLink, webLinks } from "./links";
 import type { DialogValues } from "./node-dialog";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
@@ -595,7 +595,8 @@ export class MindmapView extends ItemView {
   // Clic sur la mappemonde d'un titre : ouvre la page, ou propose le choix s'il y en a plusieurs.
   private openWeb(links: WebLink[], event: PointerEvent) {
     if (links.length === 0) return;
-    const open = (url: string) => window.open(url, `_blank`, `noopener`);
+    // Une video integree s'ouvre sur la page de la video, pas sur son adresse d'integration.
+    const open = (url: string) => window.open(openableUrl(url), `_blank`, `noopener`);
     if (links.length === 1) {
       open(links[0].url);
       return;

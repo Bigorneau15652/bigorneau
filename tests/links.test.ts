@@ -152,3 +152,18 @@ test(`liens web : modifier, retirer et ajouter`, () => {
   assert.equal(insertWebLink(`## A\n`, parseNote(`## A\n`, NAME), `r.0`, `https://v.test`, `Video`, true), `## A\n![Video](https://v.test)\n`);
   assert.equal(insertWebLink(`## A\n`, parseNote(`## A\n`, NAME), `r.0`, `https://v.test`, ``, true), `## A\n![](https://v.test)\n`);
 });
+
+test(`une video integree s'ouvre sur la page de la video`, async () => {
+  const { openableUrl } = await import(`../src/links`);
+  assert.equal(openableUrl(`https://www.youtube.com/embed/dQw4w9WgXcQ`), `https://www.youtube.com/watch?v=dQw4w9WgXcQ`);
+  assert.equal(openableUrl(`https://www.youtube.com/embed/dQw4w9WgXcQ?start=42&rel=0`), `https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42`);
+  assert.equal(openableUrl(`https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ`), `https://www.youtube.com/watch?v=dQw4w9WgXcQ`);
+  assert.equal(openableUrl(`https://www.youtube.com/embed/videoseries?list=PL123`), `https://www.youtube.com/playlist?list=PL123`);
+  assert.equal(openableUrl(`https://player.vimeo.com/video/12345?h=abc`), `https://vimeo.com/12345`);
+  assert.equal(openableUrl(`https://www.dailymotion.com/embed/video/x7abc`), `https://www.dailymotion.com/video/x7abc`);
+  // Les adresses de pages restent inchangees.
+  assert.equal(openableUrl(`https://www.youtube.com/watch?v=dQw4w9WgXcQ`), `https://www.youtube.com/watch?v=dQw4w9WgXcQ`);
+  assert.equal(openableUrl(`https://youtu.be/dQw4w9WgXcQ`), `https://youtu.be/dQw4w9WgXcQ`);
+  assert.equal(openableUrl(`https://exemple.fr/page`), `https://exemple.fr/page`);
+  assert.equal(openableUrl(`pas une adresse`), `pas une adresse`);
+});
