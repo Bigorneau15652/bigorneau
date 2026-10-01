@@ -177,3 +177,20 @@ test(`le PDF trace le cadre et rend l'adresse du media cliquable`, async () => {
   assert.ok(pdf.includes(`0.55 G 0.5 w`));
   assert.ok(pdf.includes(`/URI (https://www.youtube.com/watch?v=abc)`));
 });
+
+import { renderTex } from "../src/export/mathjax";
+
+test(`MathJax dessine une formule TeX avec ses dimensions et refuse une formule incorrecte`, () => {
+  const a = renderTex(`E_s = \\frac{Q}{S} \\leq 90`, false)!;
+  assert.ok(a);
+  assert.ok(a.width > 3000 && a.ascent > 500 && a.descent > 100);
+  assert.ok(a.d.startsWith(`M `));
+  const b = renderTex(`\\sum_{i=1}^{n} \\sqrt{x_i^2 + y_i^2} = \\int_0^1 f(t)\\,dt`, true)!;
+  assert.ok(b && b.display && b.width > a.width * 0.5);
+  assert.equal(renderTex(`\\frac{`, false), null);
+  assert.equal(renderTex(`\\commandeinconnue`, false), null);
+  // Quelques formules courantes en energetique et en mathematiques.
+  for (const tex of [`\\text{kWh/m}^2\\text{.an}`, `\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}`, `\\alpha + \\beta \\neq \\gamma`, `\\overline{x}`, `\\ce{H2O}`]) {
+    assert.ok(renderTex(tex, false), tex);
+  }
+});

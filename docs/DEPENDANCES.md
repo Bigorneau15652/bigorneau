@@ -10,8 +10,10 @@ Les polices de l'export sont Libertinus Serif (normal, italique, gras, gras ital
 
 Les motifs de césure de Liang du français (hyph-fr.tex) et de l'anglais britannique (hyph-en-gb.tex) viennent du projet hyph-utf8 et sont sous licence MIT. L'utilisateur les a choisis le 1er octobre 2026. L'outil tools/make-patterns.mjs lit les fichiers copiés dans tools/ et écrit src/export/patterns-fr.ts et src/export/patterns-en-gb.ts. Les minimums de lettres avant et après une césure sont ceux du projet (français 2 et 2, anglais britannique 2 et 3), réglables dans src/export/tex-params.ts.
 
-## Aucune bibliothèque JavaScript
+## Bibliothèques JavaScript
 
-À ce stade, aucune bibliothèque n'a été ajoutée à package.json : l'algorithme de Knuth et Plass, les motifs de Liang, la lecture des polices (largeurs, ligatures, crénage), la composition et l'écriture du PDF sont écrits dans le plugin. Le seul outil de fabrication qui n'est pas intégré à Node est fonttools (Python, licence MIT), utilisé à la main par tools/make-fonts.py.
+Hormis MathJax (voir plus bas), aucune bibliothèque n'a été ajoutée à package.json : l'algorithme de Knuth et Plass, les motifs de Liang, la lecture des polices (largeurs, ligatures, crénage), la composition et l'écriture du PDF sont écrits dans le plugin. Le seul outil de fabrication qui n'est pas intégré à Node est fonttools (Python, licence MIT), utilisé à la main par tools/make-fonts.py.
 
-Formules : la version 0.1.5 utilise MathJax, le moteur de formules fourni avec Obsidian (appelé par les fonctions loadMathJax et renderMath de l'interface du plugin). Rien n'est ajouté à package.json ni au fichier main.js. Le plugin lit seulement le dessin SVG que MathJax produit et le recopie en tracé vectoriel dans le PDF. MathJax est sous licence Apache 2.0 ; les polices mathématiques qu'il dessine (MathJax TeX) sont sous licence SIL OFL.
+## Bibliothèque MathJax (formules)
+
+Depuis la version 0.1.6, le plugin intègre la bibliothèque mathjax-full, version 3.2.2, copyright The MathJax Consortium, licence Apache 2.0 (licences/Apache-2.0-MathJax.txt). Source : https://github.com/mathjax/MathJax-src. Elle lit les formules écrites en TeX et produit leur dessin SVG, que le plugin recopie en tracé vectoriel dans le PDF. Elle est incorporée au fichier main.js (environ 2,6 Mo de plus) ; ses polices mathématiques (MathJax TeX) sont sous licence SIL Open Font License 1.1 et leurs contours sont inclus dans le code de la bibliothèque. Le MathJax fourni avec Obsidian ne convient pas : il affiche les formules en HTML et ne donne pas de dessin vectoriel utilisable.

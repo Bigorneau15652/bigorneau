@@ -1,6 +1,6 @@
 {
   "name": "obsidian-mindmap-writing",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Plugin Obsidian d'ecriture en branche (carte mentale)",
   "main": "main.js",
   "scripts": {
@@ -19,5 +19,8 @@
     "obsidian": "latest",
     "tslib": "^2.6.0",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "mathjax-full": "3.2.2"
   }
 }
