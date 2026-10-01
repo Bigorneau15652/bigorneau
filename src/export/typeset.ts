@@ -543,7 +543,6 @@ class Typesetter {
     const innerWidth = this.textWidth - 2 * inner;
     this.space(lead * 0.4);
     const start = this.sink.length;
-    if (framed) this.space(5);
     this.paragraph(`**${labels[b.kind]}**${en ? `:` : ` :`}${caption === `` ? `` : ` ${caption}`}`, `media`, inner, innerWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false });
     // Adresse en chasse fixe, coupee a la largeur du cadre apres un signe de ponctuation d'adresse quand c'est possible.
     const charWidth = measureText(`0`, 9, `mono`).width;
@@ -559,12 +558,16 @@ class Typesetter {
       rest = rest.slice(cut);
       this.push({ kind: `media`, text: piece, x: inner, width: innerWidth, fontSize: 9, height: 12, wordSpacing: 0, align: `left`, breakAfter: INF_PENALTY, runs: [{ text: piece, style: `mono`, ...(web ? { link: b.target } : {}) }] });
     }
-    if (framed) this.space(5);
     const end = this.sink.length;
-    // Les lignes du bloc restent ensemble ; le cadre est trace sur toutes.
+    // Les lignes du bloc restent ensemble ; le cadre est trace sur toutes, et ses marges haute et basse sont comprises dans la
+    // premiere et la derniere ligne (la page peut se couper apres le bloc sans perdre le bas du cadre).
     for (let k = start; k < end; k++) {
       this.sink[k].breakAfter = k === end - 1 ? 0 : INF_PENALTY;
-      if (framed) this.sink[k].frame = { width: this.textWidth, top: k === start, bottom: k === end - 1 };
+      if (framed) {
+        if (k === start) this.sink[k].height += 4;
+        if (k === end - 1) this.sink[k].height += 4;
+        this.sink[k].frame = { width: this.textWidth, top: k === start, bottom: k === end - 1 };
+      }
     }
     this.anchorFrom(start, b.id);
     this.space(lead * 0.5);

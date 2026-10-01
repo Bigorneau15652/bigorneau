@@ -150,7 +150,7 @@ test(`un media est remplace par un cadre avec son titre et son adresse cliquable
   assert.equal(rows[0].runs?.[0].style, `bold`);
   assert.ok(rows.some((r) => r.runs?.some((u) => u.style === `mono` && u.link === `https://www.youtube.com/watch?v=abc`)));
   const framed = t.rows.filter((r) => r.frame);
-  assert.ok(framed.length >= 4);
+  assert.ok(framed.length >= 2);
   assert.equal(framed.filter((r) => r.frame!.top).length, 1);
   assert.equal(framed.filter((r) => r.frame!.bottom).length, 1);
   assert.ok(t.warnings.includes(`media:https://www.youtube.com/watch?v=abc`));
@@ -193,4 +193,12 @@ test(`MathJax dessine une formule TeX avec ses dimensions et refuse une formule 
   for (const tex of [`\\text{kWh/m}^2\\text{.an}`, `\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}`, `\\alpha + \\beta \\neq \\gamma`, `\\overline{x}`, `\\ce{H2O}`]) {
     assert.ok(renderTex(tex, false), tex);
   }
+});
+
+test(`la page peut se couper apres un cadre de media et avant le titre suivant`, () => {
+  const t = typesetDoc(buildExportDoc(`# A\n\n![[a.mp4|Un]]\n\n![[b.mp4|Deux]]\n\n# B\n\nTexte.`, `A.md`), A4_SETUP, undefined, DEFAULT_PAGE_STYLE);
+  const lastOfFirst = t.rows.filter((r) => r.frame).find((r) => r.frame!.bottom)!;
+  assert.ok(lastOfFirst.breakAfter < 10000);
+  const heading = t.rows.findIndex((r) => r.heading?.title === `B`);
+  assert.ok(t.rows.slice(0, heading).some((r) => r.kind === `space` && r.breakAfter < 10000));
 });
