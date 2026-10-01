@@ -1,7 +1,9 @@
 Cette note sert de contrôle visuel pour l'export (voir docs/POLITIQUE-EXPORT.md). Copiez-la dans votre coffre Obsidian pour ouvrir l'aperçu de l'export. Elle contient volontairement des mots longs comme anticonstitutionnellement ou électroencéphalographiquement, des listes, une citation, un tableau, deux notes de bas de page, un titre masqué et un sujet flottant, qui ne doivent pas apparaître dans l'export. Pour tester la pagination, dupliquez plusieurs fois le chapitre Contexte : les en-têtes courants, les notes et les coupures de pages se répartissent alors sur plusieurs pages.
 
 # Contexte
-Le bâtiment a été construit en 1972. Sa consommation d'énergie finale est aujourd'hui supérieure à 180 kWh/m².an, soit **près du double** de l'objectif fixé par le décret tertiaire pour 2030[^dec]. Les résultats détaillés figurent dans [[Audit énergétique#Résultats|le rapport d'audit]]^[Rapport établi par un bureau d'études indépendant, version de l'année précédente.].
+Le bâtiment a été construit en 1972, *l'office* de tourisme et la *difficile* rénovation de l'*affiche* en témoignent. Sa consommation d'énergie finale est aujourd'hui supérieure à 180 kWh/m².an, soit **près du double** de l'objectif fixé par le décret tertiaire pour 2030[^dec]. Les résultats détaillés figurent dans [[Audit énergétique#Résultats|le rapport d'audit]]^[Rapport établi par un bureau d'études indépendant, version de l'année précédente.].
+
+Voir aussi le site de l'[Université de Montpellier Paul-Valéry](https://www.univ-montp3.fr) ou https://exemple.fr/audit pour la ***méthode complète***.
 
 ## Constats
 - Isolation des murs

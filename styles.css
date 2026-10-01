@@ -1455,20 +1455,20 @@
   position: absolute;
 }
 
-/* Les lignes sont composees avec les largeurs de la police, sans crenage ni ligature : l'affichage doit leur correspondre. */
+/* Les lignes sont composees avec les largeurs des polices de l'export, ligatures et crenage compris : le navigateur applique les
+   memes reglages par defaut, l'affichage correspond au calcul. */
 .mmw-row {
   box-sizing: border-box;
   white-space: pre;
   overflow: visible;
-  font-kerning: none;
-  font-variant-ligatures: none;
-  font-feature-settings: "kern" 0, "liga" 0, "clig" 0;
   text-rendering: geometricPrecision;
 }
 
-.mmw-row-title,
-.mmw-row-heading {
-  font-weight: normal;
+.mmw-export-link {
+  color: #1a4f9c;
+  text-decoration: underline;
+  text-decoration-thickness: 0.4pt;
+  cursor: pointer;
 }
 
 .mmw-row-code {

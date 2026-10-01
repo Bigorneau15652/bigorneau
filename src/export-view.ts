@@ -4,7 +4,7 @@ import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { buildExportDoc } from "./export/doc-tree";
 import { FOOTNOTE_RULE_HEIGHT, paginate } from "./export/paginate";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, Row, typesetDoc } from "./export/typeset";
-import { EXPORT_FONT_FAMILY, loadExportFont } from "./export-font";
+import { EXPORT_FONT_FAMILY, EXPORT_MONO_FAMILY, loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
 
@@ -80,14 +80,25 @@ export class ExportPreviewView extends ItemView {
       const m = el.createSpan({ cls: row.kind === `footnote` ? `mmw-row-marker mmw-row-note-marker` : `mmw-row-marker`, text: row.marker });
       m.style.left = `${row.kind === `footnote` ? 0 : row.x - 16}pt`;
     }
-    // Les appels de notes de bas de page sont des numeros en exposant, a 70 % du corps du texte comme dans le calcul.
-    let at = 0;
-    for (const [from, to] of row.sups ?? []) {
-      if (from > at) el.appendChild(document.createTextNode(row.text.slice(at, from)));
-      el.createSpan({ cls: `mmw-sup`, text: row.text.slice(from, to) });
-      at = to;
+    if (row.runs) {
+      // Chaque morceau a sa police (gras, italique) ; les appels de notes de bas de page sont des numeros en exposant, a 70 %
+      // du corps du texte comme dans le calcul ; les liens web s'ouvrent dans le navigateur.
+      for (const run of row.runs) {
+        const span = el.createSpan({ text: run.text });
+        if (run.sup) span.addClass(`mmw-sup`);
+        if (run.style === `mono`) span.style.fontFamily = `"${EXPORT_MONO_FAMILY}", monospace`;
+        if (run.style === `bold` || run.style === `boldItalic`) span.style.fontWeight = `700`;
+        if (run.style === `italic` || run.style === `boldItalic`) span.style.fontStyle = `italic`;
+        if (run.link) {
+          span.addClass(`mmw-export-link`);
+          span.title = run.link;
+          const url = run.link;
+          span.addEventListener(`click`, () => window.open(url));
+        }
+      }
+    } else {
+      el.appendChild(document.createTextNode(row.text));
     }
-    if (at < row.text.length) el.appendChild(document.createTextNode(row.text.slice(at)));
   }
 
   async refresh() {

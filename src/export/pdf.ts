@@ -1,0 +1,432 @@
+// Export de haute qualite, etage 7 : ecriture du PDF (PDF 1.7) a partir des pages composees.
+// Le fichier est ecrit directement, sans bibliotheque : polices OpenType incorporees (Libertinus Serif et Mono, contours CFF), texte reel
+// et copiable (table ToUnicode, ligatures comprises), signets hierarchiques qui reprennent les titres, liens web cliquables,
+// metadonnees. Chaque ligne est placee a la position que calcule la composition, comme dans l'apercu.
+import { FONT_STYLES, fontFor, FontStyle } from "./font-metrics";
+import { OpenTypeFont } from "./font";
+import { LineRun, SUP_SCALE } from "./paragraph";
+import { FOOTNOTE_RULE_HEIGHT, Page } from "./paginate";
+import { PageSetup, Row } from "./typeset";
+
+export interface PdfOptions {
+  title: string;
+  author?: string;
+  // Langue du document (fr-FR, en-GB).
+  language: string;
+  creator: string;
+  created: Date;
+  // Compression des flux (Flate). Absente : flux non compresses, utile pour les tests.
+  deflate?: (data: Uint8Array) => Promise<Uint8Array>;
+}
+
+const encoder = new TextEncoder();
+
+// Ecrit des morceaux d'octets bout a bout et memorise la position de chaque objet.
+class Writer {
+  private chunks: Uint8Array[] = [];
+  length = 0;
+  push(data: string | Uint8Array): void {
+    const bytes = typeof data === `string` ? encoder.encode(data) : data;
+    this.chunks.push(bytes);
+    this.length += bytes.length;
+  }
+  bytes(): Uint8Array {
+    const out = new Uint8Array(this.length);
+    let o = 0;
+    for (const c of this.chunks) {
+      out.set(c, o);
+      o += c.length;
+    }
+    return out;
+  }
+}
+
+const num = (n: number): string => {
+  const s = n.toFixed(3);
+  return s.includes(`.`) ? s.replace(/0+$/, ``).replace(/\.$/, ``) : s;
+};
+
+// Chaine PDF : en ASCII simple entre parentheses, sinon en UTF-16BE avec marque d'ordre.
+function pdfText(s: string): string {
+  if (/^[\x20-\x7e]*$/.test(s)) return `(${s.replace(/[\\()]/g, (c) => `\\${c}`)})`;
+  let hex = `FEFF`;
+  for (let i = 0; i < s.length; i++) hex += s.charCodeAt(i).toString(16).padStart(4, `0`);
+  return `<${hex}>`;
+}
+
+const hex4 = (n: number): string => n.toString(16).padStart(4, `0`);
+
+function pdfDate(d: Date): string {
+  const p = (n: number, w = 2): string => String(n).padStart(w, `0`);
+  return `D:${p(d.getUTCFullYear(), 4)}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
+}
+
+// Glyphes d'une police utilises dans le document : pour la table des largeurs et la table ToUnicode.
+interface FontUse {
+  font: OpenTypeFont;
+  name: string;
+  glyphs: Map<number, string>;
+}
+
+interface LinkBox {
+  rect: [number, number, number, number];
+  url: string;
+}
+
+// Lecture des hauteurs de ligne de base d'apres la police, comme le fait le navigateur pour centrer le texte dans sa ligne.
+function baselineIn(top: number, height: number, size: number, font: OpenTypeFont): number {
+  const asc = (font.ascender * size) / font.unitsPerEm;
+  const desc = (-font.descender * size) / font.unitsPerEm;
+  return top + (height - (asc + desc)) / 2 + asc;
+}
+
+export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions): Promise<Uint8Array> {
+  const uses = new Map<FontStyle, FontUse>();
+  const use = (s: FontStyle): FontUse => {
+    let u = uses.get(s);
+    if (!u) {
+      u = { font: fontFor(s), name: `F${uses.size + 1}`, glyphs: new Map() };
+      uses.set(s, u);
+    }
+    return u;
+  };
+  const textWidth = setup.width - setup.marginLeft - setup.marginRight;
+  const H = setup.height;
+  const regular = use(`regular`);
+
+  interface Heading {
+    level: number;
+    title: string;
+    page: number;
+    x: number;
+    y: number;
+  }
+  const headings: Heading[] = [];
+
+  // Operateurs de dessin d'une ligne de morceaux. Renvoie la largeur ecrite.
+  const drawRuns = (ops: string[], links: LinkBox[], runs: LineRun[], x0: number, baseline: number, size: number, wordSpacing: number, color?: string): number => {
+    let x = x0;
+    for (const run of runs) {
+      const u = use(run.style);
+      const f = u.font;
+      const sz = size * (run.sup ? SUP_SCALE : 1);
+      // L'exposant monte de 0,38 fois sa propre taille ; les ordonnees d'ici comptent depuis le haut de la page.
+      const y = baseline - (run.sup ? 0.38 * sz : 0);
+      const glyphs = f.shape(run.text);
+      const parts: string[] = [];
+      let cur = ``;
+      let width = 0;
+      for (const g of glyphs) {
+        if (!u.glyphs.has(g.gid)) u.glyphs.set(g.gid, g.text);
+        cur += hex4(g.gid);
+        const kern = g.advance - f.advance(g.gid);
+        const isSpace = g.text === ` ` || g.text === ` `;
+        const extra = isSpace && !run.sup ? wordSpacing : 0;
+        const adj = (-kern * 1000) / f.unitsPerEm - (extra * 1000) / sz;
+        width += (g.advance * sz) / f.unitsPerEm + extra;
+        if (Math.abs(adj) > 1e-6) {
+          parts.push(`<${cur}>`, num(adj));
+          cur = ``;
+        }
+      }
+      if (cur !== ``) parts.push(`<${cur}>`);
+      const link = run.link !== undefined;
+      if (link) ops.push(`q 0.102 0.31 0.612 rg`);
+      else if (color) ops.push(`q ${color} rg`);
+      ops.push(`BT /${u.name} ${num(sz)} Tf ${num(x)} ${num(H - y)} Td [${parts.join(` `)}] TJ ET`);
+      if (link) {
+        // Soulignement et zone cliquable du lien.
+        ops.push(`${num(x)} ${num(H - baseline - 1.4)} ${num(width)} 0.4 re f Q`);
+        const rect: [number, number, number, number] = [x, H - baseline - 2, x + width, H - baseline + size * 0.8];
+        // Les mots d'un meme lien, separes par une espace, ne forment qu'une zone cliquable.
+        const prev = links[links.length - 1];
+        if (prev && prev.url === run.link && Math.abs(prev.rect[1] - rect[1]) < 0.01 && rect[0] - prev.rect[2] < size) prev.rect[2] = rect[2];
+        else links.push({ rect, url: run.link as string });
+      } else if (color) {
+        ops.push(`Q`);
+      }
+      x += width;
+    }
+    return x - x0;
+  };
+
+  const runsOf = (row: Row): LineRun[] => row.runs ?? [{ text: row.text, style: `regular` }];
+  const natural = (runs: LineRun[], size: number, wordSpacing: number): number =>
+    runs.reduce((a, r) => {
+      const f = fontFor(r.style);
+      const sz = size * (r.sup ? SUP_SCALE : 1);
+      const spaces = r.sup ? 0 : Array.from(r.text).filter((c) => c === ` ` || c === ` `).length;
+      return a + (f.width(r.text) * sz) / f.unitsPerEm + spaces * wordSpacing;
+    }, 0);
+
+  const pageContents: { ops: string[]; links: LinkBox[] }[] = [];
+  pages.forEach((page, pageIndex) => {
+    const ops: string[] = [];
+    const links: LinkBox[] = [];
+
+    // Corps de page : lignes empilees depuis la marge haute.
+    let top = setup.marginTop;
+    const drawRow = (row: Row, left: number, rowTop: number): void => {
+      if (row.kind === `space`) return;
+      const baseline = baselineIn(rowTop, row.height, row.fontSize, regular.font);
+      if (row.heading) headings.push({ level: row.heading.level, title: row.heading.title, page: pageIndex, x: left + row.x, y: rowTop });
+      if (row.kind === `quote`) {
+        // Filet vertical a gauche des citations.
+        ops.push(`q 0.6 g ${num(left + 12)} ${num(H - rowTop - row.height)} 1.5 ${num(row.height)} re f Q`);
+      }
+      if (row.marker !== undefined) {
+        const small = row.kind === `footnote`;
+        const run: LineRun = { text: row.marker, style: `regular`, ...(small ? { sup: true } : {}) };
+        if (small) {
+          const ms = row.fontSize * SUP_SCALE;
+          const markerBase = rowTop + (row.height - 1.14 * ms) / 2 + 0.894 * ms - 0.3 * ms;
+          drawRuns(ops, links, [{ ...run, sup: false }], left, markerBase, ms, 0);
+        } else {
+          drawRuns(ops, links, [run], left + row.x - 16, baseline, row.fontSize, 0);
+        }
+      }
+      const runs = runsOf(row);
+      let x = left + row.x;
+      if (row.align === `center`) x += (row.width - natural(runs, row.fontSize, row.wordSpacing)) / 2;
+      drawRuns(ops, links, runs, x, baseline, row.fontSize, row.wordSpacing);
+    };
+    for (const row of page.rows) {
+      drawRow(row, setup.marginLeft, top);
+      top += row.height;
+    }
+
+    // Notes de bas de page : en bas de la zone de texte, sous un filet.
+    if (page.footnotes.length > 0) {
+      const area = FOOTNOTE_RULE_HEIGHT + page.footnotes.reduce((a, r) => a + r.height, 0);
+      let y = H - setup.marginBottom - area;
+      ops.push(`q 0.267 G 0.4 w ${num(setup.marginLeft)} ${num(H - y)} m ${num(setup.marginLeft + textWidth * 0.33)} ${num(H - y)} l S Q`);
+      y += FOOTNOTE_RULE_HEIGHT;
+      for (const row of page.footnotes) {
+        drawRow(row, setup.marginLeft, y);
+        y += row.height;
+      }
+    }
+
+    // En-tete courant et numero de page.
+    if (page.header) {
+      const hs = 9;
+      const top0 = setup.marginTop - 34;
+      drawRuns(ops, links, [{ text: page.header, style: `regular` }], setup.marginLeft, top0 + 0.894 * hs, hs, 0, `0.333 0.333 0.333`);
+      ops.push(`q 0.6 G 0.4 w ${num(setup.marginLeft)} ${num(H - (top0 + 1.14 * hs + 3.2))} m ${num(setup.marginLeft + textWidth)} ${num(H - (top0 + 1.14 * hs + 3.2))} l S Q`);
+    }
+    if (page.footer) {
+      const fs = 10;
+      const w = natural([{ text: page.footer, style: `regular` }], fs, 0);
+      const boxTop = H - 30 - 1.14 * fs;
+      drawRuns(ops, links, [{ text: page.footer, style: `regular` }], (setup.width - w) / 2, boxTop + 0.894 * fs, fs, 0, `0.4 0.4 0.4`);
+    }
+    pageContents.push({ ops, links });
+  });
+
+  // ---------------------------------------------------------------- objets
+  const out = new Writer();
+  const offsets: number[] = [0];
+  const objects: ((id: number) => Promise<void>)[] = [];
+  let nextId = 1;
+  const reserve = (): number => nextId++;
+  const define = (id: number, body: () => Promise<string | Uint8Array>): void => {
+    objects[id] = async () => {
+      offsets[id] = out.length;
+      out.push(`${id} 0 obj\n`);
+      out.push(await body());
+      out.push(`\nendobj\n`);
+    };
+  };
+  const stream = async (dict: string, data: Uint8Array): Promise<Uint8Array> => {
+    let body = data;
+    let filter = ``;
+    if (opts.deflate) {
+      body = await opts.deflate(data);
+      filter = ` /Filter /FlateDecode`;
+    }
+    const w = new Writer();
+    w.push(`<< ${dict}${filter} /Length ${body.length} >>\nstream\n`);
+    w.push(body);
+    w.push(`\nendstream`);
+    return w.bytes();
+  };
+
+  const catalog = reserve();
+  const pagesRoot = reserve();
+  const info = reserve();
+  const outlineRoot = reserve();
+  const fontIds = new Map<FontStyle, number>();
+  for (const s of FONT_STYLES) if (uses.has(s)) fontIds.set(s, reserve());
+  const pageIds = pages.map(() => reserve());
+  const contentIds = pages.map(() => reserve());
+
+  // Polices.
+  for (const [styleName, u] of uses) {
+    const type0 = fontIds.get(styleName) as number;
+    const cid = reserve();
+    const desc = reserve();
+    const file = reserve();
+    const toUni = reserve();
+    const f = u.font;
+    // Les polices sont des sous-ensembles latins : leur nom porte la marque de sous-ensemble de six majuscules.
+    const baseName = {
+      regular: `MMWSRG+LibertinusSerif-Regular`,
+      italic: `MMWSIT+LibertinusSerif-Italic`,
+      bold: `MMWSBD+LibertinusSerif-Bold`,
+      boldItalic: `MMWSBI+LibertinusSerif-BoldItalic`,
+      mono: `MMWMRG+LibertinusMono-Regular`,
+    }[styleName];
+    define(type0, async () => `<< /Type /Font /Subtype /Type0 /BaseFont /${baseName} /Encoding /Identity-H /DescendantFonts [${cid} 0 R] /ToUnicode ${toUni} 0 R >>`);
+    const gids = [...u.glyphs.keys()].sort((a, b) => a - b);
+    define(cid, async () => {
+      const w = gids.map((g) => `${g} [${num((f.advance(g) * 1000) / f.unitsPerEm)}]`).join(` `);
+      return `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /${baseName} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${desc} 0 R /DW 500 /W [${w}] >>`;
+    });
+    const bold = styleName === `bold` || styleName === `boldItalic`;
+    const italic = styleName === `italic` || styleName === `boldItalic`;
+    define(desc, async () => {
+      const bbox = f.bbox.map((v) => num((v * 1000) / f.unitsPerEm)).join(` `);
+      return `<< /Type /FontDescriptor /FontName /${baseName} /Flags ${styleName === `mono` ? 33 : 34 | (italic ? 64 : 0)} /FontBBox [${bbox}] /ItalicAngle ${num(f.italicAngle)} /Ascent ${num((f.ascender * 1000) / f.unitsPerEm)} /Descent ${num((f.descender * 1000) / f.unitsPerEm)} /CapHeight ${num((f.capHeight * 1000) / f.unitsPerEm)} /StemV ${bold ? 140 : 80} /FontFile3 ${file} 0 R >>`;
+    });
+    define(file, async () => stream(`/Subtype /CIDFontType0C`, f.cff));
+    define(toUni, async () => stream(``, encoder.encode(toUnicodeCMap(u.glyphs))));
+  }
+
+  // Pages et flux de contenu.
+  const fontRes = (): string => {
+    const f = [...uses.entries()].map(([s, u]) => `/${u.name} ${fontIds.get(s)} 0 R`);
+    return `<< ${f.join(` `)} >>`;
+  };
+  const annotIds: number[][] = pages.map(() => []);
+  pages.forEach((_p, i) => {
+    for (const link of pageContents[i].links) {
+      const id = reserve();
+      annotIds[i].push(id);
+      const r = link.rect.map(num).join(` `);
+      define(id, async () => `<< /Type /Annot /Subtype /Link /Rect [${r}] /Border [0 0 0] /F 4 /A << /S /URI /URI ${uriString(link.url)} >> >>`);
+    }
+  });
+  pages.forEach((_p, i) => {
+    define(pageIds[i], async () => {
+      const annots = annotIds[i].length > 0 ? ` /Annots [${annotIds[i].map((a) => `${a} 0 R`).join(` `)}]` : ``;
+      return `<< /Type /Page /Parent ${pagesRoot} 0 R /MediaBox [0 0 ${num(setup.width)} ${num(H)}] /Resources << /Font ${fontRes()} >> /Contents ${contentIds[i]} 0 R${annots} >>`;
+    });
+    define(contentIds[i], async () => stream(``, encoder.encode(pageContents[i].ops.join(`\n`))));
+  });
+  define(pagesRoot, async () => `<< /Type /Pages /Kids [${pageIds.map((p) => `${p} 0 R`).join(` `)}] /Count ${pages.length} >>`);
+
+  // Signets : les titres, imbriques selon leur niveau, comme dans la vue Liste. La note elle-meme est la racine.
+  interface OutlineNode {
+    id: number;
+    heading: Heading;
+    children: OutlineNode[];
+    parent: OutlineNode | null;
+  }
+  const roots: OutlineNode[] = [];
+  const stack: OutlineNode[] = [];
+  for (const h of headings) {
+    const node: OutlineNode = { id: reserve(), heading: h, children: [], parent: null };
+    while (stack.length > 0 && stack[stack.length - 1].heading.level >= h.level) stack.pop();
+    if (stack.length > 0) {
+      node.parent = stack[stack.length - 1];
+      node.parent.children.push(node);
+    } else roots.push(node);
+    stack.push(node);
+  }
+  const count = (n: OutlineNode): number => n.children.reduce((a, c) => a + 1 + count(c), 0);
+  const defineOutline = (n: OutlineNode, siblings: OutlineNode[], index: number, parentId: number): void => {
+    define(n.id, async () => {
+      const h = n.heading;
+      const parts = [`/Title ${pdfText(h.title)}`, `/Parent ${parentId} 0 R`, `/Dest [${pageIds[h.page]} 0 R /XYZ ${num(h.x)} ${num(H - h.y + 4)} null]`];
+      if (index > 0) parts.push(`/Prev ${siblings[index - 1].id} 0 R`);
+      if (index < siblings.length - 1) parts.push(`/Next ${siblings[index + 1].id} 0 R`);
+      if (n.children.length > 0) parts.push(`/First ${n.children[0].id} 0 R /Last ${n.children[n.children.length - 1].id} 0 R /Count ${count(n)}`);
+      return `<< ${parts.join(` `)} >>`;
+    });
+    n.children.forEach((c, i) => defineOutline(c, n.children, i, n.id));
+  };
+  roots.forEach((r, i) => defineOutline(r, roots, i, outlineRoot));
+  if (roots.length > 0) {
+    define(outlineRoot, async () => `<< /Type /Outlines /First ${roots[0].id} 0 R /Last ${roots[roots.length - 1].id} 0 R /Count ${roots.reduce((a, r) => a + 1 + count(r), 0)} >>`);
+  }
+
+  define(info, async () => {
+    const parts = [`/Title ${pdfText(opts.title)}`, `/Creator ${pdfText(opts.creator)}`, `/Producer ${pdfText(opts.creator)}`, `/CreationDate (${pdfDate(opts.created)})`, `/ModDate (${pdfDate(opts.created)})`];
+    if (opts.author) parts.push(`/Author ${pdfText(opts.author)}`);
+    return `<< ${parts.join(` `)} >>`;
+  });
+  define(catalog, async () => `<< /Type /Catalog /Pages ${pagesRoot} 0 R${roots.length > 0 ? ` /Outlines ${outlineRoot} 0 R /PageMode /UseOutlines` : ``} /Lang ${pdfText(opts.language)} /ViewerPreferences << /DisplayDocTitle true >> >>`);
+
+  // ---------------------------------------------------------------- ecriture
+  out.push(`%PDF-1.7\n`);
+  out.push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+  const total = nextId;
+  for (let id = 1; id < total; id++) {
+    if (objects[id]) await objects[id](id);
+    else {
+      // Racine des signets sans titre : objet vide, jamais reference.
+      offsets[id] = out.length;
+      out.push(`${id} 0 obj\nnull\nendobj\n`);
+    }
+  }
+  const xref = out.length;
+  out.push(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for (let id = 1; id < total; id++) out.push(`${String(offsets[id]).padStart(10, `0`)} 00000 n \n`);
+  const fileId = idOf(opts.title + opts.created.toISOString() + total);
+  out.push(`trailer\n<< /Size ${total} /Root ${catalog} 0 R /Info ${info} 0 R /ID [<${fileId}> <${fileId}>] >>\nstartxref\n${xref}\n%%EOF\n`);
+  return out.bytes();
+}
+
+// Identifiant du fichier : 32 caracteres hexadecimaux tires du titre et de la date.
+function idOf(s: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  let out = ``;
+  for (let r = 0; r < 4; r++) {
+    for (let i = 0; i < s.length; i++) {
+      h1 = Math.imul(h1 ^ s.charCodeAt(i), 0x01000193) >>> 0;
+      h2 = Math.imul(h2 + s.charCodeAt(i), 0x85ebca6b) >>> 0;
+    }
+    out += h1.toString(16).padStart(8, `0`);
+    h2 ^= h1;
+  }
+  return out.slice(0, 32);
+}
+
+// Adresse d'un lien : caracteres ASCII, avec les autres codes en pourcentage.
+function uriString(url: string): string {
+  const ascii = url.replace(/[^\x21-\x7e]/g, (c) => encodeURIComponent(c));
+  return `(${ascii.replace(/[\\()]/g, (c) => `\\${c}`)})`;
+}
+
+// Table de correspondance glyphe -> texte (UTF-16BE), pour que le texte du PDF se selectionne, se copie et se recherche.
+function toUnicodeCMap(glyphs: Map<number, string>): string {
+  const entries = [...glyphs.entries()].sort((a, b) => a[0] - b[0]);
+  const lines: string[] = [];
+  for (let i = 0; i < entries.length; i += 100) {
+    const chunk = entries.slice(i, i + 100);
+    lines.push(`${chunk.length} beginbfchar`);
+    for (const [gid, text] of chunk) {
+      let u = ``;
+      for (let k = 0; k < text.length; k++) u += hex4(text.charCodeAt(k));
+      lines.push(`<${hex4(gid)}> <${u}>`);
+    }
+    lines.push(`endbfchar`);
+  }
+  return [
+    `/CIDInit /ProcSet findresource begin`,
+    `12 dict begin`,
+    `begincmap`,
+    `/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def`,
+    `/CMapName /Adobe-Identity-UCS def`,
+    `/CMapType 2 def`,
+    `1 begincodespacerange`,
+    `<0000> <FFFF>`,
+    `endcodespacerange`,
+    ...lines,
+    `endcmap`,
+    `CMapName currentdict /CMap defineresource pop`,
+    `end`,
+    `end`,
+  ].join(`\n`);
+}

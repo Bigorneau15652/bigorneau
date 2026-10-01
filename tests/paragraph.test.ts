@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { measureText } from "../src/export/font-metrics";
+import { parseInline } from "../src/export/inline";
 import { ParagraphOptions, typesetParagraph } from "../src/export/paragraph";
 
 const TEXT = [
@@ -120,4 +121,42 @@ test(`la coupure de Knuth et Plass est plus reguliere que le remplissage au plus
   const r = typesetParagraph(TEXT, OPTS);
   const kp = r.lines.filter((l) => !l.last).map((l) => l.ratio);
   assert.ok(sq(kp) <= sq(greedy), `Knuth-Plass ${sq(kp)} contre glouton ${sq(greedy)}`);
+});
+
+test(`le gras, l'italique et les liens donnent des morceaux de ligne de polices differentes`, () => {
+  const inline = parseInline(`Un mot en **gras**, un autre en *italique*, et [un lien](https://exemple.fr) puis du texte ordinaire pour remplir la ligne.`);
+  const r = typesetParagraph(inline, { ...OPTS, indent: 0, lineWidth: 400 });
+  const all = r.lines.flatMap((l) => l.runs);
+  assert.ok(all.some((x) => x.style === `bold` && x.text === `gras`));
+  assert.ok(all.some((x) => x.style === `italic` && x.text === `italique`));
+  assert.ok(all.some((x) => x.link === `https://exemple.fr` && x.text === `un` || x.link === `https://exemple.fr` && x.text === `lien`));
+  // Le texte brut ne contient aucun repere de style.
+  for (const l of r.lines) assert.ok(!/[-]/.test(l.text));
+  // Les espaces restent dans la police de base : jamais dans un morceau en gras ou en italique.
+  for (const x of all) if (x.style !== `regular`) assert.ok(!/^ | $/.test(x.text), JSON.stringify(x));
+});
+
+test(`les lignes justifiees avec du gras et de l'italique remplissent exactement la colonne`, () => {
+  const text = TEXT.replace(`bien avant`, `**bien avant**`).replace(`rapport d'audit`, `*rapport d'audit*`).replace(`isolation des murs`, `__isolation des murs__`);
+  const r = typesetParagraph(parseInline(text), OPTS);
+  r.lines.forEach((l, i) => {
+    if (l.last) return;
+    const spaces = Array.from(l.text).filter((c) => c === ` ` || c === ` `).length;
+    const w = l.runs.reduce((a, x) => a + measureText(x.text, 11, x.style).width, 0) + spaces * l.wordSpacing + l.offset;
+    assert.ok(Math.abs(w - 300) < 1e-6, `ligne ${i} : ${w}`);
+  });
+});
+
+test(`une ligature peut se former au-dessus d'une coupure de cesure invisible`, () => {
+  // Le mot est coupe en « of-fice » par la cesure ; sur une ligne qui ne le coupe pas, « ffi » reste une ligature, donc la
+  // largeur de la ligne est celle du mot entier mis en forme.
+  const r = typesetParagraph(`office`, { ...OPTS, language: `en`, indent: 0, lineWidth: 400, hyphenateLastWord: true });
+  assert.equal(r.lines.length, 1);
+  assert.equal(r.lines[0].width, measureText(`office`, 11).width);
+});
+
+test(`une police de base en gras s'applique a tout le paragraphe`, () => {
+  const r = typesetParagraph(`Un titre`, { ...OPTS, indent: 0, style: `bold`, align: `left`, hyphenate: false });
+  assert.ok(r.lines[0].runs.every((x) => x.style === `bold`));
+  assert.equal(r.lines[0].width, measureText(`Un titre`, 11, `bold`).width);
 });
