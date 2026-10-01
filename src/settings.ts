@@ -32,7 +32,9 @@ export function sanitizeFixed(raw: unknown): FixedEntry[] {
   return out.slice(0, 30);
 }
 
-export type FloatShape = `oval` | `round` | `sharp`;
+// Forme d'une case : cadre (angles aigus ou arrondis selon `corners`), ovale, trait dessous, parallelogramme ou losange.
+export type Shape = `frame` | `oval` | `underline` | `parallelogram` | `diamond`;
+export type FloatShape = `oval` | `round` | `sharp` | `underline` | `parallelogram` | `diamond`;
 export type NewNoteFolderMode = `fixed` | `current` | `root`;
 
 // Numero de la version du format des reglages enregistres.
@@ -121,6 +123,7 @@ export interface MmSettings {
   strokeDash: StrokeDash;
   roughness: Roughness;
   corners: Corners;
+  shape: Shape;
   showFrames: boolean;
   fontFamily: FontFamily;
   fontScale: number;
@@ -197,6 +200,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   strokeDash: `solid`,
   roughness: 1,
   corners: `round`,
+  shape: `frame`,
   showFrames: true,
   fontFamily: `default`,
   fontScale: 1,
@@ -244,6 +248,7 @@ export const APPEARANCE_KEYS: (keyof MmSettings)[] = [
   `strokeDash`,
   `roughness`,
   `corners`,
+  `shape`,
   `showFrames`,
   `fontFamily`,
   `fontScale`,
@@ -279,7 +284,8 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.tags = sanitizeTags(data.tags);
   merged.fixedViews = sanitizeFixed(data.fixedViews);
   merged.floatLevel = typeof merged.floatLevel === `number` && merged.floatLevel >= 1 && merged.floatLevel <= 6 ? Math.round(merged.floatLevel) : 2;
-  if (![`oval`, `round`, `sharp`].includes(merged.floatShape)) merged.floatShape = `oval`;
+  if (![`oval`, `round`, `sharp`, `underline`, `parallelogram`, `diamond`].includes(merged.floatShape)) merged.floatShape = `oval`;
+  if (![`frame`, `oval`, `underline`, `parallelogram`, `diamond`].includes(merged.shape)) merged.shape = `frame`;
   for (const k of [`floatStrokeColor`, `floatFillColor`] as const) {
     if (typeof merged[k] !== `string` || (merged[k] !== `` && !TAG_HEX.test(merged[k]))) merged[k] = ``;
   }

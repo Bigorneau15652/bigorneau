@@ -37,5 +37,6 @@ test(`reglages : l apparence par defaut couvre tous les reglages d apparence`, (
   const d = appearanceDefaults() as Record<string, unknown>;
   assert.equal(d.roughness, 1);
   assert.equal(d.strokeColor, ``);
-  assert.equal(Object.keys(d).length, 11);
+  assert.equal(Object.keys(d).length, 12);
+  assert.equal(d.shape, `frame`);
 });

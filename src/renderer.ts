@@ -4,7 +4,7 @@ import { computeStats, flattenDoc, isFloatKey, isFloatRoot, MmDoc, MmNode, nodeB
 import { t } from "./i18n";
 import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
 import { buildLayoutTree, Bounds, childIndent, computeLayout, computeListLayout, flatten, listIndent, LNode, sequential, trunkX } from "./layout";
-import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sketch";
+import { framePath, hasTrunk, polygonFrame, trunkBranch, trunkLine, trunkRadius, underlinePath } from "./sketch";
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
 import { iconSvg } from "./icons";
@@ -13,7 +13,7 @@ import { linkPath, loopPath, sidePath } from "./link-geom";
 import { MapLink, parseLinks, WebLink, webLinks } from "./links";
 import { HeadingItem, VaultPicker } from "./vault-picker";
 import { WebDialog, WebDialogOptions } from "./web-dialog";
-import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from "./style";
+import { describeScope, globalStyle, NodeStyle, resolveStyle, shapeChoice, ShapeChoice, shapePatch, StylePatch } from "./style";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
 export interface MapEdit {
@@ -239,6 +239,7 @@ export class MapRenderer {
       resetStyle: (individual) => this.callbacks.onResetStyle(individual),
       currentStyle: () => this.currentStyle(),
       scopeLabel: (individual) => this.scopeLabel(individual),
+      selectionKind: () => this.selectionKind(),
       toggleLink: () => (this.linking ? this.stopLinking() : this.startLinking()),
       back: () => this.callbacks.onBack?.(),
       toggleView: () => this.callbacks.onChange({ viewMode: this.isList() ? `map` : `list` }),
@@ -361,8 +362,9 @@ export class MapRenderer {
       if (s.floatFillColor) own.fillColor = s.floatFillColor;
       if (s.floatStrokeDash) own.strokeDash = s.floatStrokeDash;
       if (s.floatFontFamily) own.fontFamily = s.floatFontFamily;
-      if (s.floatShape !== `oval`) own.corners = s.floatShape;
-      return resolveStyle({ ...globalStyle(s), ...own }, undefined, level, n.node.meta?.style);
+      Object.assign(own, shapePatch(s.floatShape === `round` ? `rounded` : s.floatShape === `sharp` ? `rect` : (s.floatShape as ShapeChoice)));
+      // Les reglages de tous les sujets flottants (niveau `f`) puis ceux du sujet lui-meme passent avant ces valeurs par defaut.
+      return resolveStyle({ ...globalStyle(s), ...own }, this.doc?.root.meta?.levels, `f`, n.node.meta?.style);
     }
     return resolveStyle(globalStyle(s), this.doc?.root.meta?.levels, level, n.node.meta?.style);
   }
@@ -374,12 +376,19 @@ export class MapRenderer {
     return n ? this.styleOf(n) : globalStyle(s);
   }
 
+  // Nature de la selection pour le panneau d'apparence : toute la carte (ou rien), des titres, ou des sujets flottants seuls.
+  private selectionKind(): `all` | `nodes` | `floats` {
+    const keys = this.getSelection();
+    if (!this.doc || keys.length === 0 || keys.length >= flattenDoc(this.doc).length) return `all`;
+    return keys.every((k) => isFloatRoot(k)) ? `floats` : `nodes`;
+  }
+
   private scopeLabel(individual: boolean): string {
     const keys = this.getSelection();
     if (!this.doc || keys.length === 0) return `toute la carte`;
     const flat = flattenDoc(this.doc);
     const byKey = new Map<string, MmNode>(flat.map((e) => [e.key, e.node]));
-    const levels = keys.map((k) => (k === `r` ? 0 : byKey.get(k)?.level ?? 0));
+    const levels = keys.map((k) => (k === `r` ? 0 : isFloatRoot(k) ? -1 : byKey.get(k)?.level ?? 0));
     return describeScope(levels, keys.length, keys.length >= flat.length, individual);
   }
 
@@ -469,6 +478,11 @@ export class MapRenderer {
       const el = this.els.get(n.key)!;
       n.w = el.offsetWidth;
       n.h = el.offsetHeight;
+      // Les formes a pointes et l'ovale ont besoin de plus de place que le texte pour qu'il reste dans le contour.
+      if (!list) {
+        const st = this.styleOf(n);
+        if (st.showFrames) this.inflate(el, n, st);
+      }
     }
     this.bounds = list ? computeListLayout(this.root, indent, this.listWidth) : computeLayout(this.root, s.compactness);
     this.mainBounds = { ...this.bounds };
@@ -527,6 +541,27 @@ export class MapRenderer {
     else this.applyTransform();
   }
 
+  // Agrandit la case d'une forme qui entoure mal son texte : le losange (diamant), le parallelogramme et l'ovale.
+  private inflate(el: HTMLElement, n: LNode, st: NodeStyle): void {
+    let w = n.w;
+    let h = n.h;
+    if (st.shape === `diamond`) {
+      w = Math.round(n.w * 1.8);
+      h = Math.round(n.h * 1.9);
+    } else if (st.shape === `parallelogram`) {
+      w = n.w + Math.round(n.h * 0.7);
+      el.style.setProperty(`--mmw-skew`, `${Math.min(n.h * 0.35, w / 3)}px`);
+    } else if (st.shape === `oval`) {
+      w = n.w + Math.round(n.h * 0.35);
+    }
+    if (w !== n.w || h !== n.h) {
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+      n.w = w;
+      n.h = h;
+    }
+  }
+
   // Sujets flottants. Carte : chaque sujet est pose a sa position (ceux qui n'en ont pas encore sont ranges a droite de la
   // carte). Liste : ils sont empiles sous un trait, dans une zone qui reste visible meme vide.
   private layoutFloats(s: MmSettings, list: boolean, indent: number): void {
@@ -574,8 +609,9 @@ export class MapRenderer {
     el.className = `mmw-node mmw-depth-${Math.min(n.depth, 3)}`;
     el.dataset.key = n.key;
     if (this.isHidden(n)) el.classList.add(`mmw-hidden`);
-    if (isFloatRoot(n.key)) el.classList.add(`mmw-float-root`, `mmw-float-${s.floatShape}`);
+    if (isFloatRoot(n.key)) el.classList.add(`mmw-float-root`);
     const st = this.styleOf(n);
+    if (s.viewMode !== `list` && st.showFrames) el.classList.add(`mmw-shape-${shapeChoice(st)}`);
     el.style.setProperty(`--mmw-node-color`, st.strokeColor || `var(--text-normal)`);
     const list = s.viewMode === `list`;
     // Vue Liste : police du theme (ou celle de la carte si on le demande), taille uniforme, texte a gauche.
@@ -745,10 +781,14 @@ export class MapRenderer {
     for (const n of this.list) {
       const st = styleOf(n);
       if (!st.showFrames) continue;
-      const oval = isFloatRoot(n.key) && s.floatShape === `oval`;
-      const shape = framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, st.corners, st.roughness, oval);
+      const shape =
+        st.shape === `diamond` || st.shape === `parallelogram`
+          ? polygonFrame(st.shape, n.x, n.y, n.w, n.h, n.key, st.roughness)
+          : st.shape === `underline`
+            ? underlinePath(n.x, n.y, n.w, n.h, n.key, st.roughness)
+            : framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, st.corners, st.roughness, st.shape === `oval`);
       const cls = `mmw-frame` + (this.isHidden(n) ? ` mmw-frame-hidden` : ``);
-      const css = strokeCss(st, n.depth === 0 ? 1.45 : 1) + `fill:${st.fillColor || `transparent`};`;
+      const css = strokeCss(st, n.depth === 0 ? 1.45 : 1) + `fill:${st.shape === `underline` ? `none` : st.fillColor || `transparent`};`;
       if (shape.kind === `path`) this.path(shape.d, cls, css);
       else {
         const r = document.createElementNS(SVG_NS, `rect`);

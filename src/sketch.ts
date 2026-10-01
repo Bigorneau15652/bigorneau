@@ -171,6 +171,25 @@ export function trunkBranch(
   return smoothPath(wobble(resample(pts, 8, false), rng(seed), WOBBLE * 0.6 * ROUGH[rough], false), false);
 }
 
+// Contour des formes a pointes : parallelogramme (cote penche) et losange. Le trace respecte le style (net ou crayon).
+export function polygonFrame(kind: `parallelogram` | `diamond`, x: number, y: number, w: number, h: number, seed: string, rough: Roughness = 1): FrameShape {
+  const skew = Math.min(h * 0.35, w / 3);
+  const pts: Pt[] =
+    kind === `diamond`
+      ? [{ x: x + w / 2, y }, { x: x + w, y: y + h / 2 }, { x: x + w / 2, y: y + h }, { x, y: y + h / 2 }]
+      : [{ x: x + skew, y }, { x: x + w, y }, { x: x + w - skew, y: y + h }, { x, y: y + h }];
+  if (rough === 0) return { kind: `path`, d: polyPath(pts) + ` Z` };
+  return { kind: `path`, d: polyPath(wobble(resample(pts, 9, true), rng(seed), 0.3 * ROUGH[rough], true)) + ` Z` };
+}
+
+// Trait dessous : une simple ligne sous le titre.
+export function underlinePath(x: number, y: number, w: number, h: number, seed: string, rough: Roughness = 1): FrameShape {
+  const a = { x, y: y + h };
+  const b = { x: x + w, y: y + h };
+  if (rough === 0) return { kind: `path`, d: polyPath([a, b]) };
+  return { kind: `path`, d: smoothPath(wobble(resample([a, b], 8, false), rng(seed), 0.35 * ROUGH[rough], false), false) };
+}
+
 export type FrameShape = { kind: `path`; d: string } | { kind: `rect`; rx: number };
 
 // Contour d'une case : un rectangle net ou un trace irregulier, avec des angles aigus ou arrondis.

@@ -116,3 +116,15 @@ test(`retrait de proprietes d un style`, () => {
   assert.deepEqual(omitKeys({ strokeColor: `#fff`, strokeWidth: 3 }, [`strokeColor`]), { strokeWidth: 3 });
   assert.deepEqual(omitKeys(undefined, [`strokeColor`]), {});
 });
+
+test(`les formes : choix proposes, correspondance avec le cadre et nettoyage`, async () => {
+  const { shapeChoice, shapePatch, SHAPE_CHOICES } = await import(`../src/style`);
+  assert.deepEqual(SHAPE_CHOICES, [`rect`, `rounded`, `oval`, `underline`, `parallelogram`, `diamond`]);
+  assert.equal(shapeChoice({ shape: `frame`, corners: `round` }), `rounded`);
+  assert.equal(shapeChoice({ shape: `frame`, corners: `sharp` }), `rect`);
+  assert.equal(shapeChoice({ shape: `diamond`, corners: `round` }), `diamond`);
+  for (const c of SHAPE_CHOICES) assert.equal(shapeChoice({ shape: `frame`, corners: `round`, ...shapePatch(c) }), c);
+  assert.deepEqual(sanitizePatch({ shape: `diamond` }), { shape: `diamond` });
+  assert.deepEqual(sanitizePatch({ shape: `etoile` }), {});
+  assert.deepEqual(sanitizeMeta({ levels: { f: { fillColor: `#b2f2bb` }, "9": { fillColor: `#b2f2bb` } } }).levels, { f: { fillColor: `#b2f2bb` } });
+});

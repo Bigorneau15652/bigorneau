@@ -1,6 +1,6 @@
 // Portee d'une modification de style : quelles reglages et quels commentaires de la note changent
 // selon la selection et la touche Cmd (ou Ctrl). Sans dependance a Obsidian.
-import { flattenDoc, LineEdit, MmDoc, planMetaEdit } from "./model";
+import { flattenDoc, isFloatRoot, LineEdit, MmDoc, planMetaEdit } from "./model";
 import { detailsOnly, isEmptyMeta, MmMeta, mergePatch, omitKeys, StylePatch } from "./style";
 
 export interface MetaChange {
@@ -17,7 +17,8 @@ export interface StylePlan {
   changes: MetaChange[];
 }
 
-const levelOf = (key: string, doc: MmDoc, levels: Map<string, number>): number => (key === `r` ? 0 : levels.get(key) ?? 0);
+// Niveau de style d'un noeud : le niveau de son titre, ou `f` pour la racine d'un sujet flottant (tous les sujets flottants).
+const levelOf = (key: string, doc: MmDoc, levels: Map<string, number>): string => (key === `r` ? `0` : isFloatRoot(key) ? `f` : String(levels.get(key) ?? 0));
 
 function levelMap(doc: MmDoc): Map<string, number> {
   return new Map(flattenDoc(doc).map((e) => [e.key, e.node.level]));
@@ -52,7 +53,7 @@ export function planStyle(doc: MmDoc, keys: string[], patch: StylePatch, individ
   if (!individual) {
     const merged: Record<string, StylePatch> = { ...(rootMeta.levels ?? {}) };
     for (const k of keys) {
-      const lvl = String(levelOf(k, doc, levels));
+      const lvl = levelOf(k, doc, levels);
       merged[lvl] = mergePatch(merged[lvl], patch);
     }
     return { changes: [{ key: `r`, meta: { ...rootMeta, levels: merged } }] };
@@ -81,7 +82,7 @@ export function planReset(doc: MmDoc, keys: string[], individual: boolean): Styl
   if (!individual) {
     const rootMeta: MmMeta = doc.root.meta ?? {};
     const merged: Record<string, StylePatch> = { ...(rootMeta.levels ?? {}) };
-    for (const k of keys) delete merged[String(levelOf(k, doc, levels))];
+    for (const k of keys) delete merged[levelOf(k, doc, levels)];
     return { changes: [{ key: `r`, meta: { ...rootMeta, levels: merged } }] };
   }
   const changes: MetaChange[] = [];
