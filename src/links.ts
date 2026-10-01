@@ -105,6 +105,41 @@ export interface WebLink {
   kind: `md` | `src` | `auto` | `bare`;
 }
 
+// Adresse a ouvrir dans le navigateur pour une video integree : l'adresse d'integration d'un lecteur (iframe) n'est pas celle
+// de la page de la video. YouTube, YouTube sans cookies, Vimeo et Dailymotion sont reconnus ; les autres adresses restent telles quelles.
+export function openableUrl(url: string): string {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return url;
+  }
+  const host = u.hostname.replace(/^www\./, ``).toLowerCase();
+  const start = u.searchParams.get(`start`);
+  const time = start && /^\d+$/.test(start) && start !== `0` ? `&t=${start}` : ``;
+  if (host === `youtube.com` || host === `youtube-nocookie.com` || host === `m.youtube.com`) {
+    const embed = /^\/(?:embed|v)\/([\w-]{6,})/.exec(u.pathname);
+    if (embed) {
+      if (embed[1] === `videoseries`) {
+        const list = u.searchParams.get(`list`);
+        return list ? `https://www.youtube.com/playlist?list=${encodeURIComponent(list)}` : url;
+      }
+      const list = u.searchParams.get(`list`);
+      return `https://www.youtube.com/watch?v=${embed[1]}${list ? `&list=${encodeURIComponent(list)}` : ``}${time}`;
+    }
+    return url;
+  }
+  if (host === `player.vimeo.com`) {
+    const m = /^\/video\/(\d+)/.exec(u.pathname);
+    return m ? `https://vimeo.com/${m[1]}` : url;
+  }
+  if (host === `dailymotion.com` || host === `geo.dailymotion.com`) {
+    const m = /^\/(?:embed\/)?video\/([a-z0-9]+)/i.exec(u.pathname);
+    return m ? `https://www.dailymotion.com/video/${m[1]}` : url;
+  }
+  return url;
+}
+
 function hostLabel(url: string): string {
   try {
     const u = new URL(url);
