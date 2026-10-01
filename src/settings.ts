@@ -157,6 +157,10 @@ export interface MmSettings {
   newNoteFolder: string;
   // Auteur ecrit dans les metadonnees du PDF quand la note n'a pas de propriete author.
   exportAuthor: string;
+  // Figures et tableaux de l'export : flottants (en haut ou en bas de la page) ou places la ou ils sont ecrits.
+  exportFloats: `float` | `inline`;
+  // Renvois de l'export : ajouter le numero de page apres le texte cliquable.
+  exportPageRefs: boolean;
   // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
   iconExternal: string;
   iconInternal: string;
@@ -225,6 +229,8 @@ export const DEFAULT_SETTINGS: MmSettings = {
   newNoteMode: `current`,
   newNoteFolder: ``,
   exportAuthor: ``,
+  exportFloats: `float`,
+  exportPageRefs: false,
   iconExternal: `chain`,
   iconInternal: `return`,
   iconWeb: `globe`,
@@ -300,6 +306,8 @@ export function migrateSettings(stored: unknown): MmSettings {
   }
   merged.newNoteFolder = typeof merged.newNoteFolder === `string` ? merged.newNoteFolder.replace(/^\/+|\/+$/g, ``) : ``;
   merged.exportAuthor = typeof merged.exportAuthor === `string` ? merged.exportAuthor.trim() : ``;
+  if (merged.exportFloats !== `float` && merged.exportFloats !== `inline`) merged.exportFloats = `float`;
+  merged.exportPageRefs = merged.exportPageRefs === true;
   merged.settingsVersion = SETTINGS_VERSION;
   return merged;
 }

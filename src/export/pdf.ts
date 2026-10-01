@@ -3,6 +3,7 @@
 // et copiable (table ToUnicode, ligatures comprises), signets hierarchiques qui reprennent les titres, liens web cliquables,
 // metadonnees. Chaque ligne est placee a la position que calcule la composition, comme dans l'apercu.
 import { FONT_STYLES, fontFor, FontStyle } from "./font-metrics";
+import { ImageAsset } from "./image";
 import { OpenTypeFont } from "./font";
 import { LineRun, SUP_SCALE } from "./paragraph";
 import { FOOTNOTE_RULE_HEIGHT, Page } from "./paginate";
@@ -17,6 +18,8 @@ export interface PdfOptions {
   created: Date;
   // Compression des flux (Flate). Absente : flux non compresses, utile pour les tests.
   deflate?: (data: Uint8Array) => Promise<Uint8Array>;
+  // Images des figures, par cible.
+  images?: Map<string, ImageAsset>;
 }
 
 const encoder = new TextEncoder();
@@ -159,6 +162,19 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       return a + (f.width(r.text) * sz) / f.unitsPerEm + spaces * wordSpacing;
     }, 0);
 
+  // Images utilisees : nom de la ressource de page et image, par cible. Reperes des renvois : page et position.
+  const usedImages = new Map<string, { name: string; asset: ImageAsset }>();
+  const imageName = (target: string): string | undefined => {
+    const known = usedImages.get(target);
+    if (known) return known.name;
+    const asset = opts.images?.get(target);
+    if (!asset) return undefined;
+    const name = `Im${usedImages.size + 1}`;
+    usedImages.set(target, { name, asset });
+    return name;
+  };
+  const anchors = new Map<string, { page: number; x: number; y: number }>();
+
   const pageContents: { ops: string[]; links: LinkBox[] }[] = [];
   pages.forEach((page, pageIndex) => {
     const ops: string[] = [];
@@ -167,7 +183,26 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
     // Corps de page : lignes empilees depuis la marge haute.
     let top = setup.marginTop;
     const drawRow = (row: Row, left: number, rowTop: number): void => {
-      if (row.kind === `space`) return;
+      if (row.anchor !== undefined && !anchors.has(row.anchor)) anchors.set(row.anchor, { page: pageIndex, x: left + row.x, y: rowTop });
+      if (row.rules) {
+        // Filets du tableau, sur toute sa largeur.
+        const x1 = left + row.x;
+        const x2 = x1 + row.width;
+        if (row.rules.top) ops.push(`q 0.15 G 0.6 w ${num(x1)} ${num(H - rowTop)} m ${num(x2)} ${num(H - rowTop)} l S Q`);
+        if (row.rules.bottom) ops.push(`q 0.15 G 0.6 w ${num(x1)} ${num(H - rowTop - row.height)} m ${num(x2)} ${num(H - rowTop - row.height)} l S Q`);
+      }
+      if (row.kind === `space` || row.kind === `float`) return;
+      if (row.cells) {
+        const inner = row.height - (row.inset?.top ?? 0) - (row.inset?.bottom ?? 0);
+        const cellBase = baselineIn(rowTop + (row.inset?.top ?? 0), inner, row.fontSize, regular.font);
+        for (const c of row.cells) drawRuns(ops, links, c.runs, left + row.x + c.x, cellBase, row.fontSize, 0);
+        return;
+      }
+      if (row.image) {
+        const name = imageName(row.image.target);
+        if (name) ops.push(`q ${num(row.image.width)} 0 0 ${num(row.image.height)} ${num(left + row.x)} ${num(H - rowTop - row.image.height)} cm /${name} Do Q`);
+        return;
+      }
       const baseline = baselineIn(rowTop, row.height, row.fontSize, regular.font);
       if (row.heading) headings.push({ level: row.heading.level, title: row.heading.title, page: pageIndex, x: left + row.x, y: rowTop });
       if (row.kind === `quote`) {
@@ -188,11 +223,37 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       const runs = runsOf(row);
       let x = left + row.x;
       if (row.align === `center`) x += (row.width - natural(runs, row.fontSize, row.wordSpacing)) / 2;
-      drawRuns(ops, links, runs, x, baseline, row.fontSize, row.wordSpacing);
+      const written = drawRuns(ops, links, runs, x, baseline, row.fontSize, row.wordSpacing);
+      if (row.toc) {
+        // Entree de la table des matieres : numero de page a droite, points de conduite, zone cliquable sur toute la ligne.
+        const right = left + row.x + row.width;
+        if (row.toc.page >= 0) {
+          const label = String(row.toc.page);
+          const labelWidth = natural([{ text: label, style: `regular` }], row.fontSize, 0);
+          drawRuns(ops, links, [{ text: label, style: `regular` }], right - labelWidth, baseline, row.fontSize, 0);
+          const from = x + written + 4;
+          const to = right - labelWidth - 4;
+          if (to - from > 6) ops.push(`q [0.1 3.2] 0 d 1 J 0.6 w 0.4 G ${num(from)} ${num(H - baseline)} m ${num(to)} ${num(H - baseline)} l S Q`);
+        }
+        links.push({ rect: [left + row.x, H - rowTop - row.height, right, H - rowTop], url: `#${row.toc.anchor}` });
+      }
     };
+    for (const row of page.topFloats ?? []) {
+      drawRow(row, setup.marginLeft, top);
+      top += row.height;
+    }
     for (const row of page.rows) {
       drawRow(row, setup.marginLeft, top);
       top += row.height;
+    }
+    // Flottants du bas : juste au-dessus des notes de bas de page.
+    if (page.bottomFloats && page.bottomFloats.length > 0) {
+      const noteArea = page.footnotes.length > 0 ? FOOTNOTE_RULE_HEIGHT + page.footnotes.reduce((a, r) => a + r.height, 0) : 0;
+      let by = H - setup.marginBottom - noteArea - page.bottomFloats.reduce((a, r) => a + r.height, 0);
+      for (const row of page.bottomFloats) {
+        drawRow(row, setup.marginLeft, by);
+        by += row.height;
+      }
     }
 
     // Notes de bas de page : en bas de la zone de texte, sous un filet.
@@ -236,6 +297,14 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       out.push(await body());
       out.push(`\nendobj\n`);
     };
+  };
+  // Flux ecrit tel quel (image JPEG, deja compressee).
+  const rawStream = async (dict: string, data: Uint8Array): Promise<Uint8Array> => {
+    const w = new Writer();
+    w.push(`<< ${dict} /Length ${data.length} >>\nstream\n`);
+    w.push(data);
+    w.push(`\nendstream`);
+    return w.bytes();
   };
   const stream = async (dict: string, data: Uint8Array): Promise<Uint8Array> => {
     let body = data;
@@ -297,19 +366,42 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
     const f = [...uses.entries()].map(([s, u]) => `/${u.name} ${fontIds.get(s)} 0 R`);
     return `<< ${f.join(` `)} >>`;
   };
+  // Images : un objet par image, avec son masque de transparence s'il y en a un.
+  const imageIds = new Map<string, number>();
+  for (const [target, { asset }] of usedImages) {
+    const id = reserve();
+    imageIds.set(target, id);
+    const mask = asset.alpha ? reserve() : undefined;
+    define(id, async () => {
+      const dict = `/Type /XObject /Subtype /Image /Width ${asset.pixelWidth} /Height ${asset.pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8${mask ? ` /SMask ${mask} 0 R` : ``}`;
+      return asset.kind === `jpeg` ? rawStream(`${dict} /Filter /DCTDecode`, asset.data) : stream(dict, asset.data);
+    });
+    if (mask && asset.alpha) {
+      const alpha = asset.alpha;
+      define(mask, async () => stream(`/Type /XObject /Subtype /Image /Width ${asset.pixelWidth} /Height ${asset.pixelHeight} /ColorSpace /DeviceGray /BitsPerComponent 8`, alpha));
+    }
+  }
+  const xobjectRes = (): string => (usedImages.size === 0 ? `` : ` /XObject << ${[...usedImages.entries()].map(([t, u]) => `/${u.name} ${imageIds.get(t)} 0 R`).join(` `)} >>`);
   const annotIds: number[][] = pages.map(() => []);
   pages.forEach((_p, i) => {
     for (const link of pageContents[i].links) {
+      const target = link.url.startsWith(`#`) ? anchors.get(link.url.slice(1)) : undefined;
+      // Renvoi vers un repere absent du document : pas de zone cliquable.
+      if (link.url.startsWith(`#`) && !target) continue;
       const id = reserve();
       annotIds[i].push(id);
       const r = link.rect.map(num).join(` `);
-      define(id, async () => `<< /Type /Annot /Subtype /Link /Rect [${r}] /Border [0 0 0] /F 4 /A << /S /URI /URI ${uriString(link.url)} >> >>`);
+      define(id, async () =>
+        target
+          ? `<< /Type /Annot /Subtype /Link /Rect [${r}] /Border [0 0 0] /F 4 /Dest [${pageIds[target.page]} 0 R /XYZ ${num(target.x)} ${num(H - target.y + 4)} null] >>`
+          : `<< /Type /Annot /Subtype /Link /Rect [${r}] /Border [0 0 0] /F 4 /A << /S /URI /URI ${uriString(link.url)} >> >>`
+      );
     }
   });
   pages.forEach((_p, i) => {
     define(pageIds[i], async () => {
       const annots = annotIds[i].length > 0 ? ` /Annots [${annotIds[i].map((a) => `${a} 0 R`).join(` `)}]` : ``;
-      return `<< /Type /Page /Parent ${pagesRoot} 0 R /MediaBox [0 0 ${num(setup.width)} ${num(H)}] /Resources << /Font ${fontRes()} >> /Contents ${contentIds[i]} 0 R${annots} >>`;
+      return `<< /Type /Page /Parent ${pagesRoot} 0 R /MediaBox [0 0 ${num(setup.width)} ${num(H)}] /Resources << /Font ${fontRes()}${xobjectRes()} >> /Contents ${contentIds[i]} 0 R${annots} >>`;
     });
     define(contentIds[i], async () => stream(``, encoder.encode(pageContents[i].ops.join(`\n`))));
   });

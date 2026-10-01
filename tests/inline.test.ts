@@ -36,3 +36,53 @@ test(`images et liens internes sont reduits a leur texte, barre et surlignage pe
 test(`un lien sans adresse garde son texte`, () => {
   assert.equal(parseInline(`[texte]()`).text, `texte`);
 });
+
+import { InlineContext, normalizeHeading } from "../src/export/inline";
+
+function context(extra: Partial<InlineContext> = {}): InlineContext & { warnings: string[] } {
+  const warnings: string[] = [];
+  return {
+    noteName: `Audit`,
+    headingAnchor: (t) => (normalizeHeading(t) === `résultats` ? `hid:3` : undefined),
+    block: (id) => (id === `plan` ? { anchor: `b:plan`, label: `Figure 2` } : id === `para` ? { anchor: `b:para` } : undefined),
+    pageRefs: false,
+    warn: (m) => warnings.push(m),
+    warnings,
+    ...extra,
+  };
+}
+
+test(`les renvois a un titre de la note deviennent des liens internes`, () => {
+  const r = parseInline(`voir [[#Résultats]], [[Audit#résultats|ci-dessous]] et [[Autre#Titre]]`, context());
+  assert.deepEqual(r.links, [`#hid:3`, `#hid:3`]);
+  assert.equal(plainOf(r.text), `voir Résultats, ci-dessous et Titre`);
+});
+
+test(`les renvois a une figure ou un tableau prennent leur etiquette`, () => {
+  const r = parseInline(`comme sur la [[#^plan]] ou [[#^plan|ce plan]] ou [[#^para]]`, context());
+  assert.deepEqual(r.links, [`#b:plan`, `#b:plan`, `#b:para`]);
+  assert.equal(plainOf(r.text), `comme sur la Figure 2 ou ce plan ou para`);
+});
+
+test(`les renvois peuvent ajouter le numero de page`, () => {
+  const ctx = context({ pageRefs: true, pageOf: (a) => (a === `hid:3` ? 7 : undefined) });
+  assert.equal(plainOf(parseInline(`voir [[#Résultats]]`, ctx).text), `voir Résultats (page 7)`);
+  assert.equal(plainOf(parseInline(`voir [[#^plan]]`, ctx).text), `voir Figure 2 (page 0)`);
+});
+
+test(`un renvoi sans cible garde son texte et est signale`, () => {
+  const ctx = context();
+  const r = parseInline(`voir [[#Inconnu]] et [[#^absent]]`, ctx);
+  assert.deepEqual(r.links, []);
+  assert.equal(plainOf(r.text), `voir Inconnu et absent`);
+  assert.deepEqual(ctx.warnings, [`renvoi:Inconnu`, `renvoi:^absent`]);
+});
+
+test(`sans contexte, les liens internes restent du texte`, () => {
+  assert.equal(plainOf(parseInline(`voir [[#Résultats]]`).text), `voir Résultats`);
+});
+
+test(`les titres se comparent sans tenir compte de la casse, des signes et des espaces`, () => {
+  assert.equal(normalizeHeading(`Les  **Résultats** [détaillés]`), `les résultats détaillés`);
+  assert.equal(normalizeHeading(`Résultats`), normalizeHeading(`résultats `));
+});

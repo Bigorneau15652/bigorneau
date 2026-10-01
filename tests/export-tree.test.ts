@@ -67,8 +67,8 @@ test(`citations, code, tableaux et figures`, () => {
   assert.deepEqual(blocks, [
     { type: `quote`, text: `ligne une\nligne deux` },
     { type: `code`, lang: `ts`, text: `const a = \`x\`;` },
-    { type: `table`, rows: [[`Nom`, `Valeur`], [`a`, `1`]] },
-    { type: `figure`, target: `plan.png`, caption: `` },
+    { type: `table`, rows: [[`Nom`, `Valeur`], [`a`, `1`]], align: [`left`, `left`] },
+    { type: `figure`, target: `plan.png`, caption: ``, width: 400 },
     { type: `figure`, target: `carte.png`, caption: `Carte du site` },
     { type: `figure`, target: `https://exemple.fr/v.png`, caption: `Vue` },
   ]);
@@ -140,7 +140,7 @@ test(`la langue est lue dans les proprietes de la note`, () => {
 
 test(`une ligne de tableau sans cellule remplie est ignoree`, () => {
   const blocks = parseBlocks([`| a | b |`, `| --- | --- |`, `| 1 | 2 |`, `|  |  |`].join(`\n`));
-  assert.deepEqual(blocks, [{ type: `table`, rows: [[`a`, `b`], [`1`, `2`]] }]);
+  assert.deepEqual(blocks, [{ type: `table`, rows: [[`a`, `b`], [`1`, `2`]], align: [`left`, `left`] }]);
 });
 
 test(`les definitions de notes de bas de page sont retirees du texte et rassemblees`, () => {
@@ -161,4 +161,44 @@ test(`l'auteur est lu dans les proprietes de la note`, () => {
   assert.equal(buildExportDoc(`---\nauthor: Olivier H.\n---\n# A`, `N.md`).author, `Olivier H.`);
   assert.equal(buildExportDoc(`---\nauteur: "Marie Curie"\n---\n# A`, `N.md`).author, `Marie Curie`);
   assert.equal(buildExportDoc(`# A`, `N.md`).author, undefined);
+});
+
+test(`figures : legende, taille et identifiant de bloc`, () => {
+  const blocks = parseBlocks([`![[plan.png|Plan de masse|420]] ^plan`, ``, `![Vue aerienne|300x200](vue.jpg)`, ``, `![[sans-legende.png]]`].join(`\n`));
+  assert.deepEqual(blocks, [
+    { type: `figure`, target: `plan.png`, caption: `Plan de masse`, width: 420, id: `plan` },
+    { type: `figure`, target: `vue.jpg`, caption: `Vue aerienne`, width: 300 },
+    { type: `figure`, target: `sans-legende.png`, caption: `` },
+  ]);
+});
+
+test(`tableaux : alignement des colonnes, legende et identifiant de bloc`, () => {
+  const blocks = parseBlocks([`Tableau : Consommations par poste`, `| Poste | Avant | Apres |`, `| :-- | :-: | --: |`, `| Chauffage | 120 | 60 |`, `^conso`, ``, `Un paragraphe.`].join(`\n`));
+  assert.deepEqual(blocks[0], { type: `table`, rows: [[`Poste`, `Avant`, `Apres`], [`Chauffage`, `120`, `60`]], align: [`left`, `center`, `right`], caption: `Consommations par poste`, id: `conso` });
+  assert.equal(blocks.length, 2);
+  // Une ligne qui commence par « Table: » (anglais) est aussi une legende, mais pas un paragraphe quelconque.
+  assert.equal((parseBlocks(`Table: Heat\n| a |\n| - |\n| 1 |`)[0] as { caption?: string }).caption, `Heat`);
+  assert.equal(parseBlocks(`Un tableau suit.\n\n| a |\n| - |\n| 1 |`)[0].type, `paragraph`);
+});
+
+test(`identifiants de bloc des paragraphes et citations`, () => {
+  const blocks = parseBlocks([`Un paragraphe important. ^important`, ``, `> Une citation ^cite`].join(`\n`));
+  assert.deepEqual(blocks, [
+    { type: `paragraph`, text: `Un paragraphe important.`, id: `important` },
+    { type: `quote`, text: `Une citation`, id: `cite` },
+  ]);
+});
+
+test(`table des matieres demandee par les proprietes de la note`, () => {
+  assert.deepEqual(buildExportDoc(`---\ntoc: true\n---\n# A`, `N.md`).toc, { depth: 3 });
+  assert.deepEqual(buildExportDoc(`---\ntoc: oui\ntoc-depth: 2\n---\n# A`, `N.md`).toc, { depth: 2 });
+  assert.equal(buildExportDoc(`---\ntoc: false\n---\n# A`, `N.md`).toc, undefined);
+  assert.equal(buildExportDoc(`# A`, `N.md`).toc, undefined);
+});
+
+test(`l'identifiant d'un tableau peut suivre une ligne vide`, () => {
+  const blocks = parseBlocks(`| a |\n| - |\n| 1 |\n\n^conso\n\nSuite.`);
+  assert.equal(blocks[0].type === `table` && blocks[0].id, `conso`);
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[1].type === `paragraph` && blocks[1].text, `Suite.`);
 });

@@ -2,8 +2,11 @@
 // Phase 2 : coupure de lignes de Knuth et Plass avec cesure ; la pagination definitive et le PDF arrivent aux phases suivantes.
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { composeNote } from "./export/compose";
+import type { ImageAsset } from "./export/image";
 import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
+import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, Row } from "./export/typeset";
+import { loadImages, pageStyleOf, warningLines } from "./export-context";
 import { EXPORT_FONT_FAMILY, EXPORT_MONO_FAMILY, loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
@@ -16,6 +19,9 @@ export class ExportPreviewView extends ItemView {
   private token = 0;
   private sheets: HTMLElement[] = [];
   private observer: ResizeObserver | null = null;
+  // Adresses des images de l'apercu, a liberer quand il est recompose ou ferme.
+  private urls: string[] = [];
+  private images = new Map<string, ImageAsset>();
 
   constructor(leaf: WorkspaceLeaf, private plugin: MindmapWritingPlugin) {
     super(leaf);
@@ -44,6 +50,12 @@ export class ExportPreviewView extends ItemView {
   async onClose() {
     this.observer?.disconnect();
     this.observer = null;
+    this.releaseImages();
+  }
+
+  private releaseImages() {
+    for (const u of this.urls) URL.revokeObjectURL(u);
+    this.urls = [];
   }
 
   // Les pages sont composees en points ; on les reduit pour qu'elles tiennent dans la largeur du volet.
@@ -61,38 +73,95 @@ export class ExportPreviewView extends ItemView {
     }
   }
 
+  // Morceaux de ligne : chacun a sa police (gras, italique) ; les appels de notes de bas de page sont des numeros en exposant, a 70 %
+  // du corps du texte comme dans le calcul ; les liens web s'ouvrent dans le navigateur, les renvois (adresse commencant par #)
+  // menent a l'endroit visé de l'apercu.
+  private appendRuns(el: HTMLElement, runs: LineRun[]) {
+    for (const run of runs) {
+      const span = el.createSpan({ text: run.text });
+      if (run.sup) span.addClass(`mmw-sup`);
+      if (run.style === `mono`) span.style.fontFamily = `"${EXPORT_MONO_FAMILY}", monospace`;
+      if (run.style === `bold` || run.style === `boldItalic`) span.style.fontWeight = `700`;
+      if (run.style === `italic` || run.style === `boldItalic`) span.style.fontStyle = `italic`;
+      if (run.link) {
+        span.addClass(`mmw-export-link`);
+        const url = run.link;
+        if (url.startsWith(`#`)) span.addEventListener(`click`, () => this.goTo(url.slice(1)));
+        else {
+          span.title = url;
+          span.addEventListener(`click`, () => window.open(url));
+        }
+      }
+    }
+  }
+
+  // Fait defiler l'apercu jusqu'a un repere (titre, figure, tableau, bloc).
+  private goTo(anchor: string) {
+    const target = Array.from(this.contentEl.querySelectorAll<HTMLElement>(`[data-anchor]`)).find((e) => e.dataset.anchor === anchor);
+    target?.scrollIntoView({ block: `center`, behavior: `smooth` });
+  }
+
   private renderRow(parent: HTMLElement, row: Row) {
     const el = parent.createDiv({ cls: `mmw-row mmw-row-${row.kind}` });
     el.style.height = `${row.height}pt`;
-    if (row.kind === `space`) return;
+    if (row.anchor !== undefined) el.dataset.anchor = row.anchor;
+    if (row.rules) {
+      // Filets du tableau, sur toute sa largeur.
+      el.style.position = `relative`;
+      for (const side of [`top`, `bottom`] as const) {
+        if (!row.rules[side]) continue;
+        const rule = el.createDiv({ cls: `mmw-row-rule` });
+        rule.style.left = `${row.x}pt`;
+        rule.style.width = `${row.width}pt`;
+        rule.style[side] = `0`;
+      }
+    }
+    if (row.kind === `space` || row.kind === `float`) return;
     el.style.fontSize = `${row.fontSize}pt`;
     el.style.lineHeight = `${row.height}pt`;
     el.style.paddingLeft = `${row.x}pt`;
     el.style.width = `${row.width + row.x}pt`;
     if (row.align === `center`) el.style.textAlign = `center`;
     if (row.wordSpacing !== 0) el.style.wordSpacing = `${row.wordSpacing}pt`;
+    if (row.cells) {
+      el.style.position = `relative`;
+      const inner = row.height - (row.inset?.top ?? 0) - (row.inset?.bottom ?? 0);
+      for (const c of row.cells) {
+        const cell = el.createDiv({ cls: `mmw-row-cell` });
+        cell.style.left = `${row.x + c.x}pt`;
+        cell.style.top = `${row.inset?.top ?? 0}pt`;
+        cell.style.lineHeight = `${inner}pt`;
+        this.appendRuns(cell, c.runs);
+      }
+      return;
+    }
+    if (row.image) {
+      const url = this.images.get(row.image.target)?.previewUrl;
+      if (url) {
+        const img = el.createEl(`img`, { cls: `mmw-row-image` });
+        img.src = url;
+        img.style.width = `${row.image.width}pt`;
+        img.style.height = `${row.image.height}pt`;
+      }
+      return;
+    }
     if (row.marker !== undefined) {
       const m = el.createSpan({ cls: row.kind === `footnote` ? `mmw-row-marker mmw-row-note-marker` : `mmw-row-marker`, text: row.marker });
       m.style.left = `${row.kind === `footnote` ? 0 : row.x - 16}pt`;
     }
-    if (row.runs) {
-      // Chaque morceau a sa police (gras, italique) ; les appels de notes de bas de page sont des numeros en exposant, a 70 %
-      // du corps du texte comme dans le calcul ; les liens web s'ouvrent dans le navigateur.
-      for (const run of row.runs) {
-        const span = el.createSpan({ text: run.text });
-        if (run.sup) span.addClass(`mmw-sup`);
-        if (run.style === `mono`) span.style.fontFamily = `"${EXPORT_MONO_FAMILY}", monospace`;
-        if (run.style === `bold` || run.style === `boldItalic`) span.style.fontWeight = `700`;
-        if (run.style === `italic` || run.style === `boldItalic`) span.style.fontStyle = `italic`;
-        if (run.link) {
-          span.addClass(`mmw-export-link`);
-          span.title = run.link;
-          const url = run.link;
-          span.addEventListener(`click`, () => window.open(url));
-        }
+    if (row.runs) this.appendRuns(el, row.runs);
+    else el.appendChild(document.createTextNode(row.text));
+    if (row.toc) {
+      // Entree de la table des matieres : points de conduite et numero de page sur la derniere ligne du titre.
+      const anchor = row.toc.anchor;
+      el.addClass(`mmw-row-toc`);
+      el.addEventListener(`click`, () => this.goTo(anchor));
+      if (row.toc.page >= 0) {
+        el.style.display = `flex`;
+        el.style.whiteSpace = `pre`;
+        el.createSpan({ cls: `mmw-row-leader` });
+        el.createSpan({ text: String(row.toc.page) });
       }
-    } else {
-      el.appendChild(document.createTextNode(row.text));
     }
   }
 
@@ -115,7 +184,15 @@ export class ExportPreviewView extends ItemView {
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.read(file));
     if (token !== this.token) return;
 
-    const composed = composeNote(text, file.name);
+    const loaded = await loadImages(this.app, text, file.name, file.path);
+    if (token !== this.token) {
+      for (const u of loaded.urls) URL.revokeObjectURL(u);
+      return;
+    }
+    this.releaseImages();
+    this.urls = loaded.urls;
+    this.images = loaded.images;
+    const composed = composeNote(text, file.name, undefined, pageStyleOf(this.plugin.settings), loaded.images);
     const typeset = composed.typeset;
     const pages = composed.pages;
     const s = typeset.stats;
@@ -134,9 +211,7 @@ export class ExportPreviewView extends ItemView {
       cls: `mmw-export-stats`,
       text: t(`{0} lignes, dont {1} avec césure ({2} consécutives) ; {3} lâches, {4} serrées, {5} débordantes`, s.lines, s.hyphenatedLines, s.consecutiveHyphens, s.looseLines, s.tightLines, s.overfullLines),
     });
-    for (const w of typeset.warnings) {
-      if (w.startsWith(`note:`)) head.createDiv({ cls: `mmw-export-stats`, text: t(`Note de bas de page sans définition : {0}`, w.slice(5)) });
-    }
+    for (const line of warningLines(typeset.warnings)) head.createDiv({ cls: `mmw-export-stats`, text: line });
     if (typeset.missing.length > 0) {
       head.createDiv({ cls: `mmw-export-stats`, text: t(`Caractères absents de la police : {0}`, typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)) });
     }
@@ -164,6 +239,7 @@ export class ExportPreviewView extends ItemView {
       body.style.left = `${A4_SETUP.marginLeft}pt`;
       body.style.top = `${A4_SETUP.marginTop}pt`;
       body.style.width = `${textWidth}pt`;
+      for (const row of pg.topFloats ?? []) this.renderRow(body, row);
       for (const row of pg.rows) this.renderRow(body, row);
       if (pg.footnotes.length > 0) {
         const notes = page.createDiv({ cls: `mmw-export-notes` });
@@ -173,6 +249,15 @@ export class ExportPreviewView extends ItemView {
         const rule = notes.createDiv({ cls: `mmw-export-rule` });
         rule.style.height = `${FOOTNOTE_RULE_HEIGHT}pt`;
         for (const row of pg.footnotes) this.renderRow(notes, row);
+      }
+      if (pg.bottomFloats && pg.bottomFloats.length > 0) {
+        // Flottants du bas : juste au-dessus des notes de bas de page.
+        const noteArea = pg.footnotes.length > 0 ? FOOTNOTE_RULE_HEIGHT + pg.footnotes.reduce((a, r) => a + r.height, 0) : 0;
+        const floats = page.createDiv({ cls: `mmw-export-notes` });
+        floats.style.left = `${A4_SETUP.marginLeft}pt`;
+        floats.style.bottom = `${A4_SETUP.marginBottom + noteArea}pt`;
+        floats.style.width = `${textWidth}pt`;
+        for (const row of pg.bottomFloats) this.renderRow(floats, row);
       }
       if (pg.footer) page.createDiv({ cls: `mmw-export-number`, text: pg.footer });
       this.sheets.push(sheet);

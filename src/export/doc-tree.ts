@@ -10,13 +10,19 @@ export interface DocListItem {
   depth: number;
 }
 
+// Alignement d'une colonne de tableau, d'apres la ligne de separation (:--- gauche, :---: centre, ---: droite).
+export type ColumnAlign = `left` | `center` | `right`;
+
+// `id` : identifiant de bloc Obsidian (^identifiant a la fin du bloc), qui permet de renvoyer au bloc.
 export type DocBlock =
-  | { type: `paragraph`; text: string }
+  | { type: `paragraph`; text: string; id?: string }
   | { type: `list`; ordered: boolean; items: DocListItem[] }
-  | { type: `quote`; text: string }
+  | { type: `quote`; text: string; id?: string }
   | { type: `code`; lang: string; text: string }
-  | { type: `table`; rows: string[][] }
-  | { type: `figure`; target: string; caption: string };
+  // La premiere ligne est l'en-tete. `caption` : texte de la ligne « Tableau : ... » placee juste au-dessus.
+  | { type: `table`; rows: string[][]; align: ColumnAlign[]; caption?: string; id?: string }
+  // `width` : largeur demandee en pixels (![[image.png|400]]).
+  | { type: `figure`; target: string; caption: string; width?: number; id?: string };
 
 export interface DocSection {
   level: number;
@@ -32,6 +38,8 @@ export interface ExportDoc {
   language?: string;
   // Auteur indique par la propriete author (ou auteur) en en-tete de la note.
   author?: string;
+  // Table des matieres demandee par la propriete toc: true (toc-depth: n limite les niveaux, 3 par defaut).
+  toc?: { depth: number };
   // Texte place avant le premier titre.
   blocks: DocBlock[];
   sections: DocSection[];
@@ -51,8 +59,12 @@ const LIST_RE = /^([ \t]*)([-*+]|\d+[.)])[ \t]+(.*)$/;
 const RULE_RE = /^[ \t]*([-*_])([ \t]*\1){2,}[ \t]*$/;
 const QUOTE_RE = /^[ \t]*>[ \t]?(.*)$/;
 const TABLE_SEP_RE = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
-const WIKI_FIGURE_RE = /^!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\][ \t]*$/;
-const MD_FIGURE_RE = /^!\[([^\]]*)\]\(([^)]+)\)[ \t]*$/;
+const WIKI_FIGURE_RE = /^!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\](?:[ \t]+\^([A-Za-z0-9-]+))?[ \t]*$/;
+const MD_FIGURE_RE = /^!\[([^\]]*)\]\(([^)]+)\)(?:[ \t]+\^([A-Za-z0-9-]+))?[ \t]*$/;
+// Identifiant de bloc Obsidian a la fin d'une ligne : « texte ^identifiant ».
+const BLOCK_ID_RE = /[ \t]+\^([A-Za-z0-9-]+)[ \t]*$/;
+const BLOCK_ID_LINE_RE = /^\^([A-Za-z0-9-]+)[ \t]*$/;
+const TABLE_CAPTION_RE = /^(?:Tableau|Table)[ \t\u00a0]*:[ \t\u00a0]*(.+)$/i;
 
 const stripEol = (s: string): string => s.replace(/(\r\n|\n|\r)$/, ``);
 
@@ -185,7 +197,11 @@ export function parseBlocks(text: string): DocBlock[] {
   const blocks: DocBlock[] = [];
   let para: string[] = [];
   const flushPara = (): void => {
-    if (para.length > 0) blocks.push({ type: `paragraph`, text: para.join(` `) });
+    if (para.length > 0) {
+      const text = para.join(` `);
+      const m = BLOCK_ID_RE.exec(text);
+      blocks.push(m ? { type: `paragraph`, text: text.slice(0, m.index), id: m[1] } : { type: `paragraph`, text });
+    }
     para = [];
   };
 
@@ -220,13 +236,18 @@ export function parseBlocks(text: string): DocBlock[] {
     const md = wiki ? null : MD_FIGURE_RE.exec(line);
     if (wiki || md) {
       flushPara();
-      if (wiki) {
-        // Dans [[image.png|400]], le texte apres la barre est une taille et non une legende.
-        const alias = wiki[2] ?? ``;
-        blocks.push({ type: `figure`, target: wiki[1].trim(), caption: /^\d+(x\d+)?$/.test(alias.trim()) ? `` : alias.trim() });
-      } else {
-        blocks.push({ type: `figure`, target: md![2].trim(), caption: md![1].trim() });
+      // Le texte apres la barre est une legende, une taille (400 ou 400x300) ou les deux : [[image.png|Legende|400]].
+      const parts = (wiki ? wiki[2] ?? `` : md![1]).split(`|`).map((x) => x.trim());
+      let width: number | undefined;
+      const last = parts[parts.length - 1];
+      if (parts.length > 0 && /^\d+(x\d+)?$/.test(last)) {
+        width = Number(last.split(`x`)[0]);
+        parts.pop();
       }
+      const caption = (wiki ? parts.join(`|`) : parts.join(`|`)).trim();
+      const target = wiki ? wiki[1].trim() : md![2].trim();
+      const id = wiki ? wiki[3] : md![3];
+      blocks.push({ type: `figure`, target, caption, ...(width ? { width } : {}), ...(id ? { id } : {}) });
       i++;
       continue;
     }
@@ -235,22 +256,34 @@ export function parseBlocks(text: string): DocBlock[] {
       flushPara();
       const body: string[] = [];
       while (i < lines.length && QUOTE_RE.test(lines[i])) body.push(QUOTE_RE.exec(lines[i++])![1]);
-      blocks.push({ type: `quote`, text: body.join(`\n`).trim() });
+      const quoteText = body.join(`\n`).trim();
+      const q = BLOCK_ID_RE.exec(quoteText);
+      blocks.push(q ? { type: `quote`, text: quoteText.slice(0, q.index), id: q[1] } : { type: `quote`, text: quoteText });
       continue;
     }
 
     if (line.trim().startsWith(`|`)) {
       flushPara();
       const rows: string[][] = [];
+      let align: ColumnAlign[] = [];
       while (i < lines.length && lines[i].trim().startsWith(`|`)) {
-        if (!TABLE_SEP_RE.test(lines[i])) {
+        if (TABLE_SEP_RE.test(lines[i])) {
+          align = splitRow(lines[i]).map((c) => (c.startsWith(`:`) && c.endsWith(`:`) && c.length > 1 ? `center` : c.endsWith(`:`) ? `right` : `left`));
+        } else {
           const cells = splitRow(lines[i]);
           // Une ligne dont toutes les cellules sont vides n'apporte rien a l'export.
           if (cells.some((c) => c !== ``)) rows.push(cells);
         }
         i++;
       }
-      blocks.push({ type: `table`, rows });
+      // Identifiant de bloc ecrit sur la ligne qui suit le tableau, ou apres une ligne vide (c'est ainsi qu'Obsidian l'ecrit).
+      let id: string | undefined;
+      const idAt = i < lines.length && stripEol(lines[i]).trim() === `` ? i + 1 : i;
+      if (idAt < lines.length && BLOCK_ID_LINE_RE.test(stripEol(lines[idAt]))) {
+        id = BLOCK_ID_LINE_RE.exec(stripEol(lines[idAt]))![1];
+        i = idAt + 1;
+      }
+      blocks.push({ type: `table`, rows, align, ...(id ? { id } : {}) });
       continue;
     }
 
@@ -282,7 +315,21 @@ export function parseBlocks(text: string): DocBlock[] {
     i++;
   }
   flushPara();
-  return blocks;
+  // La ligne « Tableau : legende » placee juste au-dessus d'un tableau devient sa legende.
+  const out: DocBlock[] = [];
+  for (const b of blocks) {
+    const prev = out[out.length - 1];
+    if (b.type === `table` && prev && prev.type === `paragraph`) {
+      const m = TABLE_CAPTION_RE.exec(prev.text.trim());
+      if (m) {
+        out.pop();
+        out.push({ ...b, caption: m[1].trim(), ...(prev.id && !b.id ? { id: prev.id } : {}) });
+        continue;
+      }
+    }
+    out.push(b);
+  }
+  return out;
 }
 
 function buildSection(node: MmNode, opts: ExtractOptions): DocSection {
@@ -314,5 +361,7 @@ export function buildExportDoc(text: string, fileName: string, opts: ExtractOpti
   doc.floats.forEach(collect);
   const lang = /^(?:lang|langue|language)[ \t]*:[ \t]*[\x22\x27\x60]?([A-Za-z]{2}(?:-[A-Za-z]+)?)/m.exec(doc.frontmatter);
   const author = /^(?:author|auteur)[ \t]*:[ \t]*[\x22\x27\x60]?([^\x22\x27\x60\r\n]+?)[\x22\x27\x60]?[ \t]*$/m.exec(doc.frontmatter);
-  return { title: doc.root.title, ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
+  const toc = /^toc[ \t]*:[ \t]*[\x22\x27]?(true|yes|oui|vrai|1)[\x22\x27]?[ \t]*$/im.test(doc.frontmatter);
+  const depth = /^toc-depth[ \t]*:[ \t]*[\x22\x27]?([1-6])[\x22\x27]?[ \t]*$/im.exec(doc.frontmatter);
+  return { title: doc.root.title, ...(toc ? { toc: { depth: depth ? Number(depth[1]) : 3 } } : {}), ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
 }

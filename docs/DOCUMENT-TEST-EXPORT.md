@@ -1,7 +1,13 @@
-Cette note sert de contrôle visuel pour l'export (voir docs/POLITIQUE-EXPORT.md). Copiez-la dans votre coffre Obsidian pour ouvrir l'aperçu de l'export. Elle contient volontairement des mots longs comme anticonstitutionnellement ou électroencéphalographiquement, des listes, une citation, un tableau, deux notes de bas de page, un titre masqué et un sujet flottant, qui ne doivent pas apparaître dans l'export. Pour tester la pagination, dupliquez plusieurs fois le chapitre Contexte : les en-têtes courants, les notes et les coupures de pages se répartissent alors sur plusieurs pages.
+---
+toc: true
+toc-depth: 2
+---
+Cette note sert de contrôle visuel pour l'export (voir docs/POLITIQUE-EXPORT.md). Copiez-la dans votre coffre Obsidian pour ouvrir l'aperçu de l'export. Elle contient volontairement des mots longs comme anticonstitutionnellement ou électroencéphalographiquement, des listes, une citation, un tableau, deux notes de bas de page, un titre masqué et un sujet flottant, qui ne doivent pas apparaître dans l'export. Elle a une table des matières (propriété toc), un tableau légendé, une figure légendée et des renvois : placez une image nommée plan-masse.png dans votre coffre pour voir la figure, sinon l export la signale comme introuvable. Pour tester la pagination, dupliquez plusieurs fois le chapitre Contexte : les en-têtes courants, les notes et les coupures de pages se répartissent alors sur plusieurs pages.
 
 # Contexte
 Le bâtiment a été construit en 1972, *l'office* de tourisme et la *difficile* rénovation de l'*affiche* en témoignent. Sa consommation d'énergie finale est aujourd'hui supérieure à 180 kWh/m².an, soit **près du double** de l'objectif fixé par le décret tertiaire pour 2030[^dec]. Les résultats détaillés figurent dans [[Audit énergétique#Résultats|le rapport d'audit]]^[Rapport établi par un bureau d'études indépendant, version de l'année précédente.].
+
+Voir les [[#Résultats]], le [[#^conso]] et le [[#^plan]].
 
 Voir aussi le site de l'[Université de Montpellier Paul-Valéry](https://www.univ-montp3.fr) ou https://exemple.fr/audit pour la ***méthode complète***.
 
@@ -25,12 +31,16 @@ Ce chapitre est masqué : il ne doit pas apparaître dans l'export.
    2. Détecteurs de présence
 3. Ventilation
 
+Tableau : Consommations avant et après travaux
+
 | Poste | Avant (kWh) | Après (kWh) |
-| --- | --- | --- |
+| :-- | --: | --: |
 | Chauffage | 120 | 60 |
 | Éclairage | 25 | 10 |
 
-![[plan-masse.png|Plan de masse du site]]
+^conso
+
+![[plan-masse.png|Plan de masse du site]] ^plan
 
 [^dec]: Le décret tertiaire fixe des objectifs de réduction de la consommation d'énergie finale pour 2030, 2040 et 2050, par rapport à une année de référence choisie par l'exploitant. Cette note est volontairement assez longue pour tenir sur plusieurs lignes en bas de page.
 

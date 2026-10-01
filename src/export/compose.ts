@@ -1,7 +1,8 @@
 // Export de haute qualite : de la note au fichier PDF, sans rien qui depende d'Obsidian (se teste avec node --test).
 import { buildExportDoc } from "./doc-tree";
 import { languageOf } from "./typeset";
-import { paginate, Page } from "./paginate";
+import { anchorPages, paginate, Page } from "./paginate";
+import { ImageAsset } from "./image";
 import { buildPdf } from "./pdf";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, PageSetup, PageStyle, typesetDoc, TypesetDoc } from "./typeset";
 
@@ -11,19 +12,58 @@ export interface Composed {
   language: string;
   author?: string;
   title: string;
+  images?: Map<string, ImageAsset>;
+}
+
+// Cibles des images que la note affiche (figures), pour les charger avant la composition.
+export function imageTargets(text: string, fileName: string): { target: string; width?: number }[] {
+  const out: { target: string; width?: number }[] = [];
+  const walk = (blocks: ReturnType<typeof buildExportDoc>[`blocks`]): void => {
+    for (const b of blocks) if (b.type === `figure`) out.push({ target: b.target, ...(b.width ? { width: b.width } : {}) });
+  };
+  const doc = buildExportDoc(text, fileName);
+  walk(doc.blocks);
+  const sections = (list: typeof doc.sections): void => {
+    for (const s of list) {
+      walk(s.blocks);
+      sections(s.sections);
+    }
+  };
+  sections(doc.sections);
+  return out;
 }
 
 // Compose la note en pages (apercu et PDF partagent ce resultat, pour qu'ils soient identiques).
-export function composeNote(text: string, fileName: string, setup: PageSetup = A4_SETUP, style: PageStyle = DEFAULT_PAGE_STYLE): Composed {
+export function composeNote(text: string, fileName: string, setup: PageSetup = A4_SETUP, style: PageStyle = DEFAULT_PAGE_STYLE, images?: Map<string, ImageAsset>): Composed {
   const doc = buildExportDoc(text, fileName);
-  const typeset = typesetDoc(doc, setup, undefined, style);
+  // Table des matieres et renvois avec numero de page : la mise en page depend des numeros de page, qui dependent de la mise
+  // en page. On recompose avec les numeros de la composition precedente jusqu'a ce qu'ils ne changent plus (quatre fois au plus).
+  const needsPages = doc.toc !== undefined || style.pageRefs;
+  let known: Map<string, number> | undefined;
+  let typeset = typesetDoc(doc, setup, undefined, style, { ...(images ? { images } : {}) });
+  let pages = paginate(typeset, setup, style);
+  for (let pass = 0; needsPages && pass < 4; pass++) {
+    const found = anchorPages(pages);
+    if (known && sameMap(known, found)) break;
+    known = found;
+    const pageOf = (a: string): number | undefined => found.get(a);
+    typeset = typesetDoc(doc, setup, undefined, style, { ...(images ? { images } : {}), pageOf });
+    pages = paginate(typeset, setup, style);
+  }
   return {
     typeset,
-    pages: paginate(typeset, setup, style),
+    pages,
     language: languageOf(doc.language) === `en` ? `en-GB` : `fr-FR`,
     ...(doc.author ? { author: doc.author } : {}),
     title: doc.title,
+    ...(images ? { images } : {}),
   };
+}
+
+function sameMap(a: Map<string, number>, b: Map<string, number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) if (b.get(k) !== v) return false;
+  return true;
 }
 
 export interface PdfRequest {
@@ -42,6 +82,7 @@ export async function composeToPdf(composed: Composed, req: PdfRequest, setup: P
     language: composed.language,
     creator: req.creator,
     created: req.created,
+    ...(composed.images ? { images: composed.images } : {}),
     ...(req.deflate ? { deflate: req.deflate } : {}),
   });
 }
