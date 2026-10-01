@@ -13,10 +13,36 @@ export const LINK_ON = ``;
 export const LINK_NUM_END = ``;
 export const LINK_OFF = ``;
 
-// Texte a mettre en forme : le texte repere, et les adresses des liens.
+// Texte a mettre en forme : le texte repere, et les adresses des liens. Une adresse qui commence par # est un renvoi a un
+// endroit du document (#hid:3 : titre numero 3, #b:plan : bloc d'identifiant plan).
 export interface InlineText {
   text: string;
   links: string[];
+}
+
+// Ce que la mise en forme doit savoir du document pour traiter les renvois internes ([[#Titre]], [[#^bloc]]).
+export interface InlineContext {
+  // Nom de la note (ses renvois s'ecrivent aussi [[Nom#Titre]]).
+  noteName: string;
+  // Ancre du titre dont le texte est `title`, si la note le contient parmi les titres exportes.
+  headingAnchor(title: string): string | undefined;
+  // Ancre et etiquette (Figure 1, Tableau 2) du bloc d'identifiant `id`.
+  block(id: string): { anchor: string; label?: string } | undefined;
+  // Numero de la page ou se trouve une ancre (connu apres une premiere mise en page).
+  pageOf?(anchor: string): number | undefined;
+  // Ajoute « (page N) » apres le texte des renvois.
+  pageRefs: boolean;
+  // Signale un renvoi qui ne mene nulle part.
+  warn?(message: string): void;
+}
+
+// Forme normalisee du texte d'un titre pour retrouver le titre vise par un renvoi (casse, signes et espaces ignores).
+export function normalizeHeading(title: string): string {
+  return plainOf(parseInline(title).text)
+    .toLowerCase()
+    .replace(/[#^\[\]|\\]/g, ` `)
+    .replace(/\s+/g, ` `)
+    .trim();
 }
 
 const CODE_ON = ``;
@@ -28,7 +54,7 @@ const URL_TAIL = /[.,;:!?)\]'”»]+$/;
 // Transforme le Markdown en ligne : liens [texte](adresse) et adresses nues, gras (** ou __), italique (* ou _), gras italique
 // (***), code en ligne (garde son texte), images (retirees), liens internes [[note|texte]] (garde le texte), et laisse
 // tels quels le barre ~~ et le surlignage ==, dont les signes disparaissent.
-export function parseInline(source: string): InlineText {
+export function parseInline(source: string, ctx?: InlineContext): InlineText {
   const links: string[] = [];
   const codes: string[] = [];
   let s = source;
@@ -40,8 +66,31 @@ export function parseInline(source: string): InlineText {
   });
   // Images integrees ![[fichier]] et ![texte](adresse).
   s = s.replace(/!\[\[[^\]]*\]\]/g, ``).replace(/!\[([^\]]*)\]\([^)]*\)/g, `$1`);
-  // Liens internes : le texte de remplacement, sinon le titre vise, sinon le nom de la note.
-  s = s.replace(/\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g, (_m, file: string, heading: string | undefined, alias: string | undefined) => alias || heading || (file.split(`/`).pop() ?? file));
+  // Liens internes : renvois a un titre ou a un bloc de la note (cliquables), sinon le texte seul (alias, titre vise ou nom
+  // de la note).
+  s = s.replace(/\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g, (_m, file: string, heading: string | undefined, alias: string | undefined) => {
+    const fallback = alias || (heading ?? ``).replace(/^\^/, ``) || (file.split(`/`).pop() ?? file);
+    const sameNote = file === `` || (file.split(`/`).pop() ?? file).replace(/\.md$/i, ``).toLowerCase() === ctx?.noteName.toLowerCase();
+    if (!ctx || !sameNote || (heading === undefined && file === ``)) return fallback;
+    let anchor: string | undefined;
+    let label: string | undefined;
+    const block = heading !== undefined ? /\^([A-Za-z0-9-]+)$/.exec(heading) : null;
+    if (block) {
+      const b = ctx.block(block[1]);
+      anchor = b?.anchor;
+      label = b?.label;
+    } else if (heading !== undefined) {
+      anchor = ctx.headingAnchor(heading);
+    }
+    if (!anchor) {
+      ctx.warn?.(`renvoi:${heading ?? file}`);
+      return fallback;
+    }
+    let text = alias || label || (block ? block[1] : (heading as string));
+    if (ctx.pageRefs) text += ` (page ${ctx.pageOf?.(anchor) ?? 0})`;
+    links.push(`#${anchor}`);
+    return `${LINK_ON}${links.length - 1}${LINK_NUM_END}${text}${LINK_OFF}`;
+  });
   // Liens web : [texte](adresse "titre") ou adresse nue.
   s = s.replace(/\[([^\]]*)\]\(<?([^)\s>]*)>?(?:\s+"[^"]*")?\)|https?:\/\/[^\s<> -]+/g, (m: string, text: string | undefined, url: string | undefined) => {
     if (text !== undefined) {
