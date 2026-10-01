@@ -134,6 +134,7 @@ export class MindmapView extends ItemView {
       onLinkOpen: (links, event) => this.openLinks(links, event),
       onInternalLinks: (links, event) => this.goToLinks(links, event),
       onBack: () => void this.goBack(),
+      onAddFixed: () => void this.addFixedNote(),
     });
     await this.refresh();
   }
@@ -183,9 +184,10 @@ export class MindmapView extends ItemView {
     const position = this.plugin.settings.panePosition;
     if (this.notePosition !== null && position !== this.notePosition) {
       // La position de la note a change : le volet est recree au bon endroit.
-      this.noteLeaf?.detach();
+      const old = this.noteLeaf;
       this.noteLeaf = null;
       this.notePosition = null;
+      old?.detach();
       if (this.selectedKey) void this.revealInNote(this.selectedKey, false);
       return;
     }
@@ -794,6 +796,37 @@ export class MindmapView extends ItemView {
   adoptNoteLeaf(leaf: WorkspaceLeaf) {
     this.noteLeaf = leaf;
     this.notePosition = this.plugin.settings.panePosition;
+  }
+
+  // Volet de la note dynamique (celle qui suit la carte), s'il existe.
+  getNoteLeaf(): WorkspaceLeaf | null {
+    return this.noteLeaf;
+  }
+
+  // Note fixe : copie du chapitre selectionne, ouverte dans son propre volet au-dessus de la note dynamique. Elle ne suit
+  // plus la carte et peut etre redimensionnee ou deplacee comme n'importe quel volet.
+  async addFixedNote() {
+    const file = this.plugin.lastFile;
+    if (!file || !this.doc) {
+      new Notice(t(`Sélectionnez d'abord un titre dans la carte.`));
+      return;
+    }
+    const key = this.selectedKey && nodeByKey(this.doc, this.selectedKey) ? this.selectedKey : null;
+    if (!key) {
+      new Notice(t(`Sélectionnez d'abord un titre dans la carte.`));
+      return;
+    }
+    if (isHiddenKey(this.doc, key)) {
+      new Notice(t(`Ce titre est masqué dans la note. Cliquez sur l'œil de la carte pour l'afficher.`));
+      return;
+    }
+    const node = nodeByKey(this.doc, key)!;
+    const dynamic = await this.ensureNoteLeaf(file);
+    const leaf = this.app.workspace.createLeafBySplit(dynamic, `horizontal`, true);
+    await leaf.openFile(file, { active: false });
+    const view = leaf.view;
+    if (view instanceof MarkdownView && view.getMode() !== `source`) await view.setState({ ...view.getState(), mode: `source` }, { history: false });
+    this.plugin.addFixed(leaf, { path: file.path, key, title: node.title });
   }
 
   getNoteView(): MarkdownView | null {

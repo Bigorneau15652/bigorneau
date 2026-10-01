@@ -47,6 +47,7 @@ export class MmSettingTab extends PluginSettingTab {
     this.chapter(`display`, t(`Éléments affichés`), t(`Ce que la carte montre par défaut (menu de l'œil)`), (el) => this.buildDisplay(el));
     this.chapter(`writing`, t(`Rédaction`), t(`Position de la note, curseur et commentaires du plugin`), (el) => this.buildWriting(el));
     this.chapter(`active`, t(`Chapitre actif`), t(`Grisage ou masquage des chapitres inactifs dans la note`), (el) => this.buildActive(el));
+    this.chapter(`fixed`, t(`Notes fixes`), t(`Copies d'un chapitre dans leur propre volet`), (el) => this.buildFixed(el));
     this.chapter(`links`, t(`Liens et icônes`), t(`Icônes et couleurs des repères de liens`), (el) => this.buildLinks(el));
     this.chapter(`notes`, t(`Nouvelles notes`), t(`Dossier des notes créées depuis la carte`), (el) => this.buildNotes(el));
     this.chapter(`keys`, t(`Navigation au clavier`), t(`Raccourcis pour passer d'un chapitre à l'autre depuis la note`), (el) => this.buildKeys(el));
@@ -197,7 +198,6 @@ export class MmSettingTab extends PluginSettingTab {
   private buildList(el: HTMLElement): void {
     this.toggle(el, t(`Une ligne sur deux plus foncée`), t(`Alterne deux teintes de fond pour suivre facilement les lignes.`), `listStripes`);
     this.toggle(el, t(`Police de la carte`), t(`Désactivé : la liste utilise la police normale de l'interface. Activé : elle reprend la police choisie pour la carte.`), `listMapFont`);
-    this.slider(el, t(`Compacité`), t(`Espace autour des titres : plus la valeur est basse, plus la liste est serrée.`), `compactness`, 0.3, 2, 0.1);
   }
 
   private buildDisplay(el: HTMLElement): void {
@@ -244,6 +244,15 @@ export class MmSettingTab extends PluginSettingTab {
           })
       );
     this.toggle(el, t(`Inclure les dépendances dans le chapitre actif`), t(`Désactivé : seul le titre où se trouve le curseur et son texte sont actifs. Activé : ses sous-titres le sont aussi.`), `includeSubtitles`);
+  }
+
+  private buildFixed(el: HTMLElement): void {
+    this.toggle(
+      el,
+      t(`Sous-titres dans les notes fixes`),
+      t(`Désactivé : une note fixe ne montre que le paragraphe de son titre. Activé : elle se comporte comme la note dynamique, c'est-à-dire qu'elle montre aussi les sous-titres quand l'option Inclure les dépendances est active.`),
+      `fixedLikeDynamic`
+    );
   }
 
   private buildLinks(el: HTMLElement): void {

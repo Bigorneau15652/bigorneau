@@ -345,7 +345,6 @@ const PAIRS: [string, string][] = [
   [`Alterne deux teintes de fond pour suivre facilement les lignes.`, `Alternates two background tints to follow the lines easily.`],
   [`Police de la carte`, `Map font`],
   [`Désactivé : la liste utilise la police normale de l'interface. Activé : elle reprend la police choisie pour la carte.`, `Off: the list uses the normal interface font. On: it uses the font chosen for the map.`],
-  [`Espace autour des titres : plus la valeur est basse, plus la liste est serrée.`, `Space around the headings: the lower the value, the tighter the list.`],
   [`Affiche les étiquettes à côté des titres.`, `Shows the tags next to the headings.`],
   [`Affiche un repère sur les titres qui ont un commentaire.`, `Shows a marker on the headings that have a comment.`],
   [`Affiche le repère des liens web et des vidéos intégrées.`, `Shows the marker of web links and embedded videos.`],
@@ -393,6 +392,13 @@ const PAIRS: [string, string][] = [
   [`Fonctionne dans la note reliée à la carte. Cliquez sur le bouton puis tapez la combinaison voulue (Échap pour annuler).`, `Works in the note linked to the map. Click the button then type the wanted combination (Esc to cancel).`],
   [`Tapez la combinaison...`, `Type the combination...`],
   [`Rétablir la valeur d'origine`, `Restore the original value`],
+  // Notes fixes
+  [`Ajouter une note fixe`, `Add a pinned note`],
+  [`Ouvrez d'abord la carte de la note.`, `Open the map of the note first.`],
+  [`Notes fixes`, `Pinned notes`],
+  [`Copies d'un chapitre dans leur propre volet`, `Copies of a chapter in their own pane`],
+  [`Sous-titres dans les notes fixes`, `Subheadings in pinned notes`],
+  [`Désactivé : une note fixe ne montre que le paragraphe de son titre. Activé : elle se comporte comme la note dynamique, c'est-à-dire qu'elle montre aussi les sous-titres quand l'option Inclure les dépendances est active.`, `Off: a pinned note shows only the paragraph of its heading. On: it behaves like the dynamic note, that is it also shows the subheadings when the Include dependencies option is on.`],
   // Icones
   [`Chaîne`, `Chain`],
   [`Sortie d'un cadre`, `Out of a frame`],

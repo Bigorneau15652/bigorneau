@@ -27,6 +27,8 @@ export interface ControlActions {
   back: () => void;
   // Bascule entre la vue Mindmap et la vue Liste.
   toggleView: () => void;
+  // Ouvre une note fixe : copie du chapitre selectionne dans son propre volet.
+  addFixed: () => void;
 }
 
 type PopupKind = `menu` | `style` | `view` | `tags` | null;
@@ -36,6 +38,7 @@ const svg = (inner: string, size = 18, extra = ``): string =>
 
 const ICONS: Record<string, string> = {
   menu: svg(`<path d="M4 6h16M4 12h16M4 18h16"/>`),
+  pin: svg(`<path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z"/>`),
   help: svg(`<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>`),
   palette: svg(
     `<path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3c2.2 0 4-1.8 4-4 0-4.4-4.5-7.4-9.3-7.4z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>`
@@ -145,6 +148,8 @@ export class MapControls {
   private backBtn: HTMLButtonElement;
   private zoomLabel: HTMLElement;
   private slider: HTMLInputElement;
+  private compactIcon!: HTMLElement;
+  private compactSep!: HTMLElement;
   private scopeEl: HTMLElement | null = null;
   private open: PopupKind = null;
   // Champ du nom a activer apres l'ajout d'une etiquette.
@@ -192,9 +197,9 @@ export class MapControls {
       h(`span`, `mmw-sep`),
       iconButton(ICONS.undo, t(`Annuler (dans la note)`), () => this.actions.undo(), `mmw-btn`, t(`Annule la dernière modification de la note.`)),
       iconButton(ICONS.redo, t(`Rétablir (dans la note)`), () => this.actions.redo(), `mmw-btn`, t(`Rétablit la modification annulée.`)),
-      h(`span`, `mmw-sep`)
+      (this.compactSep = h(`span`, `mmw-sep`))
     );
-    const compactIcon = h(`span`, `mmw-compact-icon`);
+    const compactIcon = (this.compactIcon = h(`span`, `mmw-compact-icon`));
     compactIcon.innerHTML = ICONS.compact;
     tip(compactIcon, t(`Compacité de l'affichage`), t(`Resserre ou écarte les cases de la carte.`));
     zoom.append(compactIcon, this.slider);
@@ -407,6 +412,11 @@ export class MapControls {
   // Met a jour l'affichage des commandes et du panneau ouvert d'apres les reglages.
   refresh(): void {
     this.slider.value = String(this.getSettings().compactness);
+    // La liste est toujours compacte : la reglette ne concerne que la carte.
+    const inList = this.getSettings().viewMode === `list`;
+    this.slider.style.display = inList ? `none` : ``;
+    this.compactIcon.style.display = inList ? `none` : ``;
+    this.compactSep.style.display = inList ? `none` : ``;
     this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu` || this.open === `tags`);
     this.styleBtn.classList.toggle(`mmw-active`, this.open === `style`);
     this.viewBtn.classList.toggle(`mmw-active`, this.open === `view`);
@@ -556,6 +566,10 @@ export class MapControls {
 
     menu.append(
       h(`div`, `mmw-menu-sep`),
+      this.menuItem(ICONS.pin, t(`Ajouter une note fixe`), () => {
+        this.closePopup();
+        a.addFixed();
+      }),
       this.menuItem(ICONS.tag, t(`Étiquettes…`), () => {
         this.open = `tags`;
         this.refresh();

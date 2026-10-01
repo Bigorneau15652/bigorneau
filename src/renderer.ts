@@ -59,6 +59,8 @@ export interface MapCallbacks {
   // Un lien change de place parmi ceux de son titre : il prend la place de celui de la ligne `toLine`.
   onLinkMove?: (link: MapLink, toLine: number) => void;
   // Notes du coffre proposees pour un lien (chemins) et titres d'une note.
+  // Cree une note fixe avec le titre selectionne.
+  onAddFixed?: () => void;
   getVaultFiles?: () => string[];
   getHeadings?: (path: string) => Promise<HeadingItem[]>;
   // Creation d'une note qui n'existe pas encore (renvoie son chemin) et dossier prevu pour elle.
@@ -105,6 +107,9 @@ export const FONT_CSS: Record<string, string> = {
 
 // Espace autour du texte d'une case : plus la carte est compacte, plus il diminue,
 // et davantage encore quand la case n'a pas de contour.
+// Espace autour des lignes de la vue Liste : fixe, la liste est toujours compacte.
+const LIST_PAD = 0.6;
+
 export function padFactor(compactness: number, frames: boolean): number {
   return Math.min(1, Math.max(frames ? 0.55 : 0.08, compactness));
 }
@@ -227,6 +232,7 @@ export class MapRenderer {
       toggleLink: () => (this.linking ? this.stopLinking() : this.startLinking()),
       back: () => this.callbacks.onBack?.(),
       toggleView: () => this.callbacks.onChange({ viewMode: this.isList() ? `map` : `list` }),
+      addFixed: () => this.callbacks.onAddFixed?.(),
     });
 
     this.statusEl = document.createElement(`div`);
@@ -425,7 +431,7 @@ export class MapRenderer {
     this.eyes.clear();
     this.dropLineEl = null;
     // Vue Liste : les lignes occupent toute la largeur disponible ; chaque niveau est decale de `indent`.
-    const indent = listIndent(s.compactness);
+    const indent = listIndent(1);
     this.listWidth = Math.max(260, (this.mapEl.clientWidth - 32) / this.scale);
     this.list.forEach((n, i) => {
       const el = this.createNodeEl(n, s);
@@ -499,7 +505,7 @@ export class MapRenderer {
     el.style.setProperty(`--mmw-node-font`, list && !s.listMapFont ? `inherit` : FONT_CSS[st.fontFamily] ?? `inherit`);
     el.style.setProperty(`--mmw-node-size`, list ? `${(n.depth === 0 ? 1.1 : 1) * st.fontScale}em` : `${BASE_EM[Math.min(n.depth, 2)] * st.fontScale}em`);
     el.style.setProperty(`--mmw-node-align`, list ? `left` : st.textAlign);
-    el.style.setProperty(`--mmw-pad`, list ? String(Math.max(0.3, s.compactness)) : String(padFactor(s.compactness, st.showFrames)));
+    el.style.setProperty(`--mmw-pad`, list ? String(LIST_PAD) : String(padFactor(s.compactness, st.showFrames)));
     el.style.setProperty(`--mmw-node-justify`, list || st.textAlign === `left` ? `flex-start` : st.textAlign === `right` ? `flex-end` : `center`);
     const meta = n.node.meta;
     const title = n.node.title;
@@ -1677,7 +1683,7 @@ export class MapRenderer {
     const below = rows[index + 1];
     const minDepth = Math.min(below ? below.depth : 1, above.depth + 1);
     const maxDepth = above.depth + 1;
-    const indent = listIndent(this.getSettings().compactness);
+    const indent = listIndent(1);
     const wx = (leftScreen - rect.left - this.tx) / this.scale;
     let depth = maxDepth;
     let best = Infinity;

@@ -5,6 +5,7 @@ import { EditorState, RangeSetBuilder, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
 import { App, Editor, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "../../src/active-chapter";
+import { applyFixedState } from "../../src/fixed-editor";
 import { isModEnter } from "../../src/keys";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { webLinks } from "../../src/links";
@@ -27,6 +28,14 @@ const plugin = {
     Object.assign(plugin.settings, patch);
   },
   openSettings(): void {},
+  // Notes fixes : le banc d'essai applique le meme masquage que le plugin.
+  fixed: [] as { leaf: WorkspaceLeaf; path: string; key: string; title: string }[],
+  addFixed(leaf: WorkspaceLeaf, target: { path: string; key: string; title: string }): void {
+    plugin.fixed.push({ leaf, ...target });
+    const cm = (leaf.view as unknown as MarkdownView).editor as unknown as { cm: import("@codemirror/view").EditorView };
+    const s = plugin.settings;
+    applyFixedState(cm.cm, target, s.fixedLikeDynamic && s.includeSubtitles, s.hideMetaLines);
+  },
   getOpenText(f: TFile): string | null {
     const v = view.getNoteView();
     return v && v.file && v.file.path === f.path ? v.getViewData() : null;

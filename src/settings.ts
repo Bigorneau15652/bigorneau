@@ -12,6 +12,26 @@ export type TextAlign = `left` | `center` | `right`;
 export type Roughness = 0 | 1 | 2;
 export type ViewMode = `map` | `list`;
 export type LanguageSetting = `auto` | `fr` | `en`;
+// Note fixe memorisee : volet (identifiant Obsidian), note et chapitre montre.
+export interface FixedEntry {
+  id: string;
+  path: string;
+  key: string;
+  title: string;
+}
+
+export function sanitizeFixed(raw: unknown): FixedEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FixedEntry[] = [];
+  for (const r of raw as Record<string, unknown>[]) {
+    if (!r || typeof r !== `object`) continue;
+    if (typeof r.id !== `string` || typeof r.path !== `string` || typeof r.key !== `string` || typeof r.title !== `string`) continue;
+    if (r.id === `` || !/^r(\.\d+)*$/.test(r.key) || out.some((e) => e.id === r.id)) continue;
+    out.push({ id: r.id, path: r.path, key: r.key, title: r.title });
+  }
+  return out.slice(0, 30);
+}
+
 export type NewNoteFolderMode = `fixed` | `current` | `root`;
 
 // Numero de la version du format des reglages enregistres.
@@ -140,6 +160,10 @@ export interface MmSettings {
   iconColorWeb: string;
   // Chapitres de la page de reglages laisses ouverts.
   openChapters: string[];
+  // Notes fixes : comportement des sous-titres (vrai : comme la note dynamique ; faux : paragraphe du titre seul) et liste
+  // des notes fixes ouvertes, pour les retrouver au redemarrage.
+  fixedLikeDynamic: boolean;
+  fixedViews: FixedEntry[];
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -193,6 +217,8 @@ export const DEFAULT_SETTINGS: MmSettings = {
   iconColorInternal: ``,
   iconColorWeb: ``,
   openChapters: [],
+  fixedLikeDynamic: false,
+  fixedViews: [],
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).
@@ -237,6 +263,7 @@ export function migrateSettings(stored: unknown): MmSettings {
 
   const merged = { ...DEFAULT_SETTINGS, ...data } as MmSettings;
   merged.tags = sanitizeTags(data.tags);
+  merged.fixedViews = sanitizeFixed(data.fixedViews);
   merged.openChapters = Array.isArray(data.openChapters) ? data.openChapters.filter((x): x is string => typeof x === `string`) : [];
   for (const k of [`iconColorExternal`, `iconColorInternal`, `iconColorWeb`] as const) {
     if (typeof merged[k] !== `string` || (merged[k] !== `` && !TAG_HEX.test(merged[k]))) merged[k] = ``;
