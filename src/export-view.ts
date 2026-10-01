@@ -1,15 +1,21 @@
-// Apercu de l'export de haute qualite : volet qui montre la note ouverte telle que l'export la verra.
-// Phase 1 : texte brut paginé grossierement ; la composition definitive arrive aux phases suivantes.
+// Apercu de l'export de haute qualite : volet qui montre la note ouverte telle que l'export la composera.
+// Phase 2 : coupure de lignes de Knuth et Plass avec cesure ; la pagination definitive et le PDF arrivent aux phases suivantes.
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { buildExportDoc } from "./export/doc-tree";
-import { paginatePlain } from "./export/plain-pages";
+import { A4_SETUP, paginateRows, Row, typesetDoc } from "./export/typeset";
+import { EXPORT_FONT_FAMILY, loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
 
 export const VIEW_TYPE_EXPORT = `mindmap-writing-export-preview`;
 
+const PX_PER_PT = 96 / 72;
+
 export class ExportPreviewView extends ItemView {
   private token = 0;
+  private showQuality = false;
+  private sheets: HTMLElement[] = [];
+  private observer: ResizeObserver | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: MindmapWritingPlugin) {
     super(leaf);
@@ -30,7 +36,50 @@ export class ExportPreviewView extends ItemView {
   async onOpen() {
     this.contentEl.empty();
     this.contentEl.addClass(`mmw-export`);
+    this.observer = new ResizeObserver(() => this.applyScale());
+    this.observer.observe(this.contentEl);
     await this.refresh();
+  }
+
+  async onClose() {
+    this.observer?.disconnect();
+    this.observer = null;
+  }
+
+  // Les pages sont composees en points ; on les reduit pour qu'elles tiennent dans la largeur du volet.
+  private applyScale() {
+    const avail = this.contentEl.clientWidth - 32;
+    if (avail <= 0) return;
+    const scale = Math.min(1, avail / (A4_SETUP.width * PX_PER_PT));
+    for (const sheet of this.sheets) {
+      const page = sheet.firstElementChild as HTMLElement | null;
+      if (!page) continue;
+      sheet.style.width = `${A4_SETUP.width * PX_PER_PT * scale}px`;
+      sheet.style.height = `${A4_SETUP.height * PX_PER_PT * scale}px`;
+      // La page est dimensionnee en points (donc deja en pixels CSS) : seule la reduction s'applique.
+      page.style.transform = `scale(${scale})`;
+    }
+  }
+
+  private renderRow(parent: HTMLElement, row: Row) {
+    const el = parent.createDiv({ cls: `mmw-row mmw-row-${row.kind}` });
+    el.style.height = `${row.height}pt`;
+    if (row.kind === `space`) return;
+    el.style.fontSize = `${row.fontSize}pt`;
+    el.style.lineHeight = `${row.height}pt`;
+    el.style.paddingLeft = `${row.x}pt`;
+    el.style.width = `${row.width + row.x}pt`;
+    if (row.align === `center`) el.style.textAlign = `center`;
+    if (row.wordSpacing !== 0) el.style.wordSpacing = `${row.wordSpacing}pt`;
+    if (row.quality?.loose) el.addClass(`mmw-q-loose`);
+    if (row.quality?.tight) el.addClass(`mmw-q-tight`);
+    if (row.quality?.overfull) el.addClass(`mmw-q-over`);
+    if (row.quality?.hyphenated) el.addClass(`mmw-q-hyph`);
+    if (row.marker !== undefined) {
+      const m = el.createSpan({ cls: `mmw-row-marker`, text: row.marker });
+      m.style.left = `${row.x - 16}pt`;
+    }
+    el.appendChild(document.createTextNode(row.text));
   }
 
   async refresh() {
@@ -48,22 +97,53 @@ export class ExportPreviewView extends ItemView {
       root.createDiv({ cls: `mmw-export-message`, text: t(`Ouvrez d'abord une note.`) });
       return;
     }
+    const fontOk = await loadExportFont();
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.read(file));
     if (token !== this.token) return;
-    const result = paginatePlain(buildExportDoc(text, file.name));
+
+    const typeset = typesetDoc(buildExportDoc(text, file.name));
+    const pages = paginateRows(typeset.rows);
+    const s = typeset.stats;
     root.empty();
+    root.toggleClass(`mmw-show-quality`, this.showQuality);
+
     const head = root.createDiv({ cls: `mmw-export-head` });
     head.createDiv({ cls: `mmw-export-title`, text: t(`Aperçu de l'export : {0}`, file.basename) });
-    head.createDiv({ cls: `mmw-export-stats`, text: t(`{0} pages, {1} mots`, result.pages.length, result.wordCount) });
+    head.createDiv({ cls: `mmw-export-stats`, text: t(`{0} pages, {1} mots`, pages.length, s.wordCount) });
     head.createDiv({
-      cls: `mmw-export-hint`,
-      text: t(`Aperçu provisoire en texte brut. Les titres masqués et les sujets flottants ne sont pas exportés.`),
+      cls: `mmw-export-stats`,
+      text: t(`{0} lignes, dont {1} avec césure ({2} consécutives) ; {3} lâches, {4} serrées, {5} débordantes`, s.lines, s.hyphenatedLines, s.consecutiveHyphens, s.looseLines, s.tightLines, s.overfullLines),
     });
-    const pages = root.createDiv({ cls: `mmw-export-pages` });
-    for (const page of result.pages) {
-      const box = pages.createDiv({ cls: `mmw-export-page` });
-      box.createEl(`pre`, { text: page.lines.join(`\n`) });
-      box.createDiv({ cls: `mmw-export-number`, text: String(page.number) });
+    if (typeset.missing.length > 0) {
+      head.createDiv({ cls: `mmw-export-stats`, text: t(`Caractères absents de la police : {0}`, typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)) });
     }
+    if (!fontOk) head.createDiv({ cls: `mmw-export-stats`, text: t(`Police de l'export indisponible : l'aperçu utilise une autre police.`) });
+    head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de la phase 2 : coupure de lignes de Knuth et Plass avec césure. Les titres masqués et les sujets flottants ne sont pas exportés.`) });
+    const toggle = head.createEl(`label`, { cls: `mmw-export-toggle` });
+    const box = toggle.createEl(`input`, { type: `checkbox` });
+    box.checked = this.showQuality;
+    toggle.appendText(` ${t(`Indicateurs de qualité`)}`);
+    box.addEventListener(`change`, () => {
+      this.showQuality = box.checked;
+      root.toggleClass(`mmw-show-quality`, this.showQuality);
+    });
+
+    const host = root.createDiv({ cls: `mmw-export-pages` });
+    this.sheets = [];
+    pages.forEach((rows, index) => {
+      const sheet = host.createDiv({ cls: `mmw-export-sheet` });
+      const page = sheet.createDiv({ cls: `mmw-export-page` });
+      page.style.width = `${A4_SETUP.width}pt`;
+      page.style.height = `${A4_SETUP.height}pt`;
+      page.style.fontFamily = `"${EXPORT_FONT_FAMILY}", serif`;
+      const body = page.createDiv({ cls: `mmw-export-body` });
+      body.style.left = `${A4_SETUP.marginLeft}pt`;
+      body.style.top = `${A4_SETUP.marginTop}pt`;
+      body.style.width = `${A4_SETUP.width - A4_SETUP.marginLeft - A4_SETUP.marginRight}pt`;
+      for (const row of rows) this.renderRow(body, row);
+      page.createDiv({ cls: `mmw-export-number`, text: String(index + 1) });
+      this.sheets.push(sheet);
+    });
+    this.applyScale();
   }
 }

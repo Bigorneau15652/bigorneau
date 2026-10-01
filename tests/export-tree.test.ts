@@ -137,3 +137,14 @@ test(`une note sans titre donne seulement une introduction`, () => {
   assert.deepEqual(doc.sections, []);
   assert.deepEqual(doc.blocks, [{ type: `paragraph`, text: `Juste du texte.` }]);
 });
+
+test(`la langue est lue dans les proprietes de la note`, () => {
+  assert.equal(buildExportDoc(`---\nlang: en-GB\n---\n# A\ntexte`, `N.md`).language, `en-GB`);
+  assert.equal(buildExportDoc(`---\nlangue: "fr"\n---\n# A\ntexte`, `N.md`).language, `fr`);
+  assert.equal(buildExportDoc(`# A\ntexte`, `N.md`).language, undefined);
+});
+
+test(`une ligne de tableau sans cellule remplie est ignoree`, () => {
+  const blocks = parseBlocks([`| a | b |`, `| --- | --- |`, `| 1 | 2 |`, `|  |  |`].join(`\n`));
+  assert.deepEqual(blocks, [{ type: `table`, rows: [[`a`, `b`], [`1`, `2`]] }]);
+});

@@ -1,0 +1,13 @@
+Mindmap Note Writing est publie sous licence MIT. L'export de haute qualite embarque les elements suivants, dont les licences
+completes se trouvent dans le dossier licences/.
+
+Police Libertinus Serif (graisse normale, sous-ensemble latin), copyright 2012-2024 The Libertinus Project Authors, licence
+SIL Open Font License 1.1 (licences/OFL-Libertinus.txt). Source : https://github.com/alerque/libertinus, sous-ensemble
+distribue par le paquet npm @fontsource/libertinus-serif 5.3.0. La police est incorporee a src/export/font-libertinus.ts.
+
+Motifs de cesure francais (hyph-fr.tex), copyright 1994-2002 Daniel Flipo, Bernard Gaulle, 2016 Arthur Reutenauer, licence MIT,
+et motifs de cesure de l'anglais britannique (hyph-en-gb.tex), copyright 1992, 1996, 2005, 2016 Dominik Wujastyk, Graham Toal,
+licence MIT (licences/hyph-utf8-motifs.txt). Source : projet hyph-utf8, https://github.com/hyphenation/tex-hyphen.
+
+Les algorithmes de coupure de lignes (Knuth et Plass, 1981) et de cesure (Liang, 1983) sont reimplementes d'apres leurs
+descriptions publiees et d'apres la lecture de tex.web, sans reprise de code.
