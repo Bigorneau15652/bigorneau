@@ -236,3 +236,16 @@ test(`l'en-tete d'un JPEG donne ses dimensions et ses composantes`, async () => 
   assert.deepEqual(jpegInfo(bytes), { width: 200, height: 100, components: 3 });
   assert.equal(jpegInfo(new Uint8Array([1, 2, 3, 4])), null);
 });
+
+test(`les flottants places a la fin du texte restent sur la derniere page quand ils y tiennent`, () => {
+  const t = typesetDoc(buildExportDoc(`# A\n\nTexte court.\n\nTableau : Fin\n\n| a |\n| - |\n| 1 |\n\n![[p.png|Plan]]`, `A.md`), A4_SETUP, undefined, DEFAULT_PAGE_STYLE, { images: new Map([[`p.png`, image(300, 100)]]) });
+  const pages = paginate(t, A4_SETUP, DEFAULT_PAGE_STYLE);
+  assert.equal(pages.length, 1);
+  assert.equal((pages[0].topFloats ?? []).filter((r) => r.kind === `caption`).length, 2);
+});
+
+test(`un tableau dont l'identifiant suit une ligne vide est trouve par les renvois`, () => {
+  const c = composeNote(`# A\n\nVoir [[#^conso]].\n\nTableau : Valeurs\n\n| a |\n| - |\n| 1 |\n\n^conso`, `A.md`);
+  assert.deepEqual(c.typeset.warnings, []);
+  assert.ok(c.typeset.rows.some((r) => r.runs?.some((u) => u.text === `Tableau` && u.link === `#b:conso`)));
+});

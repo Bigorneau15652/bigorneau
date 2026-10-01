@@ -441,6 +441,28 @@ export class MmSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings(false);
         })
       );
+    new Setting(el)
+      .setName(t(`Figures et tableaux`))
+      .setDesc(t(`Flottants : placés en haut ou en bas de la page où ils tiennent, comme en LaTeX. Sinon, placés à l'endroit où ils sont écrits dans la note.`))
+      .addDropdown((d) => {
+        d.addOption(`float`, t(`Flottants (en haut ou en bas de page)`));
+        d.addOption(`inline`, t(`À l'endroit où ils sont écrits`));
+        d.setValue(s.exportFloats).onChange(async (v) => {
+          s.exportFloats = v === `inline` ? `inline` : `float`;
+          await this.plugin.saveSettings(false);
+        });
+      });
+    new Setting(el)
+      .setName(t(`Renvois vers un titre, une figure ou un tableau`))
+      .setDesc(t(`Les renvois [[#Titre]] et [[#^identifiant]] sont toujours cliquables dans le PDF. Cette option ajoute le numéro de page après le texte du renvoi.`))
+      .addDropdown((d) => {
+        d.addOption(`link`, t(`Cliquable seulement`));
+        d.addOption(`page`, t(`Cliquable avec le numéro de page`));
+        d.setValue(s.exportPageRefs ? `page` : `link`).onChange(async (v) => {
+          s.exportPageRefs = v === `page`;
+          await this.plugin.saveSettings(false);
+        });
+      });
   }
 
   private buildKeys(el: HTMLElement): void {

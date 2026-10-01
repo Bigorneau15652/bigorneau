@@ -71,6 +71,11 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
   const floatHeight = (list: PlacedFloat[]): number => list.reduce((a, p) => a + p.float.height, 0);
   // Flottants qui attendent une place, dans l'ordre ou ils ont ete ecrits.
   let deferred: FloatBlock[] = [];
+  // Derniere ligne qui n'est ni un espace ni un repere de flottant.
+  let lastReal = -1;
+  rows.forEach((r, k) => {
+    if (r.kind !== `space` && !r.float) lastReal = k;
+  });
 
   let i = 0;
   while (i < n || deferred.length > 0) {
@@ -110,7 +115,11 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
     let lastFit = -1;
     let bestSnap = { p: placed.length, d: deferredNew.length };
     let lastSnap = bestSnap;
+    // Quand la page se termine de force (fin du texte, saut de page obligatoire), les reperes de flottants qui suivent la
+    // derniere ligne appartiennent encore a cette page : `endIdx` est la derniere ligne qu'elle prend.
+    let endIdx = -1;
     for (let j = i; j < n && !bodyDone; j++) {
+      if (endIdx >= 0 && j > endIdx) break;
       const r = rows[j];
       height += r.height;
       stretch += r.stretch ?? 0;
@@ -134,12 +143,14 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
           deferredNew.push(f);
         }
       }
-      if (r.kind === `space` || r.float) continue;
+      if (endIdx >= 0 || r.kind === `space` || r.float) continue;
       const total = height + floatH + footArea(keys, carriedHeight);
       if (total > available + EPS) break;
       lastFit = j;
       lastSnap = { p: placed.length, d: deferredNew.length };
-      const forced = j === n - 1 || rows[j + 1].breakBefore === true;
+      let next = j + 1;
+      while (next < n && rows[next].float) next++;
+      const forced = j >= lastReal || next >= n || rows[next].breakBefore === true;
       const penalty = forced ? -INF_PENALTY : r.breakAfter;
       // Une penalite infinie interdit la coupure ici.
       if (penalty >= INF_PENALTY) continue;
@@ -153,9 +164,13 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
         bestCost = bad + penalty;
         bestSnap = lastSnap;
       }
-      if (forced) break;
+      if (forced) endIdx = j >= lastReal ? n - 1 : next - 1;
     }
     let snap = bestSnap;
+    if (endIdx >= 0) {
+      best = endIdx;
+      snap = { p: placed.length, d: deferredNew.length };
+    }
     if (!bodyDone) {
       // Aucune coupure permise : on coupe apres la derniere ligne qui tient, ou on laisse une ligne trop haute seule.
       if (best < 0) {

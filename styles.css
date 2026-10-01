@@ -1491,6 +1491,34 @@
   top: -0.3em;
 }
 
+.mmw-row-rule {
+  position: absolute;
+  height: 0.6pt;
+  background: #262626;
+}
+
+.mmw-row-cell {
+  position: absolute;
+  white-space: pre;
+}
+
+.mmw-row-image {
+  display: block;
+  max-width: none;
+}
+
+.mmw-row-toc {
+  cursor: pointer;
+}
+
+/* Points de conduite de la table des matieres. */
+.mmw-row-leader {
+  flex: 1;
+  height: 0.75em;
+  margin: 0 4pt;
+  border-bottom: 1.2px dotted #666;
+}
+
 .mmw-export-header {
   position: absolute;
   padding-bottom: 3pt;

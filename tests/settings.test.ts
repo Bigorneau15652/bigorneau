@@ -45,4 +45,10 @@ test(`reglages : auteur du PDF vide par defaut, nettoye quand il est enregistre`
   assert.equal(DEFAULT_SETTINGS.exportAuthor, ``);
   assert.equal(migrateSettings({ exportAuthor: `  Ada  ` }).exportAuthor, `Ada`);
   assert.equal(migrateSettings({ exportAuthor: 42 }).exportAuthor, ``);
+  assert.equal(DEFAULT_SETTINGS.exportFloats, `float`);
+  assert.equal(DEFAULT_SETTINGS.exportPageRefs, false);
+  assert.equal(migrateSettings({ exportFloats: `inline` }).exportFloats, `inline`);
+  assert.equal(migrateSettings({ exportFloats: `autre` }).exportFloats, `float`);
+  assert.equal(migrateSettings({ exportPageRefs: true }).exportPageRefs, true);
+  assert.equal(migrateSettings({ exportPageRefs: `oui` }).exportPageRefs, false);
 });

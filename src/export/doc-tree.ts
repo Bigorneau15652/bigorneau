@@ -276,9 +276,13 @@ export function parseBlocks(text: string): DocBlock[] {
         }
         i++;
       }
-      // Identifiant de bloc ecrit sur la ligne qui suit le tableau.
+      // Identifiant de bloc ecrit sur la ligne qui suit le tableau, ou apres une ligne vide (c'est ainsi qu'Obsidian l'ecrit).
       let id: string | undefined;
-      if (i < lines.length && BLOCK_ID_LINE_RE.test(lines[i])) id = BLOCK_ID_LINE_RE.exec(lines[i++])![1];
+      const idAt = i < lines.length && stripEol(lines[i]).trim() === `` ? i + 1 : i;
+      if (idAt < lines.length && BLOCK_ID_LINE_RE.test(stripEol(lines[idAt]))) {
+        id = BLOCK_ID_LINE_RE.exec(stripEol(lines[idAt]))![1];
+        i = idAt + 1;
+      }
       blocks.push({ type: `table`, rows, align, ...(id ? { id } : {}) });
       continue;
     }

@@ -195,3 +195,10 @@ test(`table des matieres demandee par les proprietes de la note`, () => {
   assert.equal(buildExportDoc(`---\ntoc: false\n---\n# A`, `N.md`).toc, undefined);
   assert.equal(buildExportDoc(`# A`, `N.md`).toc, undefined);
 });
+
+test(`l'identifiant d'un tableau peut suivre une ligne vide`, () => {
+  const blocks = parseBlocks(`| a |\n| - |\n| 1 |\n\n^conso\n\nSuite.`);
+  assert.equal(blocks[0].type === `table` && blocks[0].id, `conso`);
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[1].type === `paragraph` && blocks[1].text, `Suite.`);
+});
