@@ -2,7 +2,7 @@
 toc: true
 toc-depth: 2
 ---
-Cette note sert de contrôle visuel pour l'export (voir docs/POLITIQUE-EXPORT.md). Copiez-la dans votre coffre Obsidian pour ouvrir l'aperçu de l'export. Elle contient volontairement des mots longs comme anticonstitutionnellement ou électroencéphalographiquement, des listes, une citation, un tableau, deux notes de bas de page, un titre masqué et un sujet flottant, qui ne doivent pas apparaître dans l'export. Elle a une table des matières (propriété toc), un tableau légendé, une figure légendée et des renvois : placez une image nommée plan-masse.png dans votre coffre pour voir la figure, sinon l export la signale comme introuvable. Pour tester la pagination, dupliquez plusieurs fois le chapitre Contexte : les en-têtes courants, les notes et les coupures de pages se répartissent alors sur plusieurs pages.
+Cette note sert de contrôle visuel pour l'export (voir docs/POLITIQUE-EXPORT.md). Copiez-la dans votre coffre Obsidian pour ouvrir l'aperçu de l'export. Elle contient volontairement des mots longs comme anticonstitutionnellement ou électroencéphalographiquement, des listes, une citation, un tableau, des formules, des médias, deux notes de bas de page, un titre masqué et un sujet flottant, qui ne doivent pas apparaître dans l'export. Elle a une table des matières (propriété toc), un tableau légendé, une figure légendée et des renvois : placez une image nommée plan-masse.png dans votre coffre pour voir la figure, sinon l export la signale comme introuvable. Pour tester la pagination, dupliquez plusieurs fois le chapitre Contexte : les en-têtes courants, les notes et les coupures de pages se répartissent alors sur plusieurs pages.
 
 # Contexte
 Le bâtiment a été construit en 1972, *l'office* de tourisme et la *difficile* rénovation de l'*affiche* en témoignent. Sa consommation d'énergie finale est aujourd'hui supérieure à 180 kWh/m².an, soit **près du double** de l'objectif fixé par le décret tertiaire pour 2030[^dec]. Les résultats détaillés figurent dans [[Audit énergétique#Résultats|le rapport d'audit]]^[Rapport établi par un bureau d'études indépendant, version de l'année précédente.].
@@ -33,6 +33,18 @@ Voir aussi le site de l'[Université de Montpellier Paul-Valéry](https://www.un
 ## Hypothèses retenues
 %% mmw {"hidden":true} %%
 Ce chapitre est masqué : il ne doit pas apparaître dans l'export.
+
+## Calculs
+L'intensité énergétique se calcule par $E_s = \frac{Q}{S}$, avec $Q$ la consommation annuelle en kWh et $S$ la surface en m². Pour plusieurs bâtiments, la somme pondérée s'écrit :
+
+$$E_{moy} = \frac{\sum_{i=1}^{n} E_i \, S_i}{\sum_{i=1}^{n} S_i}$$
+
+## Médias
+![Visite virtuelle du campus](https://www.youtube.com/watch?v=abcdefghijk)
+
+<iframe width="560" height="315" src="https://player.vimeo.com/video/123456789" title="Présentation du projet"></iframe>
+
+![[interview-gestionnaire.mp3|Interview du gestionnaire]]
 
 # Résultats
 1. Chauffage

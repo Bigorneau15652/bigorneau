@@ -57,6 +57,20 @@ function pdfText(s: string): string {
   return `<${hex}>`;
 }
 
+// Contour d'une formule (M, L, C, Z) en operateurs PDF.
+function mathOps(d: string): string {
+  const t = d.split(` `);
+  const out: string[] = [];
+  for (let i = 0; i < t.length; ) {
+    const c = t[i++];
+    if (c === `M`) out.push(`${t[i++]} ${t[i++]} m`);
+    else if (c === `L`) out.push(`${t[i++]} ${t[i++]} l`);
+    else if (c === `C`) out.push(`${t.slice(i, i + 6).join(` `)} c`), (i += 6);
+    else if (c === `Z`) out.push(`h`);
+  }
+  return out.join(` `);
+}
+
 const hex4 = (n: number): string => n.toString(16).padStart(4, `0`);
 
 function pdfDate(d: Date): string {
@@ -110,6 +124,13 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
   const drawRuns = (ops: string[], links: LinkBox[], runs: LineRun[], x0: number, baseline: number, size: number, wordSpacing: number, color?: string): number => {
     let x = x0;
     for (const run of runs) {
+      if (run.math) {
+        // Formule en ligne : contour rempli, a l'echelle du corps du texte, pose sur la ligne de base.
+        const k = size / 1000;
+        ops.push(`q ${num(k)} 0 0 ${num(-k)} ${num(x)} ${num(H - baseline)} cm ${mathOps(run.math.d)} f Q`);
+        x += run.math.width * k;
+        continue;
+      }
       const u = use(run.style);
       const f = u.font;
       const sz = size * (run.sup ? SUP_SCALE : 1);
@@ -156,6 +177,7 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
   const runsOf = (row: Row): LineRun[] => row.runs ?? [{ text: row.text, style: `regular` }];
   const natural = (runs: LineRun[], size: number, wordSpacing: number): number =>
     runs.reduce((a, r) => {
+      if (r.math) return a + (r.math.width * size) / 1000;
       const f = fontFor(r.style);
       const sz = size * (r.sup ? SUP_SCALE : 1);
       const spaces = r.sup ? 0 : Array.from(r.text).filter((c) => c === ` ` || c === ` `).length;
@@ -191,7 +213,25 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
         if (row.rules.top) ops.push(`q 0.15 G 0.6 w ${num(x1)} ${num(H - rowTop)} m ${num(x2)} ${num(H - rowTop)} l S Q`);
         if (row.rules.bottom) ops.push(`q 0.15 G 0.6 w ${num(x1)} ${num(H - rowTop - row.height)} m ${num(x2)} ${num(H - rowTop - row.height)} l S Q`);
       }
+      if (row.frame) {
+        // Cadre d'un media : bords gauche et droit, et haut ou bas sur la premiere et la derniere ligne.
+        const x1 = left;
+        const x2 = left + row.frame.width;
+        const y1 = H - rowTop;
+        const y2 = H - rowTop - row.height;
+        const edges: string[] = [`${num(x1)} ${num(y1)} m ${num(x1)} ${num(y2)} l S`, `${num(x2)} ${num(y1)} m ${num(x2)} ${num(y2)} l S`];
+        if (row.frame.top) edges.push(`${num(x1)} ${num(y1)} m ${num(x2)} ${num(y1)} l S`);
+        if (row.frame.bottom) edges.push(`${num(x1)} ${num(y2)} m ${num(x2)} ${num(y2)} l S`);
+        ops.push(`q 0.55 G 0.5 w ${edges.join(` `)} Q`);
+      }
       if (row.kind === `space` || row.kind === `float`) return;
+      if (row.math) {
+        // Formule en bloc : centree dans sa ligne, ligne de base placee d'apres la hauteur du dessin.
+        const k = row.math.size / 1000;
+        const top = (row.height - (row.math.asset.ascent + row.math.asset.descent) * k) / 2;
+        ops.push(`q ${num(k)} 0 0 ${num(-k)} ${num(left + row.x)} ${num(H - (rowTop + top + row.math.asset.ascent * k))} cm ${mathOps(row.math.asset.d)} f Q`);
+        return;
+      }
       if (row.cells) {
         const inner = row.height - (row.inset?.top ?? 0) - (row.inset?.bottom ?? 0);
         const cellBase = baselineIn(rowTop + (row.inset?.top ?? 0), inner, row.fontSize, regular.font);

@@ -3,10 +3,11 @@
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { composeNote } from "./export/compose";
 import type { ImageAsset } from "./export/image";
+import type { MathAsset } from "./export/math";
 import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, Row } from "./export/typeset";
-import { loadImages, pageStyleOf, warningLines } from "./export-context";
+import { loadAssets, pageStyleOf, warningLines } from "./export-context";
 import { EXPORT_FONT_FAMILY, EXPORT_MONO_FAMILY, loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
@@ -76,8 +77,21 @@ export class ExportPreviewView extends ItemView {
   // Morceaux de ligne : chacun a sa police (gras, italique) ; les appels de notes de bas de page sont des numeros en exposant, a 70 %
   // du corps du texte comme dans le calcul ; les liens web s'ouvrent dans le navigateur, les renvois (adresse commencant par #)
   // menent a l'endroit visé de l'apercu.
+  // Dessin d'une formule : le contour, a l'echelle du corps du texte, dont le bas est sous la ligne de base de la profondeur voulue.
+  private appendMath(el: HTMLElement, asset: MathAsset, size: number, inline: boolean) {
+    const k = size / 1000;
+    const svg = el.createSvg(`svg`, { attr: { width: `${asset.width * k}pt`, height: `${(asset.ascent + asset.descent) * k}pt`, viewBox: `0 ${-asset.ascent} ${asset.width} ${asset.ascent + asset.descent}` } });
+    svg.createSvg(`path`, { attr: { d: asset.d, fill: `currentColor` } });
+    svg.addClass(`mmw-row-math`);
+    if (inline) svg.style.verticalAlign = `${-asset.descent * k}pt`;
+  }
+
   private appendRuns(el: HTMLElement, runs: LineRun[]) {
     for (const run of runs) {
+      if (run.math) {
+        this.appendMath(el, run.math, Number.parseFloat(el.style.fontSize) || 11, true);
+        continue;
+      }
       const span = el.createSpan({ text: run.text });
       if (run.sup) span.addClass(`mmw-sup`);
       if (run.style === `mono`) span.style.fontFamily = `"${EXPORT_MONO_FAMILY}", monospace`;
@@ -116,6 +130,14 @@ export class ExportPreviewView extends ItemView {
         rule.style[side] = `0`;
       }
     }
+    if (row.frame) {
+      // Cadre d'un media : bords gauche et droit, et haut ou bas sur la premiere et la derniere ligne.
+      el.style.position = `relative`;
+      const frame = el.createDiv({ cls: `mmw-row-frame` });
+      frame.style.width = `${row.frame.width}pt`;
+      if (row.frame.top) frame.style.borderTopWidth = `0.5pt`;
+      if (row.frame.bottom) frame.style.borderBottomWidth = `0.5pt`;
+    }
     if (row.kind === `space` || row.kind === `float`) return;
     el.style.fontSize = `${row.fontSize}pt`;
     el.style.lineHeight = `${row.height}pt`;
@@ -123,6 +145,14 @@ export class ExportPreviewView extends ItemView {
     el.style.width = `${row.width + row.x}pt`;
     if (row.align === `center`) el.style.textAlign = `center`;
     if (row.wordSpacing !== 0) el.style.wordSpacing = `${row.wordSpacing}pt`;
+    if (row.math) {
+      const k = row.math.size / 1000;
+      const top = (row.height - (row.math.asset.ascent + row.math.asset.descent) * k) / 2;
+      const holder = el.createDiv();
+      holder.style.paddingTop = `${top}pt`;
+      this.appendMath(holder, row.math.asset, row.math.size, false);
+      return;
+    }
     if (row.cells) {
       el.style.position = `relative`;
       const inner = row.height - (row.inset?.top ?? 0) - (row.inset?.bottom ?? 0);
@@ -184,7 +214,7 @@ export class ExportPreviewView extends ItemView {
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.read(file));
     if (token !== this.token) return;
 
-    const loaded = await loadImages(this.app, text, file.name, file.path);
+    const loaded = await loadAssets(this.app, text, file.name, file.path);
     if (token !== this.token) {
       for (const u of loaded.urls) URL.revokeObjectURL(u);
       return;
@@ -192,7 +222,7 @@ export class ExportPreviewView extends ItemView {
     this.releaseImages();
     this.urls = loaded.urls;
     this.images = loaded.images;
-    const composed = composeNote(text, file.name, undefined, pageStyleOf(this.plugin.settings), loaded.images);
+    const composed = composeNote(text, file.name, undefined, pageStyleOf(this.plugin.settings), { images: loaded.images, formulas: loaded.formulas });
     const typeset = composed.typeset;
     const pages = composed.pages;
     const s = typeset.stats;

@@ -3,7 +3,7 @@
 import { Notice, Platform, TFile } from "obsidian";
 import { composeNote, composeToPdf } from "./export/compose";
 import { ExportDialog, ExportReportModal, targetPath } from "./export-dialog";
-import { loadImages, pageStyleOf, warningLines } from "./export-context";
+import { loadAssets, pageStyleOf, warningLines } from "./export-context";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
 
@@ -32,8 +32,8 @@ export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile)
     const text = plugin.getOpenText(file) ?? (await plugin.app.vault.read(file));
     // Laisse le temps d'afficher le message avant le calcul.
     await new Promise((r) => window.setTimeout(r, 30));
-    const { images, urls } = await loadImages(plugin.app, text, file.name, file.path);
-    const composed = composeNote(text, file.name, undefined, pageStyleOf(plugin.settings), images);
+    const { images, formulas, urls } = await loadAssets(plugin.app, text, file.name, file.path);
+    const composed = composeNote(text, file.name, undefined, pageStyleOf(plugin.settings), { images, formulas });
     for (const u of urls) URL.revokeObjectURL(u);
     const pdf = await composeToPdf(composed, {
       defaultAuthor: plugin.settings.exportAuthor,
