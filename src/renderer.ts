@@ -64,6 +64,8 @@ export interface MapCallbacks {
   // Notes du coffre proposees pour un lien (chemins) et titres d'une note.
   // Cree une note fixe avec le titre selectionne.
   onAddFixed?: () => void;
+  // Ouvre l'apercu de l'export ; absent quand l'export n'est pas disponible (tablette, telephone).
+  onOpenExport?: () => void;
   getVaultFiles?: () => string[];
   getHeadings?: (path: string) => Promise<HeadingItem[]>;
   // Creation d'une note qui n'existe pas encore (renvoie son chemin) et dossier prevu pour elle.
@@ -244,6 +246,7 @@ export class MapRenderer {
       back: () => this.callbacks.onBack?.(),
       toggleView: () => this.callbacks.onChange({ viewMode: this.isList() ? `map` : `list` }),
       addFixed: () => this.callbacks.onAddFixed?.(),
+      ...(this.callbacks.onOpenExport ? { openExport: () => this.callbacks.onOpenExport?.() } : {}),
     });
 
     this.statusEl = document.createElement(`div`);

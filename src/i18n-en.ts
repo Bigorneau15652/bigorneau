@@ -389,6 +389,13 @@ const PAIRS: [string, string][] = [
   [`Rétablir la valeur d'origine`, `Restore the original value`],
   // Notes fixes
   [`Ajouter une note fixe`, `Add a pinned note`],
+  [`Aperçu de l'export`, `Export preview`],
+  [`Aperçu de l'export de la note`, `Preview the note export`],
+  [`Aperçu de l'export : {0}`, `Export preview: {0}`],
+  [`{0} pages, {1} mots`, `{0} pages, {1} words`],
+  [`Aperçu provisoire en texte brut. Les titres masqués et les sujets flottants ne sont pas exportés.`, `Provisional plain-text preview. Hidden headings and floating topics are not exported.`],
+  [`L'export n'est disponible que sur ordinateur.`, `Export is only available on desktop.`],
+  [`Ouvrez d'abord une note.`, `Open a note first.`],
   [`Ouvrez d'abord la carte de la note.`, `Open the map of the note first.`],
   [`Notes fixes`, `Pinned notes`],
   [`Copies d'un chapitre dans leur propre volet`, `Copies of a chapter in their own pane`],

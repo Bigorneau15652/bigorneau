@@ -1397,3 +1397,60 @@
   border-top: 1px solid var(--background-modifier-border);
   pointer-events: none;
 }
+
+/* Apercu de l'export */
+.mmw-export {
+  padding: 12px 16px !important;
+  overflow: auto;
+}
+
+.mmw-export-head {
+  margin-bottom: 12px;
+}
+
+.mmw-export-title {
+  font-weight: 600;
+}
+
+.mmw-export-stats,
+.mmw-export-hint,
+.mmw-export-message {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.mmw-export-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.mmw-export-page {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  padding: 28px 24px 36px;
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.mmw-export-page pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  background: transparent;
+}
+
+.mmw-export-number {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+}

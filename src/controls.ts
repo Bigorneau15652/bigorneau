@@ -31,6 +31,8 @@ export interface ControlActions {
   toggleView: () => void;
   // Ouvre une note fixe : copie du chapitre selectionne dans son propre volet.
   addFixed: () => void;
+  // Apercu de l'export de haute qualite (ordinateur seulement : absent sur tablette et telephone).
+  openExport?: () => void;
 }
 
 type PopupKind = `menu` | `style` | `view` | `tags` | null;
@@ -41,6 +43,7 @@ const svg = (inner: string, size = 18, extra = ``): string =>
 const ICONS: Record<string, string> = {
   menu: svg(`<path d="M4 6h16M4 12h16M4 18h16"/>`),
   pin: svg(`<path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z"/>`),
+  file: svg(`<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>`),
   help: svg(`<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>`),
   palette: svg(
     `<path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3c2.2 0 4-1.8 4-4 0-4.4-4.5-7.4-9.3-7.4z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>`
@@ -590,6 +593,14 @@ export class MapControls {
         this.closePopup();
         a.addFixed();
       }),
+      ...(a.openExport
+        ? [
+            this.menuItem(ICONS.file, t(`Aperçu de l'export`), () => {
+              this.closePopup();
+              a.openExport?.();
+            }),
+          ]
+        : []),
       this.menuItem(ICONS.tag, t(`Étiquettes…`), () => {
         this.open = `tags`;
         this.refresh();
