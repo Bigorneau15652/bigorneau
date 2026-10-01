@@ -51,6 +51,7 @@ export class MmSettingTab extends PluginSettingTab {
     this.chapter(`floats`, t(`Sujets flottants`), t(`Sujets de notes libres, hors de la carte : niveau, forme, couleurs`), (el) => this.buildFloats(el));
     this.chapter(`links`, t(`Liens et icônes`), t(`Icônes et couleurs des repères de liens`), (el) => this.buildLinks(el));
     this.chapter(`notes`, t(`Nouvelles notes`), t(`Dossier des notes créées depuis la carte`), (el) => this.buildNotes(el));
+    this.chapter(`export`, t(`Export PDF`), t(`Métadonnées du PDF produit par l'export de haute qualité`), (el) => this.buildExport(el));
     this.chapter(`keys`, t(`Navigation au clavier`), t(`Raccourcis pour passer d'un chapitre à l'autre depuis la note`), (el) => this.buildKeys(el));
   }
 
@@ -427,6 +428,19 @@ export class MmSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings(false);
         });
       });
+  }
+
+  private buildExport(el: HTMLElement): void {
+    const s = this.plugin.settings;
+    new Setting(el)
+      .setName(t(`Auteur du PDF`))
+      .setDesc(t(`Nom écrit dans les propriétés du PDF quand la note n'a pas de propriété author ou auteur.`))
+      .addText((x) =>
+        x.setValue(s.exportAuthor).onChange(async (v) => {
+          s.exportAuthor = v.trim();
+          await this.plugin.saveSettings(false);
+        })
+      );
   }
 
   private buildKeys(el: HTMLElement): void {

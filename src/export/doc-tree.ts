@@ -30,6 +30,8 @@ export interface ExportDoc {
   title: string;
   // Langue indiquee par la propriete lang (ou langue, language) en en-tete de la note, par exemple fr ou en-GB.
   language?: string;
+  // Auteur indique par la propriete author (ou auteur) en en-tete de la note.
+  author?: string;
   // Texte place avant le premier titre.
   blocks: DocBlock[];
   sections: DocSection[];
@@ -283,27 +285,6 @@ export function parseBlocks(text: string): DocBlock[] {
   return blocks;
 }
 
-// Transforme le Markdown d'une ligne en texte brut : liens, accentuations et code en ligne perdent leurs signes.
-// Provisoire : les styles (gras, italique) seront conserves par les etages suivants.
-export function inlineToPlain(text: string): string {
-  return text
-    .replace(/!\[\[[^\]]*\]\]/g, ``)
-    .replace(/\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g, (_m, file: string, heading: string | undefined, alias: string | undefined) => {
-      if (alias) return alias;
-      if (heading) return heading;
-      return file.split(`/`).pop() ?? file;
-    })
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, `$1`)
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, `$1`)
-    .replace(/`([^`]*)`/g, `$1`)
-    .replace(/\*\*([^*]+)\*\*/g, `$1`)
-    .replace(/__([^_]+)__/g, `$1`)
-    .replace(/~~([^~]+)~~/g, `$1`)
-    .replace(/==([^=]+)==/g, `$1`)
-    .replace(/\*([^*\s][^*]*)\*/g, `$1`)
-    .replace(/(?<![\w])_([^_]+)_(?![\w])/g, `$1`);
-}
-
 function buildSection(node: MmNode, opts: ExtractOptions): DocSection {
   return {
     level: node.level,
@@ -332,5 +313,6 @@ export function buildExportDoc(text: string, fileName: string, opts: ExtractOpti
   collect(doc.root);
   doc.floats.forEach(collect);
   const lang = /^(?:lang|langue|language)[ \t]*:[ \t]*[\x22\x27\x60]?([A-Za-z]{2}(?:-[A-Za-z]+)?)/m.exec(doc.frontmatter);
-  return { title: doc.root.title, ...(lang ? { language: lang[1] } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
+  const author = /^(?:author|auteur)[ \t]*:[ \t]*[\x22\x27\x60]?([^\x22\x27\x60\r\n]+?)[\x22\x27\x60]?[ \t]*$/m.exec(doc.frontmatter);
+  return { title: doc.root.title, ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
 }

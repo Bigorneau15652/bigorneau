@@ -40,3 +40,9 @@ test(`reglages : l apparence par defaut couvre tous les reglages d apparence`, (
   assert.equal(Object.keys(d).length, 12);
   assert.equal(d.shape, `frame`);
 });
+
+test(`reglages : auteur du PDF vide par defaut, nettoye quand il est enregistre`, () => {
+  assert.equal(DEFAULT_SETTINGS.exportAuthor, ``);
+  assert.equal(migrateSettings({ exportAuthor: `  Ada  ` }).exportAuthor, `Ada`);
+  assert.equal(migrateSettings({ exportAuthor: 42 }).exportAuthor, ``);
+});
