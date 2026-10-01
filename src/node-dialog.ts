@@ -1,6 +1,7 @@
 // Petite fenetre de modification d'un titre : titre, titre court (carte seulement), commentaire et etiquettes.
 // N'utilise que le DOM standard, pour pouvoir etre verifiee hors d'Obsidian.
 import type { TagDef } from "./settings";
+import { t } from "./i18n";
 
 export interface DialogValues {
   title: string;
@@ -53,9 +54,9 @@ export class NodeDialog {
     this.selected = new Set(opts.values.tags);
     this.root = el(`div`, `mmw-dialog`);
     this.root.setAttribute(`role`, `dialog`);
-    this.root.setAttribute(`aria-label`, opts.isRoot ? `Nom de la note` : `Modifier le titre`);
+    this.root.setAttribute(`aria-label`, opts.isRoot ? t(`Nom de la note`) : t(`Modifier le titre`));
 
-    this.titleInput = this.field(opts.isRoot ? `Nom de la note` : `Titre`, () => {
+    this.titleInput = this.field(opts.isRoot ? t(`Nom de la note`) : t(`Titre`), () => {
       const input = el(`input`, `mmw-dlg-input mmw-dlg-title`);
       input.type = `text`;
       input.value = opts.values.title;
@@ -64,28 +65,28 @@ export class NodeDialog {
     });
 
     if (!opts.isRoot) {
-      this.shortInput = this.field(`Titre court (affiché sur la carte seulement)`, () => {
+      this.shortInput = this.field(t(`Titre court (affiché sur la carte seulement)`), () => {
         const input = el(`input`, `mmw-dlg-input mmw-dlg-short`);
         input.type = `text`;
         input.value = opts.values.short;
-        input.placeholder = `Facultatif`;
+        input.placeholder = t(`Facultatif`);
         return input;
       });
-      this.commentInput = this.field(`Commentaire`, () => {
+      this.commentInput = this.field(t(`Commentaire`), () => {
         const area = el(`textarea`, `mmw-dlg-input mmw-dlg-comment`);
         area.rows = 3;
         area.value = opts.values.comment;
-        area.placeholder = `Facultatif`;
+        area.placeholder = t(`Facultatif`);
         return area;
       });
       this.buildTags();
     }
 
     const actions = el(`div`, `mmw-dlg-actions`);
-    const cancel = el(`button`, `mmw-dlg-btn`, `Annuler`);
+    const cancel = el(`button`, `mmw-dlg-btn`, t(`Annuler`));
     cancel.type = `button`;
     cancel.addEventListener(`click`, () => this.close(false));
-    const ok = el(`button`, `mmw-dlg-btn mod-cta`, `Valider`);
+    const ok = el(`button`, `mmw-dlg-btn mod-cta`, t(`Valider`));
     ok.type = `button`;
     ok.addEventListener(`click`, () => this.close(true));
     actions.append(cancel, ok);
@@ -119,11 +120,11 @@ export class NodeDialog {
 
   private buildTags(): void {
     const wrap = el(`div`, `mmw-dlg-field`);
-    wrap.append(el(`span`, `mmw-dlg-label`, `Étiquettes`));
+    wrap.append(el(`span`, `mmw-dlg-label`, t(`Étiquettes`)));
     const box = el(`div`, `mmw-dlg-tagbox`);
     const filter = el(`input`, `mmw-dlg-input mmw-dlg-filter`);
     filter.type = `text`;
-    filter.placeholder = `Écrire pour chercher ou créer, Entrée pour choisir`;
+    filter.placeholder = t(`Écrire pour chercher ou créer, Entrée pour choisir`);
     filter.addEventListener(`input`, () => {
       this.dismissConfirm(false);
       this.applyFilter();
@@ -131,7 +132,7 @@ export class NodeDialog {
     this.filterInput = filter;
     const list = el(`div`, `mmw-dlg-chips`);
     this.chipList = list;
-    this.emptyNote = el(`p`, `mmw-dlg-empty`, `Aucune étiquette n'existe encore. Écrivez un nom ci-dessus pour en créer une.`);
+    this.emptyNote = el(`p`, `mmw-dlg-empty`, t(`Aucune étiquette n'existe encore. Écrivez un nom ci-dessus pour en créer une.`));
     for (const def of this.opts.defs) this.addChip(def);
     this.confirmBar = el(`div`, `mmw-dlg-confirm`);
     this.confirmBar.hidden = true;
@@ -158,11 +159,11 @@ export class NodeDialog {
     if (!bar) return;
     this.pendingName = name;
     bar.replaceChildren();
-    bar.append(el(`span`, `mmw-dlg-confirm-text`, `Ajouter l'étiquette « ${name} » ?`));
-    const yes = el(`button`, `mmw-dlg-btn mod-cta mmw-dlg-yes`, `Oui`);
+    bar.append(el(`span`, `mmw-dlg-confirm-text`, t(`Ajouter l'étiquette « {0} » ?`, name)));
+    const yes = el(`button`, `mmw-dlg-btn mod-cta mmw-dlg-yes`, t(`Oui`));
     yes.type = `button`;
     yes.addEventListener(`click`, () => this.confirmCreate());
-    const no = el(`button`, `mmw-dlg-btn mmw-dlg-no`, `Non`);
+    const no = el(`button`, `mmw-dlg-btn mmw-dlg-no`, t(`Non`));
     no.type = `button`;
     no.addEventListener(`click`, () => this.dismissConfirm(true));
     bar.append(yes, no);

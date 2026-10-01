@@ -1,12 +1,12 @@
 {
   "name": "obsidian-mindmap-writing",
-  "version": "0.0.34",
+  "version": "0.0.36",
   "description": "Plugin Obsidian d'ecriture en branche (carte mentale)",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "esbuild tests/model.test.ts tests/layout.test.ts tests/keys.test.ts tests/settings.test.ts tests/style.test.ts tests/style-edit.test.ts tests/edit.test.ts tests/tags.test.ts tests/links.test.ts --bundle --platform=node --format=cjs --outdir=.test-build && node --test .test-build/model.test.js .test-build/layout.test.js .test-build/keys.test.js .test-build/settings.test.js .test-build/style.test.js .test-build/style-edit.test.js .test-build/edit.test.js .test-build/tags.test.js .test-build/links.test.js"
+    "test": "esbuild tests/model.test.ts tests/layout.test.ts tests/keys.test.ts tests/settings.test.ts tests/style.test.ts tests/style-edit.test.ts tests/edit.test.ts tests/tags.test.ts tests/links.test.ts tests/i18n.test.ts tests/fixed.test.ts --bundle --platform=node --format=cjs --outdir=.test-build && node --test .test-build/model.test.js .test-build/layout.test.js .test-build/keys.test.js .test-build/settings.test.js .test-build/style.test.js .test-build/style-edit.test.js .test-build/edit.test.js .test-build/tags.test.js .test-build/links.test.js .test-build/i18n.test.js .test-build/fixed.test.js"
   },
   "license": "MIT",
   "devDependencies": {

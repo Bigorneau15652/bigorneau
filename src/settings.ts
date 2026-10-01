@@ -11,6 +11,28 @@ export type TextAlign = `left` | `center` | `right`;
 // 0 : trait net, 1 : trait de crayon leger, 2 : trait tres irregulier.
 export type Roughness = 0 | 1 | 2;
 export type ViewMode = `map` | `list`;
+export type LanguageSetting = `auto` | `fr` | `en`;
+// Note fixe memorisee : volet (identifiant Obsidian), note et chapitre montre.
+export interface FixedEntry {
+  id: string;
+  path: string;
+  key: string;
+  title: string;
+}
+
+export function sanitizeFixed(raw: unknown): FixedEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FixedEntry[] = [];
+  for (const r of raw as Record<string, unknown>[]) {
+    if (!r || typeof r !== `object`) continue;
+    if (typeof r.id !== `string` || typeof r.path !== `string` || typeof r.key !== `string` || typeof r.title !== `string`) continue;
+    if (r.id === `` || !/^r(\.\d+)*$/.test(r.key) || out.some((e) => e.id === r.id)) continue;
+    out.push({ id: r.id, path: r.path, key: r.key, title: r.title });
+  }
+  return out.slice(0, 30);
+}
+
+export type NewNoteFolderMode = `fixed` | `current` | `root`;
 
 // Numero de la version du format des reglages enregistres.
 export const SETTINGS_VERSION = 4;
@@ -108,7 +130,7 @@ export interface MmSettings {
   selectionContrast: number;
   // Masque dans la note les lignes de commentaire du plugin (%% mmw ... %%) : etiquettes, styles, titre court.
   hideMetaLines: boolean;
-  // Fleches de lien toujours en bleu (couleur des liens du theme) ; sinon neutres, et bleues quand on les selectionne.
+  // Fleches de lien toujours colorees (couleur des liens du theme) ; sinon neutres, et colorees quand on les selectionne.
   linkColored: boolean;
   // Note : masque les chapitres inactifs au lieu de les griser (seul le chapitre actif reste visible).
   hideInactive: boolean;
@@ -124,6 +146,24 @@ export interface MmSettings {
   viewMode: ViewMode;
   listStripes: boolean;
   listMapFont: boolean;
+  // Langue du plugin : automatique (celle d'Obsidian), francais ou anglais.
+  language: LanguageSetting;
+  // Dossier des notes creees depuis la carte : un dossier choisi, le dossier de la note courante ou la racine du coffre.
+  newNoteMode: NewNoteFolderMode;
+  newNoteFolder: string;
+  // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
+  iconExternal: string;
+  iconInternal: string;
+  iconWeb: string;
+  iconColorExternal: string;
+  iconColorInternal: string;
+  iconColorWeb: string;
+  // Chapitres de la page de reglages laisses ouverts.
+  openChapters: string[];
+  // Notes fixes : comportement des sous-titres (vrai : comme la note dynamique ; faux : paragraphe du titre seul) et liste
+  // des notes fixes ouvertes, pour les retrouver au redemarrage.
+  fixedLikeDynamic: boolean;
+  fixedViews: FixedEntry[];
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -167,6 +207,18 @@ export const DEFAULT_SETTINGS: MmSettings = {
   viewMode: `map`,
   listStripes: false,
   listMapFont: false,
+  language: `auto`,
+  newNoteMode: `current`,
+  newNoteFolder: ``,
+  iconExternal: `chain`,
+  iconInternal: `return`,
+  iconWeb: `globe`,
+  iconColorExternal: ``,
+  iconColorInternal: ``,
+  iconColorWeb: ``,
+  openChapters: [],
+  fixedLikeDynamic: false,
+  fixedViews: [],
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).
@@ -211,6 +263,12 @@ export function migrateSettings(stored: unknown): MmSettings {
 
   const merged = { ...DEFAULT_SETTINGS, ...data } as MmSettings;
   merged.tags = sanitizeTags(data.tags);
+  merged.fixedViews = sanitizeFixed(data.fixedViews);
+  merged.openChapters = Array.isArray(data.openChapters) ? data.openChapters.filter((x): x is string => typeof x === `string`) : [];
+  for (const k of [`iconColorExternal`, `iconColorInternal`, `iconColorWeb`] as const) {
+    if (typeof merged[k] !== `string` || (merged[k] !== `` && !TAG_HEX.test(merged[k]))) merged[k] = ``;
+  }
+  merged.newNoteFolder = typeof merged.newNoteFolder === `string` ? merged.newNoteFolder.replace(/^\/+|\/+$/g, ``) : ``;
   merged.settingsVersion = SETTINGS_VERSION;
   return merged;
 }

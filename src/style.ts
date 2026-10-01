@@ -4,6 +4,7 @@
 // Le meme commentaire porte les etiquettes, le titre court et le commentaire d'une case (visibles sur la carte seulement) :
 //   %% mmw {"tags":["k3f9"],"short":"Budget","comment":"A revoir en mars"} %%
 // (sans dependance a Obsidian pour pouvoir etre teste hors de l'application).
+import { t } from "./i18n";
 import type { Corners, FontFamily, Roughness, StrokeDash, TextAlign } from "./settings";
 
 export interface NodeStyle {
@@ -177,11 +178,11 @@ export function formatMetaLine(meta: MmMeta): string {
 
 // Libelle de la portee d'une modification de style, pour le panneau d'apparence.
 export function describeScope(levels: number[], count: number, allSelected: boolean, individual: boolean): string {
-  if (count === 0 || (allSelected && !individual)) return `toute la carte`;
-  if (individual) return count === 1 ? `cette case seulement` : `les ${count} cases sélectionnées`;
+  if (count === 0 || (allSelected && !individual)) return t(`toute la carte`);
+  if (individual) return count === 1 ? t(`cette case seulement`) : t(`les {0} cases sélectionnées`, count);
   const names = [...new Set(levels)].sort((a, b) => a - b);
-  const label = (n: number): string => (n === 0 ? `principal` : String(n));
-  if (names.length === 1) return names[0] === 0 ? `le titre principal` : `tous les titres de niveau ${names[0]}`;
+  const label = (n: number): string => (n === 0 ? t(`principal`) : String(n));
+  if (names.length === 1) return names[0] === 0 ? t(`le titre principal`) : t(`tous les titres de niveau {0}`, names[0]);
   const list = names.map(label);
-  return `tous les titres de niveaux ${list.slice(0, -1).join(`, `)} et ${list[list.length - 1]}`;
+  return t(`tous les titres de niveaux {0} et {1}`, list.slice(0, -1).join(`, `), list[list.length - 1]);
 }

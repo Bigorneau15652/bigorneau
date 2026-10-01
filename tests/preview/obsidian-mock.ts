@@ -99,6 +99,10 @@ export class Menu {
   }
 }
 
+export class TFolder {
+  constructor(public path: string) {}
+}
+
 export class TFile {
   parent = { path: `/` };
   constructor(public path: string, public extension = `md`) {}
@@ -253,13 +257,22 @@ export class Workspace {
 export class App {
   workspace: Workspace;
   files = new Map<string, string>();
+  folders = new Set<string>();
   vault = {
     cachedRead: async (f: TFile) => this.files.get(f.path) ?? ``,
     read: async (f: TFile) => this.files.get(f.path) ?? ``,
     process: async (f: TFile, fn: (d: string) => string) => {
       this.files.set(f.path, fn(this.files.get(f.path) ?? ``));
     },
-    getAbstractFileByPath: (p: string) => (this.files.has(p) ? new TFile(p) : null),
+    getAbstractFileByPath: (p: string) => (this.files.has(p) ? new TFile(p) : this.folders.has(p) ? new TFolder(p) : null),
+    createFolder: async (p: string) => {
+      this.folders.add(p);
+    },
+    create: async (p: string, text: string) => {
+      this.files.set(p, text);
+      return new TFile(p);
+    },
+    getAllLoadedFiles: () => [...this.folders].map((p) => new TFolder(p)),
     getMarkdownFiles: () => [...this.files.keys()].map((p) => new TFile(p)),
   };
   metadataCache = {

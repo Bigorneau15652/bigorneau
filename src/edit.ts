@@ -1,6 +1,7 @@
 // Modifications de la structure faites depuis la carte : creer, renommer, supprimer.
 // Chaque operation prend le texte de la note et renvoie le nouveau texte, sans rien ecrire elle-meme :
 // la vue applique le resultat dans l'editeur d'Obsidian (une seule transaction, donc annulable).
+import { t } from "./i18n";
 import { applyLineEdits, branchEnd, flattenDoc, MmDoc, MmNode, nodeAtLine, nodeByKey, parseNote, renderHeading, splitLines } from "./model";
 
 export interface EditResult {
@@ -90,7 +91,7 @@ export function describeDeletion(text: string, fileName: string, keys: string[])
     subtitles += count(t.node);
     words += countWords(lines.slice(t.node.line ?? 0, branchEnd(t.node)));
   }
-  return { nodes: targets.length, subtitles, words, titles: targets.map((t) => t.node.title || `(sans titre)`) };
+  return { nodes: targets.length, subtitles, words, titles: targets.map((x) => x.node.title || t(`(sans titre)`)) };
 }
 
 // Supprime les noeuds avec toute leur descendance. La selection passe au frere precedent, sinon au parent.

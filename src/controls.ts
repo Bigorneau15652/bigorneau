@@ -2,6 +2,7 @@
 // (apparence de la carte, des niveaux de titre ou d'une case), puis le zoom, l'annulation et la compacite.
 // N'utilise que le DOM standard.
 import { MmSettings, makeTag, PanePosition, TagDef } from "./settings";
+import { t } from "./i18n";
 import type { NodeStyle, StylePatch } from "./style";
 
 export interface ControlActions {
@@ -26,6 +27,8 @@ export interface ControlActions {
   back: () => void;
   // Bascule entre la vue Mindmap et la vue Liste.
   toggleView: () => void;
+  // Ouvre une note fixe : copie du chapitre selectionne dans son propre volet.
+  addFixed: () => void;
 }
 
 type PopupKind = `menu` | `style` | `view` | `tags` | null;
@@ -35,6 +38,8 @@ const svg = (inner: string, size = 18, extra = ``): string =>
 
 const ICONS: Record<string, string> = {
   menu: svg(`<path d="M4 6h16M4 12h16M4 18h16"/>`),
+  pin: svg(`<path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z"/>`),
+  help: svg(`<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>`),
   palette: svg(
     `<path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3c2.2 0 4-1.8 4-4 0-4.4-4.5-7.4-9.3-7.4z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>`
   ),
@@ -79,19 +84,19 @@ const OPT = {
 };
 
 const STROKE_COLORS = [
-  { value: ``, label: `Couleur du thème` },
-  { value: `#e03131`, label: `Rouge` },
-  { value: `#2f9e44`, label: `Vert` },
-  { value: `#1971c2`, label: `Bleu` },
-  { value: `#f08c00`, label: `Orange` },
+  { value: ``, label: t(`Couleur du thème`) },
+  { value: `#e03131`, label: t(`Rouge`) },
+  { value: `#2f9e44`, label: t(`Vert`) },
+  { value: `#1971c2`, label: t(`Bleu`) },
+  { value: `#f08c00`, label: t(`Orange`) },
 ];
 
 const FILL_COLORS = [
-  { value: ``, label: `Transparent` },
-  { value: `#ffc9c9`, label: `Rose` },
-  { value: `#b2f2bb`, label: `Vert clair` },
-  { value: `#a5d8ff`, label: `Bleu clair` },
-  { value: `#ffec99`, label: `Jaune` },
+  { value: ``, label: t(`Transparent`) },
+  { value: `#ffc9c9`, label: t(`Rose`) },
+  { value: `#b2f2bb`, label: t(`Vert clair`) },
+  { value: `#a5d8ff`, label: t(`Bleu clair`) },
+  { value: `#ffec99`, label: t(`Jaune`) },
 ];
 
 const WIDTHS = [1, 1.8, 2.6, 3.6, 5];
@@ -111,16 +116,20 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
 }
 
 // Etiquette affichee quand la souris survole l'element, et lue par les lecteurs d'ecran.
-function tip(el: HTMLElement, text: string): void {
+function tip(el: HTMLElement, text: string, desc?: string): void {
   el.dataset.tip = text;
+  if (desc) el.dataset.tipDesc = desc;
+  else delete el.dataset.tipDesc;
   el.setAttribute(`aria-label`, text);
+  if (desc) el.setAttribute(`aria-description`, desc);
+  else el.removeAttribute(`aria-description`);
 }
 
-function iconButton(icon: string, label: string, onClick: () => void, cls = `mmw-btn`): HTMLButtonElement {
+function iconButton(icon: string, label: string, onClick: () => void, cls = `mmw-btn`, desc?: string): HTMLButtonElement {
   const b = h(`button`, cls);
   b.type = `button`;
   b.innerHTML = icon;
-  tip(b, label);
+  tip(b, label, desc);
   b.addEventListener(`click`, onClick);
   return b;
 }
@@ -139,11 +148,17 @@ export class MapControls {
   private backBtn: HTMLButtonElement;
   private zoomLabel: HTMLElement;
   private slider: HTMLInputElement;
+  private compactIcon!: HTMLElement;
+  private compactSep!: HTMLElement;
   private scopeEl: HTMLElement | null = null;
   private open: PopupKind = null;
   // Champ du nom a activer apres l'ajout d'une etiquette.
   private focusTagIndex: number | null = null;
   private tipTimer: number | null = null;
+  private helpRoot!: HTMLElement;
+  private helpPanel!: HTMLElement;
+  private helpBtn!: HTMLButtonElement;
+  private helpOpen = false;
   // Vrai quand Cmd (ou Ctrl) est maintenu : la modification ne concerne que la case selectionnee.
   private mod = false;
   private cleanups: (() => void)[] = [];
@@ -156,13 +171,13 @@ export class MapControls {
     this.tipEl.style.display = `none`;
 
     const dock = h(`div`, `mmw-dock`);
-    this.menuBtn = iconButton(ICONS.menu, `Menu et réglages`, () => this.toggle(`menu`));
-    this.styleBtn = iconButton(ICONS.palette, `Apparence de la carte`, () => this.toggle(`style`));
-    this.linkBtn = iconButton(ICONS.link, `Relier deux titres par un lien`, () => this.actions.toggleLink());
-    this.backBtn = iconButton(ICONS.back, `Revenir à la carte précédente`, () => this.actions.back());
+    this.menuBtn = iconButton(ICONS.menu, t(`Menu et réglages`), () => this.toggle(`menu`), `mmw-btn`, t(`Position de la note, étiquettes, réglages du plugin.`));
+    this.styleBtn = iconButton(ICONS.palette, t(`Apparence de la carte`), () => this.toggle(`style`), `mmw-btn`, t(`Couleurs, traits, angles, branches, police et taille du texte, pour toute la carte, un niveau ou une case.`));
+    this.linkBtn = iconButton(ICONS.link, t(`Relier deux titres par un lien`), () => this.actions.toggleLink(), `mmw-btn`, t(`Relie le titre sélectionné à un autre titre ou à une note du coffre. Taper le nom d'une note qui n'existe pas propose de la créer.`));
+    this.backBtn = iconButton(ICONS.back, t(`Revenir à la carte précédente`), () => this.actions.back(), `mmw-btn`, t(`Retour à la note dont vous venez d'ouvrir la carte par un lien.`));
     this.backBtn.style.display = `none`;
-    this.viewBtn = iconButton(ICONS.eye, `Affichage : éléments visibles et vue`, () => this.toggle(`view`));
-    this.modeBtn = iconButton(ICONS.list, `Passer à la vue Liste`, () => this.actions.toggleView());
+    this.viewBtn = iconButton(ICONS.eye, t(`Affichage : éléments visibles et vue`), () => this.toggle(`view`), `mmw-btn`, t(`Étiquettes, commentaires, liens, vue noir et blanc, grisage ou masquage des chapitres inactifs de la note.`));
+    this.modeBtn = iconButton(ICONS.list, t(`Passer à la vue Liste`), () => this.actions.toggleView(), `mmw-btn`, t(`Bascule entre la carte mentale et la liste condensée.`));
     dock.append(this.menuBtn, this.styleBtn, this.viewBtn, this.linkBtn, this.modeBtn, this.backBtn);
 
     const zoom = h(`div`, `mmw-dock mmw-zoom`);
@@ -172,25 +187,41 @@ export class MapControls {
     this.slider.min = `0.2`;
     this.slider.max = `1.6`;
     this.slider.step = `0.05`;
-    tip(this.slider, `Compacité de l'affichage`);
+    tip(this.slider, t(`Compacité de l'affichage`), t(`Resserre ou écarte les cases de la carte.`));
     this.slider.addEventListener(`input`, () => this.actions.change({ compactness: Number(this.slider.value) }));
     zoom.append(
-      iconButton(ICONS.minus, `Dézoomer`, () => this.actions.zoomOut()),
+      iconButton(ICONS.minus, t(`Dézoomer`), () => this.actions.zoomOut(), `mmw-btn`, t(`Réduit la carte (touche -).`)),
       this.zoomLabel,
-      iconButton(ICONS.plus, `Zoomer`, () => this.actions.zoomIn()),
-      iconButton(ICONS.locate, `Recentrer la carte`, () => this.actions.recenter()),
+      iconButton(ICONS.plus, t(`Zoomer`), () => this.actions.zoomIn(), `mmw-btn`, t(`Agrandit la carte (touche +).`)),
+      iconButton(ICONS.locate, t(`Recentrer la carte`), () => this.actions.recenter(), `mmw-btn`, t(`Ajuste le zoom pour voir toute la carte (touche 0).`)),
       h(`span`, `mmw-sep`),
-      iconButton(ICONS.undo, `Annuler (dans la note)`, () => this.actions.undo()),
-      iconButton(ICONS.redo, `Rétablir (dans la note)`, () => this.actions.redo()),
-      h(`span`, `mmw-sep`)
+      iconButton(ICONS.undo, t(`Annuler (dans la note)`), () => this.actions.undo(), `mmw-btn`, t(`Annule la dernière modification de la note.`)),
+      iconButton(ICONS.redo, t(`Rétablir (dans la note)`), () => this.actions.redo(), `mmw-btn`, t(`Rétablit la modification annulée.`)),
+      (this.compactSep = h(`span`, `mmw-sep`))
     );
-    const compactIcon = h(`span`, `mmw-compact-icon`);
+    const compactIcon = (this.compactIcon = h(`span`, `mmw-compact-icon`));
     compactIcon.innerHTML = ICONS.compact;
-    tip(compactIcon, `Compacité de l'affichage`);
+    tip(compactIcon, t(`Compacité de l'affichage`), t(`Resserre ou écarte les cases de la carte.`));
     zoom.append(compactIcon, this.slider);
 
     this.root.append(this.popup, dock, zoom, this.tipEl);
     host.appendChild(this.root);
+
+    // Bouton d'aide en bas a droite : raccourcis et conseils de la carte.
+    this.helpRoot = h(`div`, `mmw-help`);
+    this.helpPanel = this.buildHelp();
+    this.helpPanel.style.display = `none`;
+    this.helpBtn = iconButton(ICONS.help, t(`Aide de la carte`), () => this.toggleHelp(), `mmw-btn mmw-help-btn`, t(`Raccourcis clavier et conseils de déplacement de la carte.`));
+    this.helpRoot.append(this.helpPanel, this.helpBtn);
+    host.appendChild(this.helpRoot);
+    this.cleanups.push(() => this.helpRoot.remove());
+    this.listen(this.helpRoot, `mouseover`, (e) => {
+      const el = (e.target as HTMLElement).closest(`[data-tip]`) as HTMLElement | null;
+      if (el && this.helpRoot.contains(el)) this.scheduleTip(el, this.helpRoot);
+    });
+    this.listen(this.helpRoot, `mouseout`, (e) => {
+      if ((e.target as HTMLElement).closest(`[data-tip]`)) this.hideTip();
+    });
 
     // Etiquettes au survol, avec un court delai.
     this.listen(this.root, `mouseover`, (e) => {
@@ -210,6 +241,7 @@ export class MapControls {
     const doc = host.ownerDocument;
     const outside = (e: Event) => {
       if (this.open !== null && !this.isOnPanel(e.target)) this.closePopup();
+      if (this.helpOpen && !(e.target instanceof Node && this.helpRoot.contains(e.target))) this.toggleHelp(false);
     };
     this.listen(doc, `pointerdown`, outside, true);
     this.listen(doc, `mousedown`, outside, true);
@@ -217,6 +249,11 @@ export class MapControls {
     this.listen(doc, `keydown`, (e) => {
       const k = e as KeyboardEvent;
       this.setModifier(k.metaKey || k.ctrlKey);
+      if (k.key === `Escape` && this.helpOpen) {
+        k.stopPropagation();
+        this.toggleHelp(false);
+        return;
+      }
       if (k.key === `Escape` && this.open !== null) {
         k.stopPropagation();
         this.closePopup();
@@ -249,7 +286,7 @@ export class MapControls {
   }
 
   contains(target: EventTarget | null): boolean {
-    return target instanceof Node && this.root.contains(target);
+    return target instanceof Node && (this.root.contains(target) || this.helpRoot.contains(target));
   }
 
   setZoom(scale: number): void {
@@ -274,6 +311,7 @@ export class MapControls {
   }
 
   private toggle(kind: Exclude<PopupKind, null>): void {
+    this.toggleHelp(false);
     this.open = this.open === kind ? null : kind;
     this.refresh();
   }
@@ -290,16 +328,71 @@ export class MapControls {
 
   // ---------------------------------------------------------------- etiquettes
 
-  private scheduleTip(el: HTMLElement): void {
+  private scheduleTip(el: HTMLElement, owner: HTMLElement = this.root): void {
     if (this.tipTimer !== null) window.clearTimeout(this.tipTimer);
-    this.tipTimer = window.setTimeout(() => this.showTip(el), 300);
+    this.tipTimer = window.setTimeout(() => this.showTip(el, owner), 300);
   }
 
-  private showTip(el: HTMLElement): void {
+  // Fenetre d'aide : raccourcis et conseils de la carte, en texte condense.
+  private buildHelp(): HTMLElement {
+    const mod = isMac() ? `Cmd` : `Ctrl`;
+    const panel = h(`div`, `mmw-help-panel`);
+    panel.setAttribute(`role`, `dialog`);
+    panel.setAttribute(`aria-label`, t(`Aide de la carte`));
+    panel.append(h(`div`, `mmw-menu-title`, t(`Aide de la carte`)));
+    const section = (title: string, rows: [string, string][]): void => {
+      panel.append(h(`div`, `mmw-help-title`, title));
+      for (const [keys, what] of rows) {
+        const row = h(`div`, `mmw-help-row`);
+        row.append(h(`span`, `mmw-help-keys`, keys), h(`span`, `mmw-help-what`, what));
+        panel.append(row);
+      }
+    };
+    section(t(`Se déplacer`), [
+      [t(`Flèches`), t(`Titre voisin, parent ou premier sous-titre`)],
+      [t(`Espace`), t(`Replier ou déplier la branche`)],
+      [t(`Molette`), t(`Déplacer la carte`)],
+      [t(`{0} + molette`, mod), t(`Zoomer`)],
+      [`+  -  0`, t(`Zoomer, dézoomer, tout afficher`)],
+    ]);
+    section(t(`Écrire`), [
+      [`Tab`, t(`Nouveau sous-titre`)],
+      [t(`Entrée`), t(`Nouveau titre de même niveau`)],
+      [`F2`, t(`Modifier le titre (double clic, ou taper une lettre)`)],
+      [t(`Suppr`), t(`Supprimer avec confirmation`)],
+      [`${mod} + C  X  V  D`, t(`Copier, couper, coller, dupliquer`)],
+      [`${mod} + ${t(`Maj`)} + ${t(`Entrée`)}`, t(`Aller de la carte à la note, et inversement`)],
+    ]);
+    section(t(`Organiser`), [
+      [t(`Glisser`), t(`Déplacer un titre avec sa branche`)],
+      [t(`{0} + Maj + flèches`, mod), t(`Déplacer au clavier`)],
+      [t(`Maj + glisser`), t(`Sélectionner plusieurs titres`)],
+      [t(`Clic droit`), t(`Menu du titre`)],
+    ]);
+    section(t(`Liens`), [
+      [t(`Bouton lien`), t(`Relier deux titres ou une note du coffre`)],
+      [t(`Nom inconnu`), t(`Proposition de créer la note`)],
+      [t(`Flèche, puis Suppr`), t(`Retirer un lien`)],
+      [t(`Double clic`), t(`Modifier un lien`)],
+    ]);
+    return panel;
+  }
+
+  private toggleHelp(force?: boolean): void {
+    this.helpOpen = force ?? !this.helpOpen;
+    this.helpPanel.style.display = this.helpOpen ? `block` : `none`;
+    this.helpBtn.classList.toggle(`mmw-active`, this.helpOpen);
+    this.hideTip();
+    if (this.helpOpen) this.closePopup();
+  }
+
+  private showTip(el: HTMLElement, owner: HTMLElement = this.root): void {
     this.tipTimer = null;
     if (!el.isConnected || !el.dataset.tip) return;
     const t = this.tipEl;
-    t.textContent = el.dataset.tip;
+    if (t.parentElement !== owner) owner.append(t);
+    t.replaceChildren(h(`div`, `mmw-tip-name`, el.dataset.tip));
+    if (el.dataset.tipDesc) t.append(h(`div`, `mmw-tip-desc`, el.dataset.tipDesc));
     t.style.display = `block`;
     const r = el.getBoundingClientRect();
     const view = el.ownerDocument.defaultView ?? window;
@@ -319,14 +412,18 @@ export class MapControls {
   // Met a jour l'affichage des commandes et du panneau ouvert d'apres les reglages.
   refresh(): void {
     this.slider.value = String(this.getSettings().compactness);
+    // La liste est toujours compacte : la reglette ne concerne que la carte.
+    const inList = this.getSettings().viewMode === `list`;
+    this.slider.style.display = inList ? `none` : ``;
+    this.compactIcon.style.display = inList ? `none` : ``;
+    this.compactSep.style.display = inList ? `none` : ``;
     this.menuBtn.classList.toggle(`mmw-active`, this.open === `menu` || this.open === `tags`);
     this.styleBtn.classList.toggle(`mmw-active`, this.open === `style`);
     this.viewBtn.classList.toggle(`mmw-active`, this.open === `view`);
     // Le bouton montre la vue vers laquelle il bascule.
     const toList = this.getSettings().viewMode !== `list`;
     this.modeBtn.innerHTML = toList ? ICONS.list : ICONS.network;
-    this.modeBtn.setAttribute(`aria-label`, toList ? `Passer à la vue Liste` : `Passer à la vue Mindmap`);
-    this.modeBtn.dataset.tip = toList ? `Passer à la vue Liste` : `Passer à la vue Mindmap`;
+    tip(this.modeBtn, toList ? t(`Passer à la vue Liste`) : t(`Passer à la vue Mindmap`), t(`Bascule entre la carte mentale et la liste condensée.`));
     this.scopeEl = null;
     if (this.open === null) {
       this.popup.style.display = `none`;
@@ -355,30 +452,30 @@ export class MapControls {
 
     const back = h(`button`, `mmw-menu-item mmw-back`);
     back.type = `button`;
-    back.append(h(`span`, `mmw-menu-label`, `Retour au menu`));
+    back.append(h(`span`, `mmw-menu-label`, t(`Retour au menu`)));
     back.addEventListener(`click`, () => {
       this.open = `menu`;
       this.refresh();
     });
     panel.append(back);
-    panel.append(h(`div`, `mmw-menu-title`, `Étiquettes de la carte`));
-    panel.append(h(`div`, `mmw-scope-hint`, `Une étiquette a un nom, une couleur de fond et une couleur de texte. Elle apparaît en petit à côté du titre, sur la carte seulement. Pour la donner à un titre, faites un double clic sur ce titre.`));
+    panel.append(h(`div`, `mmw-menu-title`, t(`Étiquettes de la carte`)));
+    panel.append(h(`div`, `mmw-scope-hint`, t(`Une étiquette a un nom, une couleur de fond et une couleur de texte. Elle apparaît en petit à côté du titre, sur la carte seulement. Pour la donner à un titre, faites un double clic sur ce titre.`)));
 
     const save = (next: TagDef[]): void => a.change({ tags: next });
     const patched = (i: number, patch: Partial<TagDef>): TagDef[] => tags.map((t, j) => (j === i ? { ...t, ...patch } : t));
 
     const list = h(`div`, `mmw-taglist`);
-    if (tags.length === 0) list.append(h(`div`, `mmw-menu-help`, `Aucune étiquette pour l'instant.`));
-    tags.forEach((t, i) => {
+    if (tags.length === 0) list.append(h(`div`, `mmw-menu-help`, t(`Aucune étiquette pour l'instant.`)));
+    tags.forEach((tg, i) => {
       const row = h(`div`, `mmw-tagrow`);
-      const preview = h(`span`, `mmw-tag mmw-tag-preview`, t.name === `` ? `?` : t.name);
-      preview.style.background = t.bg;
-      preview.style.color = t.fg;
+      const preview = h(`span`, `mmw-tag mmw-tag-preview`, tg.name === `` ? `?` : tg.name);
+      preview.style.background = tg.bg;
+      preview.style.color = tg.fg;
 
       const name = h(`input`, `mmw-tag-name`);
       name.type = `text`;
-      name.value = t.name;
-      name.placeholder = `Nom`;
+      name.value = tg.name;
+      name.placeholder = t(`Nom`);
       name.maxLength = 40;
       name.addEventListener(`input`, () => {
         preview.textContent = name.value === `` ? `?` : name.value;
@@ -397,19 +494,19 @@ export class MapControls {
         input.addEventListener(`change`, () => apply(input.value));
         return input;
       };
-      const bg = color(t.bg, `Couleur de fond`, (v) => save(patched(i, { bg: v })), (v) => (preview.style.background = v));
-      const fg = color(t.fg, `Couleur du texte`, (v) => save(patched(i, { fg: v })), (v) => (preview.style.color = v));
-      const del = iconButton(ICONS.trash, `Supprimer cette étiquette`, () => save(tags.filter((_, j) => j !== i)), `mmw-btn mmw-btn-small`);
+      const bg = color(tg.bg, t(`Couleur de fond`), (v) => save(patched(i, { bg: v })), (v) => (preview.style.background = v));
+      const fg = color(tg.fg, t(`Couleur du texte`), (v) => save(patched(i, { fg: v })), (v) => (preview.style.color = v));
+      const del = iconButton(ICONS.trash, t(`Supprimer cette étiquette`), () => save(tags.filter((_, j) => j !== i)), `mmw-btn mmw-btn-small`);
       row.append(preview, name, bg, fg, del);
       list.append(row);
     });
     panel.append(list);
 
     const legend = h(`div`, `mmw-tag-legend`);
-    legend.append(h(`span`, ``, `Nom`), h(`span`, ``, `Fond`), h(`span`, ``, `Texte`));
+    legend.append(h(`span`, ``, t(`Nom`)), h(`span`, ``, t(`Fond`)), h(`span`, ``, t(`Texte`)));
     if (tags.length > 0) panel.insertBefore(legend, list);
 
-    const add = h(`button`, `mmw-option mmw-reset`, `Ajouter une étiquette`);
+    const add = h(`button`, `mmw-option mmw-reset`, t(`Ajouter une étiquette`));
     add.type = `button`;
     add.addEventListener(`click`, () => {
       this.focusTagIndex = tags.length;
@@ -448,32 +545,36 @@ export class MapControls {
     const a = this.actions;
     const menu = h(`div`, `mmw-menu`);
     menu.append(
-      ...(s.viewMode === `list` ? [] : [this.menuItem(ICONS.locate, `Recentrer la carte`, () => a.recenter())]),
-      this.menuItem(ICONS.collapse, `Tout replier`, () => a.collapseAll()),
-      this.menuItem(ICONS.expand, `Tout déplier`, () => a.expandAll()),
+      ...(s.viewMode === `list` ? [] : [this.menuItem(ICONS.locate, t(`Recentrer la carte`), () => a.recenter())]),
+      this.menuItem(ICONS.collapse, t(`Tout replier`), () => a.collapseAll()),
+      this.menuItem(ICONS.expand, t(`Tout déplier`), () => a.expandAll()),
       h(`div`, `mmw-menu-sep`),
-      this.menuToggle(`Afficher le préfixe (#)`, s.showPrefix, (v) => a.change({ showPrefix: v })),
-      this.menuToggle(`Titres longs à la ligne`, s.longTitles === `wrap`, (v) => a.change({ longTitles: v ? `wrap` : `ellipsis` }))
+      this.menuToggle(t(`Afficher le préfixe (#)`), s.showPrefix, (v) => a.change({ showPrefix: v })),
+      this.menuToggle(t(`Titres longs à la ligne`), s.longTitles === `wrap`, (v) => a.change({ longTitles: v ? `wrap` : `ellipsis` }))
     );
 
     const positions: { value: PanePosition; label: string }[] = [
-      { value: `right`, label: `Droite` },
-      { value: `left`, label: `Gauche` },
-      { value: `top`, label: `Dessus` },
-      { value: `bottom`, label: `Dessous` },
+      { value: `right`, label: t(`Droite`) },
+      { value: `left`, label: t(`Gauche`) },
+      { value: `top`, label: t(`Dessus`) },
+      { value: `bottom`, label: t(`Dessous`) },
     ];
     const pos = h(`div`, `mmw-menu-row`);
-    pos.append(h(`div`, `mmw-menu-title`, `Position de la note`));
+    pos.append(h(`div`, `mmw-menu-title`, t(`Position de la note`)));
     pos.append(this.options(positions.map((p) => ({ value: p.value, text: p.label })), s.panePosition, (v) => a.change({ panePosition: v as PanePosition }), true));
     menu.append(pos);
 
     menu.append(
       h(`div`, `mmw-menu-sep`),
-      this.menuItem(ICONS.tag, `Étiquettes…`, () => {
+      this.menuItem(ICONS.pin, t(`Ajouter une note fixe`), () => {
+        this.closePopup();
+        a.addFixed();
+      }),
+      this.menuItem(ICONS.tag, t(`Étiquettes…`), () => {
         this.open = `tags`;
         this.refresh();
       }),
-      this.menuItem(ICONS.settings, `Tous les paramètres`, () => a.openSettings())
+      this.menuItem(ICONS.settings, t(`Tous les paramètres`), () => a.openSettings())
     );
     return menu;
   }
@@ -486,30 +587,30 @@ export class MapControls {
     const heading = (text: string): HTMLElement => h(`div`, `mmw-menu-title mmw-menu-heading`, text);
 
     menu.append(
-      heading(`Visible sur la carte`),
-      this.menuToggle(`Étiquettes`, s.showTags, (v) => a.change({ showTags: v })),
-      this.menuToggle(`Bulles de commentaire`, s.showComments, (v) => a.change({ showComments: v })),
-      this.menuToggle(`Liens web (mappemonde)`, s.showWebLinks, (v) => a.change({ showWebLinks: v })),
-      this.menuToggle(s.viewMode === `list` ? `Repère : autres notes` : `Liens vers d'autres notes`, s.showExternalLinks, (v) => a.change({ showExternalLinks: v })),
-      this.menuToggle(s.viewMode === `list` ? `Repère : liens dans la note` : `Liens dans la note (flèches)`, s.showInternalLinks, (v) => a.change({ showInternalLinks: v })),
+      heading(t(`Visible sur la carte`)),
+      this.menuToggle(t(`Étiquettes`), s.showTags, (v) => a.change({ showTags: v })),
+      this.menuToggle(t(`Bulles de commentaire`), s.showComments, (v) => a.change({ showComments: v })),
+      this.menuToggle(t(`Liens web (mappemonde)`), s.showWebLinks, (v) => a.change({ showWebLinks: v })),
+      this.menuToggle(s.viewMode === `list` ? t(`Repère : autres notes`) : t(`Liens vers d'autres notes`), s.showExternalLinks, (v) => a.change({ showExternalLinks: v })),
+      this.menuToggle(s.viewMode === `list` ? t(`Repère : liens dans la note`) : t(`Liens dans la note (flèches)`), s.showInternalLinks, (v) => a.change({ showInternalLinks: v })),
       h(`div`, `mmw-menu-sep`),
-      heading(`Couleurs`),
-      this.menuToggle(`Vue noir et blanc`, s.blackWhite, (v) => a.change({ blackWhite: v })),
-      ...(s.viewMode === `list` ? [] : [this.menuToggle(`Flèches toujours en bleu`, s.linkColored, (v) => a.change({ linkColored: v }))]),
+      heading(t(`Couleurs`)),
+      this.menuToggle(t(`Vue noir et blanc`), s.blackWhite, (v) => a.change({ blackWhite: v })),
+      ...(s.viewMode === `list` ? [] : [this.menuToggle(t(`Flèches toujours colorées`), s.linkColored, (v) => a.change({ linkColored: v }))]),
       h(`div`, `mmw-menu-sep`),
-      heading(`Chapitres inactifs de la note`)
+      heading(t(`Chapitres inactifs de la note`))
     );
     // Griser et inclure les dependances cote a cote, puis masquer.
     const pair = h(`div`, `mmw-menu-pair`);
     pair.append(
-      this.menuToggle(`Griser`, s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
-      this.menuToggle(`Dépendances`, s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
+      this.menuToggle(t(`Griser`), s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
+      this.menuToggle(t(`Dépendances`), s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
     );
-    pair.title = `Dépendances : le chapitre actif comprend aussi ses sous-titres, qui ne sont alors ni grisés ni masqués.`;
-    menu.append(pair, this.menuToggle(`Masquer les chapitres inactifs`, s.hideInactive, (v) => a.change({ hideInactive: v })));
+    pair.title = t(`Dépendances : le chapitre actif comprend aussi ses sous-titres, qui ne sont alors ni grisés ni masqués.`);
+    menu.append(pair, this.menuToggle(t(`Masquer les chapitres inactifs`), s.hideInactive, (v) => a.change({ hideInactive: v })));
 
     const contrast = h(`div`, `mmw-menu-row`);
-    contrast.append(h(`div`, `mmw-menu-title`, `Contraste des chapitres grisés`));
+    contrast.append(h(`div`, `mmw-menu-title`, t(`Contraste des chapitres grisés`)));
     const range = h(`input`, `mmw-range`);
     range.type = `range`;
     range.min = `15`;
@@ -532,12 +633,12 @@ export class MapControls {
 
     // Portee de la modification : toute la carte, un niveau de titre ou une case.
     const scope = h(`div`, `mmw-scope`);
-    scope.append(h(`span`, `mmw-scope-label`, `Appliqué à : `));
+    scope.append(h(`span`, `mmw-scope-label`, t(`Appliqué à : `)));
     this.scopeEl = h(`strong`, `mmw-scope-value`, a.scopeLabel(this.mod));
     scope.append(this.scopeEl);
     panel.append(scope);
     if (a.scopeLabel(false) !== `toute la carte`) {
-      panel.append(h(`div`, `mmw-scope-hint`, `Maintenez ${isMac() ? `Cmd` : `Ctrl`} en cliquant pour ne modifier que la case sélectionnée.`));
+      panel.append(h(`div`, `mmw-scope-hint`, t(`Maintenez {0} en cliquant pour ne modifier que la case sélectionnée.`, isMac() ? `Cmd` : `Ctrl`)));
     }
 
     const section = (title: string, ...content: HTMLElement[]): void => {
@@ -549,14 +650,14 @@ export class MapControls {
     if (this.getSettings().viewMode === `list`) {
       // Vue Liste : seuls la couleur du texte, la police et la taille ont un sens, plus les options propres a la liste.
       const s = this.getSettings();
-      section(`Couleur du texte`, this.swatches(STROKE_COLORS, st.strokeColor, (v) => apply({ strokeColor: v }), `#1e1e1e`));
+      section(t(`Couleur du texte`), this.swatches(STROKE_COLORS, st.strokeColor, (v) => apply({ strokeColor: v }), `#1e1e1e`));
       section(
-        `Police`,
+        t(`Police`),
         this.options(
           [
-            { value: `default`, text: `Aa`, title: `Police de l'interface` },
-            { value: `handwritten`, text: `Aa`, title: `Écriture manuscrite`, font: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` },
-            { value: `mono`, text: `</>`, title: `Code`, font: `var(--font-monospace, monospace)` },
+            { value: `default`, text: `Aa`, title: t(`Police de l'interface`) },
+            { value: `handwritten`, text: `Aa`, title: t(`Écriture manuscrite`), font: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` },
+            { value: `mono`, text: `</>`, title: t(`Code`), font: `var(--font-monospace, monospace)` },
           ],
           s.listMapFont ? st.fontFamily : `default`,
           (v) => {
@@ -566,83 +667,83 @@ export class MapControls {
         )
       );
       section(
-        `Taille de la police`,
+        t(`Taille de la police`),
         this.options(
-          FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label, title: `Taille ${f.label}` })),
+          FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label, title: t(`Taille {0}`, f.label) })),
           String(st.fontScale),
           (v) => apply({ fontScale: Number(v) })
         )
       );
       section(
-        `Lignes`,
+        t(`Lignes`),
         this.options(
           [
-            { value: `plain`, text: `Unies` },
-            { value: `striped`, text: `Une sur deux foncée` },
+            { value: `plain`, text: t(`Unies`) },
+            { value: `striped`, text: t(`Une sur deux foncée`) },
           ],
           s.listStripes ? `striped` : `plain`,
           (v) => a.change({ listStripes: v === `striped` }),
           true
         )
       );
-      const resetList = h(`button`, `mmw-reset`, `Réinitialiser l'apparence`);
+      const resetList = h(`button`, `mmw-reset`, t(`Réinitialiser l'apparence`));
       resetList.type = `button`;
       resetList.addEventListener(`click`, () => a.resetStyle(this.mod));
       panel.append(resetList);
       return panel;
     }
 
-    section(`Trait`, this.swatches(STROKE_COLORS, st.strokeColor, (v) => apply({ strokeColor: v }), `#1e1e1e`));
-    section(`Arrière-plan`, this.swatches(FILL_COLORS, st.fillColor, (v) => apply({ fillColor: v }), `#ffffff`));
+    section(t(`Trait`), this.swatches(STROKE_COLORS, st.strokeColor, (v) => apply({ strokeColor: v }), `#1e1e1e`));
+    section(t(`Arrière-plan`), this.swatches(FILL_COLORS, st.fillColor, (v) => apply({ fillColor: v }), `#ffffff`));
     section(
-      `Largeur du contour`,
+      t(`Largeur du contour`),
       this.options(
-        WIDTHS.map((w) => ({ value: String(w), html: OPT.width(w), title: `Largeur ${w}` })),
+        WIDTHS.map((w) => ({ value: String(w), html: OPT.width(w), title: t(`Largeur {0}`, w) })),
         String(st.strokeWidth),
         (v) => apply({ strokeWidth: Number(v) })
       )
     );
     section(
-      `Style du trait`,
+      t(`Style du trait`),
       this.options(
         [
-          { value: `solid`, html: OPT.solid, title: `Continu` },
-          { value: `dashed`, html: OPT.dashed, title: `Tirets` },
-          { value: `dotted`, html: OPT.dotted, title: `Pointillés` },
+          { value: `solid`, html: OPT.solid, title: t(`Continu`) },
+          { value: `dashed`, html: OPT.dashed, title: t(`Tirets`) },
+          { value: `dotted`, html: OPT.dotted, title: t(`Pointillés`) },
         ],
         st.strokeDash,
         (v) => apply({ strokeDash: v as NodeStyle[`strokeDash`] })
       )
     );
     section(
-      `Style de tracé`,
+      t(`Style de tracé`),
       this.options(
         [
-          { value: `0`, html: OPT.rough0, title: `Architecte : trait net` },
-          { value: `1`, html: OPT.rough1, title: `Artiste : trait de crayon` },
-          { value: `2`, html: OPT.rough2, title: `Caricaturiste : trait très irrégulier` },
+          { value: `0`, html: OPT.rough0, title: t(`Architecte : trait net`) },
+          { value: `1`, html: OPT.rough1, title: t(`Artiste : trait de crayon`) },
+          { value: `2`, html: OPT.rough2, title: t(`Caricaturiste : trait très irrégulier`) },
         ],
         String(st.roughness),
         (v) => apply({ roughness: Number(v) as NodeStyle[`roughness`] })
       )
     );
     section(
-      `Angles`,
+      t(`Angles`),
       this.options(
         [
-          { value: `sharp`, html: OPT.sharp, title: `Angles aigus` },
-          { value: `round`, html: OPT.round, title: `Angles arrondis` },
+          { value: `sharp`, html: OPT.sharp, title: t(`Angles aigus`) },
+          { value: `round`, html: OPT.round, title: t(`Angles arrondis`) },
         ],
         st.corners,
         (v) => apply({ corners: v as NodeStyle[`corners`] })
       )
     );
     section(
-      `Contour des cases`,
+      t(`Contour des cases`),
       this.options(
         [
-          { value: `yes`, text: `Avec contour` },
-          { value: `no`, text: `Sans contour` },
+          { value: `yes`, text: t(`Avec contour`) },
+          { value: `no`, text: t(`Sans contour`) },
         ],
         st.showFrames ? `yes` : `no`,
         (v) => apply({ showFrames: v === `yes` }),
@@ -650,44 +751,44 @@ export class MapControls {
       )
     );
     section(
-      `Branches`,
+      t(`Branches`),
       this.options(
         [
-          { value: `elbow`, html: OPT.elbow, title: `En angle` },
-          { value: `curve`, html: OPT.curve, title: `Courbes` },
-          { value: `straight`, html: OPT.straight, title: `Droites` },
+          { value: `elbow`, html: OPT.elbow, title: t(`En angle`) },
+          { value: `curve`, html: OPT.curve, title: t(`Courbes`) },
+          { value: `straight`, html: OPT.straight, title: t(`Droites`) },
         ],
         this.getSettings().branchStyle,
         (v) => a.change({ branchStyle: v as MmSettings[`branchStyle`] })
       )
     );
     section(
-      `Police`,
+      t(`Police`),
       this.options(
         [
-          { value: `default`, text: `Aa`, title: `Police de l'interface` },
-          { value: `handwritten`, text: `Aa`, title: `Écriture manuscrite`, font: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` },
-          { value: `mono`, text: `</>`, title: `Code`, font: `var(--font-monospace, monospace)` },
+          { value: `default`, text: `Aa`, title: t(`Police de l'interface`) },
+          { value: `handwritten`, text: `Aa`, title: t(`Écriture manuscrite`), font: `"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive` },
+          { value: `mono`, text: `</>`, title: t(`Code`), font: `var(--font-monospace, monospace)` },
         ],
         st.fontFamily,
         (v) => apply({ fontFamily: v as NodeStyle[`fontFamily`] })
       )
     );
     section(
-      `Taille de la police`,
+      t(`Taille de la police`),
       this.options(
-        FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label, title: `Taille ${f.label}` })),
+        FONT_SCALES.map((f) => ({ value: String(f.value), text: f.label, title: t(`Taille {0}`, f.label) })),
         String(st.fontScale),
         (v) => apply({ fontScale: Number(v) })
       )
     );
     section(
-      `Alignement du texte`,
+      t(`Alignement du texte`),
       this.options(
         [
-          { value: `left`, html: OPT.alignLeft, title: `À gauche` },
-          { value: `center`, html: OPT.alignCenter, title: `Centré` },
-          { value: `right`, html: OPT.alignRight, title: `À droite` },
+          { value: `left`, html: OPT.alignLeft, title: t(`À gauche`) },
+          { value: `center`, html: OPT.alignCenter, title: t(`Centré`) },
+          { value: `right`, html: OPT.alignRight, title: t(`À droite`) },
         ],
         st.textAlign,
         (v) => apply({ textAlign: v as NodeStyle[`textAlign`] })
@@ -695,7 +796,7 @@ export class MapControls {
     );
 
     const hasSelection = a.scopeLabel(false) !== `toute la carte`;
-    const reset = h(`button`, `mmw-reset`, hasSelection ? `Rétablir le style de la sélection` : `Réinitialiser l'apparence`);
+    const reset = h(`button`, `mmw-reset`, hasSelection ? t(`Rétablir le style de la sélection`) : t(`Réinitialiser l'apparence`));
     reset.type = `button`;
     reset.addEventListener(`click`, () => a.resetStyle(this.mod));
     panel.append(reset);
@@ -737,7 +838,7 @@ export class MapControls {
     }
     const isCustom = current !== `` && !colors.some((c) => c.value === current);
     const custom = h(`label`, `mmw-swatch mmw-swatch-custom` + (isCustom ? ` mmw-selected-swatch` : ``));
-    tip(custom, `Couleur personnalisée`);
+    tip(custom, t(`Couleur personnalisée`));
     const input = h(`input`);
     input.type = `color`;
     input.value = isCustom ? current : fallback;

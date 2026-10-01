@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 // Combinaisons de touches configurables (sans dependance a Obsidian).
 // Format : modificateurs puis touche, separes par un tiret, par exemple Mod-ArrowUp.
 // Mod designe Cmd sur Mac et Ctrl ailleurs.
@@ -33,21 +35,21 @@ export function comboMatches(e: KeyLike, combo: string, isMac: boolean): boolean
   return combo !== `` && eventToCombo(e, isMac) === combo;
 }
 
-const NAMES: Record<string, string> = {
+const names = (): Record<string, string> => ({
   ArrowUp: `↑`,
   ArrowDown: `↓`,
   ArrowLeft: `←`,
   ArrowRight: `→`,
-  Enter: `Entrée`,
-  Escape: `Échap`,
-  Backspace: `Retour arrière`,
-  Delete: `Suppr`,
-  " ": `Espace`,
-};
+  Enter: t(`Entrée`),
+  Escape: t(`Échap`),
+  Backspace: t(`Retour arrière`),
+  Delete: t(`Suppr`),
+  " ": t(`Espace`),
+});
 
 // Libelle lisible d'une combinaison, par exemple Cmd + ↑ sur Mac.
 export function comboLabel(combo: string, isMac: boolean): string {
-  if (combo === ``) return `Aucune`;
+  if (combo === ``) return t(`Aucune`);
   return combo
     .split(`-`)
     .map((part) => {
@@ -55,7 +57,7 @@ export function comboLabel(combo: string, isMac: boolean): string {
       if (part === `Alt`) return isMac ? `Option` : `Alt`;
       if (part === `Shift`) return `Maj`;
       if (part === ``) return `-`;
-      return NAMES[part] ?? part;
+      return names()[part] ?? part;
     })
     .join(` + `);
 }
