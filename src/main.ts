@@ -5,6 +5,7 @@ import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
+import { exportNoteToPdf } from "./export-pdf";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
@@ -196,6 +197,17 @@ export default class MindmapWritingPlugin extends Plugin {
       checkCallback: (checking) => {
         if (!Platform.isDesktop) return false;
         if (!checking) void this.openExportPreview();
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: `export-pdf`,
+      name: t(`Exporter la note en PDF`),
+      checkCallback: (checking) => {
+        if (!Platform.isDesktop) return false;
+        if (!this.app.workspace.getActiveFile() && !this.lastFile) return false;
+        if (!checking) void this.exportPdf();
         return true;
       },
     });
@@ -423,6 +435,17 @@ export default class MindmapWritingPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_EXPORT)) {
       if (leaf.view instanceof ExportPreviewView) void leaf.view.refresh();
     }
+  }
+
+  // Exporte la note ouverte en PDF (fenetre de choix du dossier et du nom).
+  async exportPdf() {
+    if (!Platform.isDesktop) return;
+    this.rememberFile(this.app.workspace.getActiveFile());
+    if (!this.lastFile) {
+      new Notice(t(`Ouvrez d'abord une note.`));
+      return;
+    }
+    await exportNoteToPdf(this, this.lastFile);
   }
 
   // Ouvre l'apercu de l'export a cote de la note (ou le montre s'il est deja ouvert).

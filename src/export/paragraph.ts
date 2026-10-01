@@ -1,8 +1,10 @@
-// Export de haute qualite, etages 3 et 4 : composition d'un paragraphe de texte brut.
-// Mesure les mots avec la police, place les points de cesure, applique les conventions typographiques francaises, coupe le
-// paragraphe en lignes (Knuth et Plass) et calcule l'espacement de chaque ligne justifiee.
-import { displayChar, FINE_SPACE, measureText, NO_BREAK_SPACE } from "./font-metrics";
+// Export de haute qualite, etages 3 et 4 : composition d'un paragraphe.
+// Lit la mise en forme du texte (gras, italique, liens), mesure les mots avec la police de chacun, place les points de
+// cesure, applique les conventions typographiques francaises, coupe le paragraphe en lignes (Knuth et Plass) et calcule
+// l'espacement de chaque ligne justifiee d'apres la largeur reelle du texte affiche (ligatures et crenage compris).
+import { FINE_SPACE, FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
 import { getLanguage, HyphenationLanguage, hyphenPoints, LanguageCode } from "./hyphenate";
+import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON } from "./inline";
 import { breakParagraph, Item } from "./line-break";
 import { DEFAULT_TEX_PARAMS, DECENT, Fitness, INF_PENALTY, TexParams } from "./tex-params";
 import { frenchSpacing } from "./typography";
@@ -22,19 +24,33 @@ export interface ParagraphOptions {
   hyphenateLastWord?: boolean;
   // Les mots qui commencent par une majuscule (noms propres) peuvent etre coupes ; faux pour l'interdire.
   hyphenateCapitalized?: boolean;
+  // Police de base du paragraphe (gras pour les titres) ; le gras et l'italique du texte s'y ajoutent.
+  style?: FontStyle;
   params?: TexParams;
-  // Mots de cesure imposee supplementaires (liste que l'utilisateur enrichit), du type `ordi-nateur`.
+  // Langue de cesure toute faite (par exemple avec les mots que l'utilisateur a ajoutes) ; sinon celle de `language`.
   hyphenation?: HyphenationLanguage;
+}
+
+// Morceau de ligne de meme police, a ecrire d'un trait.
+export interface LineRun {
+  text: string;
+  style: FontStyle;
+  // Adresse du lien web qui couvre le morceau.
+  link?: string;
+  // Numero d'appel de note en exposant.
+  sup?: boolean;
 }
 
 export interface TypesetLine {
   // Texte tel qu'il sera affiche (cesure comprise).
   text: string;
+  // Le meme texte, decoupe par police.
+  runs: LineRun[];
   // Retrait de la ligne, en points (alinea sur la premiere ligne).
   offset: number;
   // Largeur supplementaire a donner a chaque espace pour justifier la ligne, en points (negative si l'on comprime).
   wordSpacing: number;
-  // Largeur naturelle de la ligne, en points.
+  // Largeur naturelle de la ligne, en points, d'apres la mise en forme reelle du texte affiche.
   width: number;
   ratio: number;
   badness: number;
@@ -57,106 +73,183 @@ export interface TypesetParagraph {
 }
 
 // Appel de note de bas de page prepare par la composition du document : cle de la note, numero affiche.
-export const NOTE_CALL = /\uE000(\d+),(\d+)\uE001/g;
+export const NOTE_CALL = /(\d+),(\d+)/g;
 // Taille d'un numero d'appel, en fraction du corps du texte.
 export const SUP_SCALE = 0.7;
 
-const WORD_RUN = /[\p{L}\x27\u2019]+/gu;
-const APOSTROPHE = /[\x27\u2019]/;
+const WORD_RUN = /[\p{L}\x27’]+/gu;
+const APOSTROPHE = /[\x27’]/;
 
-function buildItems(text: string, o: ParagraphOptions, p: TexParams, lang: HyphenationLanguage): { items: Item[]; missing: number[] } {
+// Style et lien de chaque caractere d'un morceau de mot.
+interface CharMeta {
+  style: FontStyle;
+  link: number;
+}
+
+function combine(base: FontStyle, bold: boolean, italic: boolean): FontStyle {
+  const b = bold || base === `bold` || base === `boldItalic`;
+  const i = italic || base === `italic` || base === `boldItalic`;
+  return b ? (i ? `boldItalic` : `bold`) : i ? `italic` : `regular`;
+}
+
+function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: HyphenationLanguage): { items: Item[]; missing: number[] } {
   const items: Item[] = [];
   const missing: number[] = [];
   const size = o.fontSize;
-  const space = measureText(` `, size).width;
+  const base: FontStyle = o.style ?? `regular`;
+  const space = measureText(` `, size, base).width;
   const justify = o.align === `justify`;
-  const glue = (shown: string): Item => ({ type: `glue`, width: space, stretch: justify ? space * p.spaceStretch : 0, shrink: justify ? space * p.spaceShrink : 0, text: shown });
-  const hyphenW = measureText(`-`, size).width;
+  const glue = (shown: string): Item => ({ type: `glue`, width: space, stretch: justify ? space * p.spaceStretch : 0, shrink: justify ? space * p.spaceShrink : 0, text: shown, style: base });
   const mins = { left: p.leftHyphenMin, right: p.rightHyphenMin };
+  // Etat de la mise en forme, qui se poursuit d'un mot au suivant.
+  let bold = false;
+  let italic = false;
+  let link = -1;
+  let gluePending = false;
 
-  const pushBox = (s: string): void => {
+  const pushBox = (s: string, meta: CharMeta): void => {
     if (s === ``) return;
-    const m = measureText(s, size);
+    if (gluePending) {
+      items.push(glue(` `));
+      gluePending = false;
+    }
+    const m = measureText(s, size, meta.style);
     missing.push(...m.missing);
-    items.push({ type: `box`, width: m.width, text: s });
+    items.push({ type: `box`, width: m.width, text: s, style: meta.style, ...(meta.link >= 0 ? { link: meta.link } : {}) });
   };
-  const pushHyphen = (): void => {
-    items.push({ type: `penalty`, width: hyphenW, penalty: p.hyphenPenalty, flagged: true, hyphen: true, text: `-` });
+  // Boite dont les caracteres peuvent differer de police ou de lien : une boite par morceau uniforme.
+  const pushMeta = (plain: string, meta: CharMeta[], from: number, to: number): void => {
+    let start = from;
+    for (let i = from + 1; i <= to; i++) {
+      if (i === to || meta[i].style !== meta[start].style || meta[i].link !== meta[start].link) {
+        pushBox(plain.slice(start, i), meta[start]);
+        start = i;
+      }
+    }
+  };
+  const pushHyphen = (style: FontStyle): void => {
+    items.push({ type: `penalty`, width: measureText(`-`, size, style).width, penalty: p.hyphenPenalty, flagged: true, hyphen: true, text: `-`, style });
   };
 
   // Un segment est un morceau de mot sans tiret explicite : on y place les points de cesure.
-  const pushSegment = (seg: string, hyphenOk: boolean): void => {
+  const pushSegment = (plain: string, meta: CharMeta[], from: number, to: number, hyphenOk: boolean): void => {
+    const seg = plain.slice(from, to);
     if (!hyphenOk || !o.hyphenate) {
-      pushBox(seg);
+      pushMeta(plain, meta, from, to);
       return;
     }
-    let last = 0;
+    let last = from;
     for (const m of seg.matchAll(WORD_RUN)) {
       const run = m[0];
-      const at = m.index ?? 0;
+      const at = from + (m.index ?? 0);
       if (run.length < p.minHyphenWordLength) continue;
       if (o.hyphenateCapitalized === false && run[0] !== run[0].toLowerCase()) continue;
       for (const i of hyphenPoints(run, lang, mins)) {
         // On ne coupe pas juste avant ou juste apres une apostrophe : « l' » ne reste pas seul en fin de ligne.
         if (APOSTROPHE.test(run[i - 1]) || APOSTROPHE.test(run[i])) continue;
-        pushBox(seg.slice(last, at + i));
-        pushHyphen();
+        pushMeta(plain, meta, last, at + i);
+        pushHyphen(meta[at + i - 1].style);
         last = at + i;
       }
     }
-    pushBox(seg.slice(last));
-  };
-
-  // Appel de note de bas de page : numero en exposant, colle au mot qui precede.
-  const pushCall = (key: number, label: string): void => {
-    const m = measureText(label, size * SUP_SCALE);
-    items.push({ type: `box`, width: m.width, text: label, sup: true, note: key });
+    pushMeta(plain, meta, last, to);
   };
 
   // Un morceau est un mot sans espace : on le coupe aux tirets explicites, qui sont des points de coupure sans largeur.
-  const pushPiece = (piece: string, hyphenOk: boolean): void => {
+  const pushPiece = (plain: string, meta: CharMeta[], hyphenOk: boolean): void => {
     let start = 0;
-    for (let i = 1; i < piece.length - 1; i++) {
-      if (piece[i] === `-` && /[\p{L}\d]/u.test(piece[i - 1]) && /[\p{L}\d]/u.test(piece[i + 1])) {
-        pushSegment(piece.slice(start, i + 1), hyphenOk);
+    for (let i = 1; i < plain.length - 1; i++) {
+      if (plain[i] === `-` && /[\p{L}\d]/u.test(plain[i - 1]) && /[\p{L}\d]/u.test(plain[i + 1])) {
+        pushSegment(plain, meta, start, i + 1, hyphenOk);
         items.push({ type: `penalty`, width: 0, penalty: p.exHyphenPenalty, flagged: true, text: `` });
         start = i + 1;
       }
     }
-    pushSegment(piece.slice(start), hyphenOk);
+    pushSegment(plain, meta, start, plain.length, hyphenOk);
+  };
+
+  // Lit les reperes de style d'un texte : renvoie le texte brut et le style de chaque caractere.
+  const readMarks = (piece: string): { plain: string; meta: CharMeta[] } => {
+    let plain = ``;
+    const meta: CharMeta[] = [];
+    for (let i = 0; i < piece.length; i++) {
+      const ch = piece[i];
+      if (ch === BOLD_ON) bold = true;
+      else if (ch === BOLD_OFF) bold = false;
+      else if (ch === ITALIC_ON) italic = true;
+      else if (ch === ITALIC_OFF) italic = false;
+      else if (ch === LINK_ON) {
+        const end = piece.indexOf(LINK_NUM_END, i);
+        link = Number(piece.slice(i + 1, end));
+        i = end;
+      } else if (ch === LINK_OFF) link = -1;
+      else {
+        plain += ch;
+        meta.push({ style: combine(base, bold, italic), link });
+      }
+    }
+    return { plain, meta };
+  };
+
+  // Appel de note de bas de page : numero en exposant, colle au mot qui precede.
+  const pushCall = (key: number, label: string): void => {
+    if (gluePending) {
+      items.push(glue(` `));
+      gluePending = false;
+    }
+    const m = measureText(label, size * SUP_SCALE, `regular`);
+    items.push({ type: `box`, width: m.width, text: label, sup: true, note: key, style: `regular` });
   };
 
   const pushPieceWithCalls = (piece: string, hyphenOk: boolean): void => {
     let last = 0;
+    const text = (s: string): void => {
+      const { plain, meta } = readMarks(s);
+      if (plain !== ``) pushPiece(plain, meta, hyphenOk);
+    };
     for (const m of piece.matchAll(NOTE_CALL)) {
-      pushPiece(piece.slice(last, m.index), hyphenOk);
+      text(piece.slice(last, m.index));
       pushCall(Number(m[1]), m[2]);
       last = (m.index ?? 0) + m[0].length;
     }
-    pushPiece(piece.slice(last), hyphenOk);
+    text(piece.slice(last));
   };
 
-  const source = o.language === `fr` ? frenchSpacing(text) : text;
+  const source = o.language === `fr` ? frenchSpacing(input.text) : input.text;
   const words = source.split(/[ \t\r\n]+/).filter((w) => w !== ``);
-  if (words.length === 0) return { items: [], missing };
+  // Un paragraphe qui ne contient que des reperes n'a rien a afficher.
+  if (words.every((w) => /^[-\d]*$/.test(w))) return { items: [], missing };
   if (o.indent > 0) items.push({ type: `box`, width: o.indent, text: `` });
+  const lastIndex = (() => {
+    let k = -1;
+    words.forEach((w, i) => {
+      if (/[^-\d]/.test(w)) k = i;
+    });
+    return k;
+  })();
+  let started = false;
   words.forEach((word, wi) => {
-    if (wi > 0) items.push(glue(` `));
-    const lastWord = wi === words.length - 1;
+    const before = items.length;
     const parts = word.split(/([  ])/);
     parts.forEach((part, pi) => {
       if (part === NO_BREAK_SPACE) {
         // Espace insecable : colle etirable devant laquelle on ne coupe pas.
         items.push({ type: `penalty`, width: 0, penalty: INF_PENALTY, flagged: false, text: `` }, glue(NO_BREAK_SPACE));
+        gluePending = false;
       } else if (part === FINE_SPACE) {
         // Espace fine insecable : largeur fixe, jamais etiree.
-        pushBox(FINE_SPACE);
+        pushBox(FINE_SPACE, { style: combine(base, bold, italic), link });
       } else {
-        const lastPart = lastWord && pi === parts.length - 1;
+        const lastPart = wi === lastIndex && pi === parts.length - 1;
         pushPieceWithCalls(part, o.hyphenateLastWord === true || !lastPart);
       }
     });
+    if (items.length > before) {
+      started = true;
+      gluePending = true;
+    }
   });
+  if (!started) return { items: [], missing };
   items.push(
     { type: `penalty`, width: 0, penalty: INF_PENALTY, flagged: false, text: `` },
     { type: `glue`, width: 0, stretch: 0, shrink: 0, fil: true, text: `` },
@@ -165,101 +258,94 @@ function buildItems(text: string, o: ParagraphOptions, p: TexParams, lang: Hyphe
   return { items, missing };
 }
 
-export function typesetParagraph(text: string, o: ParagraphOptions): TypesetParagraph {
+// Morceaux de ligne a partir des elements de la ligne ; les morceaux voisins de meme police et de meme lien sont fusionnes, ce
+// qui laisse les ligatures et le crenage se former au-dessus des coupures de cesure invisibles.
+function lineRuns(items: Item[], from: number, to: number, base: FontStyle, links: string[]): LineRun[] {
+  const runs: LineRun[] = [];
+  const add = (text: string, style: FontStyle, link: number | undefined, sup: boolean): void => {
+    if (text === ``) return;
+    const url = link !== undefined && link >= 0 ? links[link] : undefined;
+    const prev = runs[runs.length - 1];
+    if (prev && !sup && !prev.sup && prev.style === style && prev.link === url) prev.text += text;
+    else runs.push({ text, style, ...(url !== undefined ? { link: url } : {}), ...(sup ? { sup: true } : {}) });
+  };
+  for (let i = from; i < to; i++) {
+    const it = items[i];
+    if (it.type === `box`) add(it.text, (it.style as FontStyle | undefined) ?? base, it.link, it.sup === true);
+    else if (it.type === `glue` && it.text !== ``) add(it.text, base, undefined, false);
+  }
+  const end = items[to];
+  if (end.type === `penalty` && end.hyphen) add(end.text, (end.style as FontStyle | undefined) ?? base, undefined, false);
+  return runs;
+}
+
+export function typesetParagraph(text: string | InlineText, o: ParagraphOptions): TypesetParagraph {
+  const input: InlineText = typeof text === `string` ? { text, links: [] } : text;
   const p = o.params ?? DEFAULT_TEX_PARAMS;
   const lang = o.hyphenation ?? getLanguage(o.language);
-  const { items, missing } = buildItems(text, o, p, lang);
+  const base: FontStyle = o.style ?? `regular`;
+  const { items, missing } = buildItems(input, o, p, lang);
   if (items.length === 0) return { lines: [], pass: 0, demerits: 0, missing };
 
   const justify = o.align === `justify`;
   const result = breakParagraph(items, { lineWidth: o.lineWidth, em: o.fontSize, backgroundStretch: justify ? 0 : p.raggedStretch * o.fontSize }, p);
-  const space = measureText(` `, o.fontSize).width;
-  const stretchOne = space * p.spaceStretch;
+  const space = measureText(` `, o.fontSize, base).width;
   const shrinkOne = space * p.spaceShrink;
 
   if (!result) {
     // Ne devrait pas arriver apres la passe d'urgence : on se contente d'une coupure au plus court.
-    return { lines: greedyLines(items, o), pass: 0, demerits: 0, missing };
+    return { lines: singleLine(items, o, input.links), pass: 0, demerits: 0, missing };
   }
 
   const lines: TypesetLine[] = result.lines.map((bl, index) => {
-    let shown = ``;
-    let width = 0;
-    let stretch = 0;
-    let shrink = 0;
+    const runs = lineRuns(items, bl.from, bl.to, base, input.links);
     const notes: number[] = [];
-    const sups: [number, number][] = [];
     for (let i = bl.from; i < bl.to; i++) {
       const it = items[i];
-      if (it.type === `penalty`) continue;
-      width += it.width;
-      if (it.type === `box` && it.sup) {
-        sups.push([shown.length, shown.length + it.text.length]);
-        if (it.note !== undefined) notes.push(it.note);
-      }
-      shown += it.text;
-      if (it.type === `glue` && !it.fil) {
-        stretch += it.stretch;
-        shrink += it.shrink;
-      }
+      if (it.type === `box` && it.sup && it.note !== undefined) notes.push(it.note);
     }
-    const end = items[bl.to];
-    if (end.type === `penalty` && end.hyphen) {
-      shown += end.text;
-      width += end.width;
-    }
-    const last = index === result.lines.length - 1;
-    // Rapport reel : un ecart que la colle ne peut pas absorber (passe d'urgence) reste visible dans l'espacement.
-    let ratio = 0;
-    if (justify && !last) {
-      if (width < o.lineWidth) ratio = stretch > 0 ? (o.lineWidth - width) / stretch : 0;
-      else ratio = shrink > 0 ? Math.max(-1, (o.lineWidth - width) / shrink) : -1;
-    }
-    const wordSpacing = ratio > 0 ? ratio * stretchOne : ratio * shrinkOne;
-    return {
-      text: Array.from(shown).map(displayChar).join(``),
-      offset: bl.from === 0 && o.indent > 0 ? o.indent : 0,
-      wordSpacing: justify ? wordSpacing : 0,
-      width,
-      ratio: bl.ratio,
-      badness: bl.badness,
-      fitness: bl.fitness,
-      hyphenated: bl.hyphenated,
-      overfull: bl.overfull,
-      last,
-      notes,
-      sups,
-    };
+    return finishLine(runs, notes, bl, index === result.lines.length - 1, o, items[bl.from], justify, shrinkOne);
   });
   return { lines, pass: result.pass, demerits: result.demerits, missing };
 }
 
-// Coupure de secours : remplit chaque ligne autant que possible, sans optimisation.
-function greedyLines(items: Item[], o: ParagraphOptions): TypesetLine[] {
-  const lines: TypesetLine[] = [];
-  let shown = ``;
+// Largeur reelle d'une ligne (d'apres la mise en forme du texte affiche), espacement des mots qui la justifie, texte et
+// intervalles en exposant.
+function finishLine(
+  runs: LineRun[],
+  notes: number[],
+  bl: { from: number; ratio: number; badness: number; fitness: Fitness; hyphenated: boolean; overfull: boolean },
+  last: boolean,
+  o: ParagraphOptions,
+  firstItem: Item,
+  justify: boolean,
+  shrinkOne: number
+): TypesetLine {
+  let text = ``;
   let width = 0;
-  let pendingGlue: Item | null = null;
-  const flush = (last: boolean): void => {
-    lines.push({ text: Array.from(shown).map(displayChar).join(``), offset: 0, wordSpacing: 0, width, ratio: 0, badness: 0, fitness: DECENT, hyphenated: false, overfull: width > o.lineWidth, last, notes: [], sups: [] });
-    shown = ``;
-    width = 0;
-  };
-  for (const it of items) {
-    if (it.type === `glue`) {
-      pendingGlue = it;
-    } else if (it.type === `box`) {
-      const gap = pendingGlue && shown !== `` ? pendingGlue.width : 0;
-      if (shown !== `` && pendingGlue && width + gap + it.width > o.lineWidth) flush(false);
-      if (pendingGlue && shown !== ``) {
-        shown += pendingGlue.text;
-        width += pendingGlue.width;
-      }
-      shown += it.text;
-      width += it.width;
-      pendingGlue = null;
-    }
+  let spaces = 0;
+  const sups: [number, number][] = [];
+  for (const r of runs) {
+    if (r.sup) sups.push([text.length, text.length + r.text.length]);
+    text += r.text;
+    width += measureText(r.text, o.fontSize * (r.sup ? SUP_SCALE : 1), r.style).width;
+    if (!r.sup) for (const ch of r.text) if (ch === ` ` || ch === NO_BREAK_SPACE) spaces++;
   }
-  if (shown !== ``) flush(true);
-  return lines;
+  const offset = bl.from === 0 && o.indent > 0 && firstItem.type === `box` && firstItem.text === `` ? o.indent : 0;
+  let wordSpacing = 0;
+  if (justify && !last && spaces > 0) {
+    // Les espaces absorbent tout l'ecart, sans compression au-dela de la limite des espaces.
+    wordSpacing = Math.max(-shrinkOne, (o.lineWidth - offset - width) / spaces);
+  }
+  return { text, runs, offset, wordSpacing, width, ratio: bl.ratio, badness: bl.badness, fitness: bl.fitness, hyphenated: bl.hyphenated, overfull: bl.overfull, last, notes, sups };
+}
+
+// Coupure de secours si l'algorithme n'a trouve aucune solution (ne devrait pas arriver apres la passe d'urgence) : tout le
+// paragraphe sur une seule ligne, signalee comme debordante.
+function singleLine(items: Item[], o: ParagraphOptions, links: string[]): TypesetLine[] {
+  const base: FontStyle = o.style ?? `regular`;
+  const runs = lineRuns(items, 0, items.length - 1, base, links);
+  const text = runs.map((r) => r.text).join(``);
+  const width = runs.reduce((a, r) => a + measureText(r.text, o.fontSize * (r.sup ? SUP_SCALE : 1), r.style).width, 0);
+  return [{ text, runs, offset: 0, wordSpacing: 0, width, ratio: 0, badness: 0, fitness: DECENT, hyphenated: false, overfull: width > o.lineWidth, last: true, notes: [], sups: [] }];
 }

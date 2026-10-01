@@ -1,10 +1,10 @@
 // Apercu de l'export de haute qualite : volet qui montre la note ouverte telle que l'export la composera.
 // Phase 2 : coupure de lignes de Knuth et Plass avec cesure ; la pagination definitive et le PDF arrivent aux phases suivantes.
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
-import { buildExportDoc } from "./export/doc-tree";
-import { FOOTNOTE_RULE_HEIGHT, paginate } from "./export/paginate";
-import { A4_SETUP, DEFAULT_PAGE_STYLE, Row, typesetDoc } from "./export/typeset";
-import { EXPORT_FONT_FAMILY, loadExportFont } from "./export-font";
+import { composeNote } from "./export/compose";
+import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
+import { A4_SETUP, Row } from "./export/typeset";
+import { EXPORT_FONT_FAMILY, EXPORT_MONO_FAMILY, loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
 
@@ -80,14 +80,25 @@ export class ExportPreviewView extends ItemView {
       const m = el.createSpan({ cls: row.kind === `footnote` ? `mmw-row-marker mmw-row-note-marker` : `mmw-row-marker`, text: row.marker });
       m.style.left = `${row.kind === `footnote` ? 0 : row.x - 16}pt`;
     }
-    // Les appels de notes de bas de page sont des numeros en exposant, a 70 % du corps du texte comme dans le calcul.
-    let at = 0;
-    for (const [from, to] of row.sups ?? []) {
-      if (from > at) el.appendChild(document.createTextNode(row.text.slice(at, from)));
-      el.createSpan({ cls: `mmw-sup`, text: row.text.slice(from, to) });
-      at = to;
+    if (row.runs) {
+      // Chaque morceau a sa police (gras, italique) ; les appels de notes de bas de page sont des numeros en exposant, a 70 %
+      // du corps du texte comme dans le calcul ; les liens web s'ouvrent dans le navigateur.
+      for (const run of row.runs) {
+        const span = el.createSpan({ text: run.text });
+        if (run.sup) span.addClass(`mmw-sup`);
+        if (run.style === `mono`) span.style.fontFamily = `"${EXPORT_MONO_FAMILY}", monospace`;
+        if (run.style === `bold` || run.style === `boldItalic`) span.style.fontWeight = `700`;
+        if (run.style === `italic` || run.style === `boldItalic`) span.style.fontStyle = `italic`;
+        if (run.link) {
+          span.addClass(`mmw-export-link`);
+          span.title = run.link;
+          const url = run.link;
+          span.addEventListener(`click`, () => window.open(url));
+        }
+      }
+    } else {
+      el.appendChild(document.createTextNode(row.text));
     }
-    if (at < row.text.length) el.appendChild(document.createTextNode(row.text.slice(at)));
   }
 
   async refresh() {
@@ -109,15 +120,22 @@ export class ExportPreviewView extends ItemView {
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.read(file));
     if (token !== this.token) return;
 
-    const typeset = typesetDoc(buildExportDoc(text, file.name));
-    const pages = paginate(typeset, A4_SETUP, DEFAULT_PAGE_STYLE);
+    const composed = composeNote(text, file.name);
+    const typeset = composed.typeset;
+    const pages = composed.pages;
     const s = typeset.stats;
     root.empty();
     root.toggleClass(`mmw-show-quality`, this.showQuality);
 
     const head = root.createDiv({ cls: `mmw-export-head` });
     head.createDiv({ cls: `mmw-export-title`, text: t(`Aperçu de l'export : {0}`, file.basename) });
-    head.createDiv({ cls: `mmw-export-stats`, text: t(`{0} pages, {1} mots, {2} notes de bas de page`, pages.length, s.wordCount, s.footnotes) });
+    const nPages = pages.length;
+    const stats = [
+      nPages === 1 ? t(`{0} page`, nPages) : t(`{0} pages`, nPages),
+      s.wordCount === 1 ? t(`{0} mot`, s.wordCount) : t(`{0} mots`, s.wordCount),
+      s.footnotes === 1 ? t(`{0} note de bas de page`, s.footnotes) : t(`{0} notes de bas de page`, s.footnotes),
+    ];
+    head.createDiv({ cls: `mmw-export-stats`, text: stats.join(`, `) });
     head.createDiv({
       cls: `mmw-export-stats`,
       text: t(`{0} lignes, dont {1} avec césure ({2} consécutives) ; {3} lâches, {4} serrées, {5} débordantes`, s.lines, s.hyphenatedLines, s.consecutiveHyphens, s.looseLines, s.tightLines, s.overfullLines),
@@ -129,7 +147,9 @@ export class ExportPreviewView extends ItemView {
       head.createDiv({ cls: `mmw-export-stats`, text: t(`Caractères absents de la police : {0}`, typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)) });
     }
     if (!fontOk) head.createDiv({ cls: `mmw-export-stats`, text: t(`Police de l'export indisponible : l'aperçu utilise une autre police.`) });
-    head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de la phase 3 : pagination, notes de bas de page et en-têtes courants. Les titres masqués et les sujets flottants ne sont pas exportés.`) });
+    head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de l'export : le PDF reprend exactement ces pages. Les titres masqués et les sujets flottants ne sont pas exportés.`) });
+    const exportBtn = head.createEl(`button`, { cls: `mod-cta mmw-export-button`, text: t(`Exporter en PDF…`) });
+    exportBtn.addEventListener(`click`, () => void this.plugin.exportPdf());
     const toggle = head.createEl(`label`, { cls: `mmw-export-toggle` });
     const box = toggle.createEl(`input`, { type: `checkbox` });
     box.checked = this.showQuality;

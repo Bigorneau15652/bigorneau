@@ -1,22 +1,42 @@
-// Export de haute qualite, etage 3 : mesure du texte avec la police du premier gabarit (Libertinus Serif, graisse normale).
-// Les largeurs viennent du fichier genere font-libertinus.ts. Le crenage et les ligatures ne sont pas encore appliques :
-// l'apercu les desactive pour que l'affichage corresponde exactement aux largeurs calculees.
-import { FONT_ASCENDER, FONT_DESCENDER, FONT_UNITS_PER_EM, FONT_WIDTHS } from "./font-libertinus";
+// Export de haute qualite, etage 3 : mesure du texte avec les polices du premier gabarit (Libertinus Serif : normal, italique,
+// gras, gras italique ; Libertinus Mono pour le code). Les largeurs viennent de la mise en forme reelle (ligatures et crenage compris, voir font.ts) : elles
+// correspondent a celles que calcule le navigateur pour afficher le meme texte.
+import { OpenTypeFont } from "./font";
+import { FONT_FILES } from "./fonts-libertinus";
 
-const WIDTHS = new Map<number, number>(FONT_WIDTHS);
-
-// Caracteres que la police du sous-ensemble ne contient pas et que l'on mesure et affiche avec un equivalent.
-const ALIASES = new Map<number, number>([
-  [0x202f, 0x2009], // espace insecable fine -> espace fine
-  [0x2010, 0x2d], // trait d'union typographique -> trait d'union
-  [0x2011, 0x2d], // trait d'union insecable -> trait d'union
-]);
+// Les quatre styles de Libertinus Serif et Libertinus Mono (chasse fixe pour le code et les tableaux).
+export type FontStyle = `regular` | `italic` | `bold` | `boldItalic` | `mono`;
+export const FONT_STYLES: FontStyle[] = [`regular`, `italic`, `bold`, `boldItalic`, `mono`];
 
 export const FINE_SPACE = ` `;
 export const NO_BREAK_SPACE = ` `;
 
 // Caractere de remplacement quand la police n'a pas le caractere demande.
 const FALLBACK = 0x3f;
+
+const fonts = new Map<FontStyle, OpenTypeFont>();
+const bytes = new Map<FontStyle, Uint8Array>();
+
+// Octets du fichier de police d'un style (decodes une seule fois).
+export function fontBytes(style: FontStyle): Uint8Array {
+  let b = bytes.get(style);
+  if (!b) {
+    const binary = atob(FONT_FILES[style]);
+    b = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) b[i] = binary.charCodeAt(i);
+    bytes.set(style, b);
+  }
+  return b;
+}
+
+export function fontFor(style: FontStyle = `regular`): OpenTypeFont {
+  let f = fonts.get(style);
+  if (!f) {
+    f = new OpenTypeFont(fontBytes(style));
+    fonts.set(style, f);
+  }
+  return f;
+}
 
 export interface TextMeasure {
   // Largeur en points.
@@ -25,33 +45,27 @@ export interface TextMeasure {
   missing: number[];
 }
 
-// Caractere reellement affiche : les alias sont remplaces, les caracteres de controle supprimes.
-export function displayChar(ch: string): string {
-  const cp = ch.codePointAt(0)!;
-  const alias = ALIASES.get(cp);
-  return alias ? String.fromCodePoint(alias) : ch;
+export function hasGlyph(cp: number, style: FontStyle = `regular`): boolean {
+  return fontFor(style).hasChar(cp);
 }
 
-export function charUnits(cp: number): number {
-  const known = WIDTHS.get(ALIASES.get(cp) ?? cp);
-  return known ?? WIDTHS.get(FALLBACK) ?? 500;
-}
-
-export function hasGlyph(cp: number): boolean {
-  return WIDTHS.has(ALIASES.get(cp) ?? cp);
+// Largeur d'un caractere seul, en unites de la police.
+export function charUnits(cp: number, style: FontStyle = `regular`): number {
+  const f = fontFor(style);
+  return f.advance(f.cmap.get(cp) ?? f.cmap.get(FALLBACK) ?? 0);
 }
 
 // Largeur d'un texte, en points, a la taille `size` (en points).
-export function measureText(text: string, size: number): TextMeasure {
-  let units = 0;
+export function measureText(text: string, size: number, style: FontStyle = `regular`): TextMeasure {
+  const f = fontFor(style);
   const missing: number[] = [];
   for (const ch of text) {
     const cp = ch.codePointAt(0)!;
-    if (!hasGlyph(cp)) missing.push(cp);
-    units += charUnits(cp);
+    if (!f.hasChar(cp)) missing.push(cp);
   }
-  return { width: (units * size) / FONT_UNITS_PER_EM, missing };
+  return { width: (f.width(text) * size) / f.unitsPerEm, missing };
 }
 
-export const fontAscender = (size: number): number => (FONT_ASCENDER * size) / FONT_UNITS_PER_EM;
-export const fontDescender = (size: number): number => (FONT_DESCENDER * size) / FONT_UNITS_PER_EM;
+// Hauteurs de la police (au-dessus et au-dessous de la ligne de base), en points.
+export const fontAscender = (size: number): number => (fontFor().ascender * size) / fontFor().unitsPerEm;
+export const fontDescender = (size: number): number => (fontFor().descender * size) / fontFor().unitsPerEm;

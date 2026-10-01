@@ -2,9 +2,11 @@
 // avec la feuille de style du premier gabarit (A4, recto simple). La repartition des lignes en pages est faite par paginate.ts.
 // Phase 3 : notes de bas de page, penalites de pagination (lignes veuves et orphelines, titres), chapitres courants. Les
 // tableaux, formules et figures sont encore des reperes provisoires.
-import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE, inlineToPlain } from "./doc-tree";
+import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
+import { FontStyle, measureText } from "./font-metrics";
 import { LanguageCode } from "./hyphenate";
-import { typesetParagraph, TypesetLine } from "./paragraph";
+import { parseInline, plainOf } from "./inline";
+import { LineRun, typesetParagraph, TypesetLine } from "./paragraph";
 import { DEFAULT_TEX_PARAMS, INF_PENALTY, TexParams } from "./tex-params";
 
 export interface PageSetup {
@@ -98,6 +100,10 @@ export interface Row {
   // Notes de bas de page appelees sur la ligne (cles) et intervalles du texte a afficher en exposant.
   notes?: number[];
   sups?: [number, number][];
+  // Texte de la ligne decoupe par police (gras, italique, liens), absent pour les lignes qui n'en ont pas besoin.
+  runs?: LineRun[];
+  // Titre dont la ligne est la premiere : sert au plan de navigation du PDF.
+  heading?: { level: number; title: string };
 }
 
 // Note de bas de page composee : ses lignes et leur hauteur totale.
@@ -209,6 +215,7 @@ class Typesetter {
         breakAfter: opts.keep ? INF_PENALTY : this.penaltyFor(i, lines.length, l.hyphenated),
         align: `left`,
         ...(i === 0 && opts.marker ? { marker: opts.marker } : {}),
+        runs: l.runs,
         ...(l.notes.length > 0 ? { notes: l.notes, sups: l.sups } : {}),
         quality: { badness: l.badness, hyphenated: l.hyphenated, overfull: l.overfull, loose, tight },
       });
@@ -247,7 +254,7 @@ class Typesetter {
 
   private registerNote(key: number, label: string, text: string): void {
     const s = this.setup;
-    const r = typesetParagraph(inlineToPlain(text), {
+    const r = typesetParagraph(parseInline(text), {
       language: this.language,
       fontSize: s.noteFontSize,
       lineWidth: this.textWidth - NOTE_INDENT,
@@ -267,6 +274,7 @@ class Typesetter {
       wordSpacing: l.wordSpacing,
       breakAfter: 0,
       align: `left` as const,
+      runs: l.runs,
       ...(i === 0 ? { marker: label } : {}),
     }));
     // Petit espace apres chaque note.
@@ -277,16 +285,17 @@ class Typesetter {
   }
 
   // Compose un texte en lignes et les ajoute ; renvoie le nombre de lignes ajoutees.
-  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean }): number {
+  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle }): number {
     // Le Markdown en ligne (gras, liens, code) est reduit a du texte brut ; les styles viendront plus tard.
     const prepared = opts.notes === false ? text : this.withNoteCalls(text);
-    const r = typesetParagraph(inlineToPlain(prepared), {
+    const r = typesetParagraph(parseInline(prepared), {
       language: this.language,
       fontSize: opts.fontSize,
       lineWidth: width,
       indent: opts.indent,
       align: opts.justify ? `justify` : `left`,
       hyphenate: opts.hyphenate,
+      style: opts.style ?? `regular`,
       params: this.params,
     });
     this.missing.push(...r.missing);
@@ -297,7 +306,9 @@ class Typesetter {
   }
 
   title(text: string): void {
-    this.paragraph(text, `title`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0], keep: true, notes: false });
+    const first = this.rows.length;
+    this.paragraph(text, `title`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0], keep: true, notes: false, style: `bold` });
+    if (this.rows.length > first) this.rows[first].heading = { level: 0, title: plainOf(parseInline(text).text) };
     this.space(this.setup.leading * 1.2);
     // L'espace qui suit le titre reste avec lui.
     this.rows[this.rows.length - 1].breakAfter = INF_PENALTY;
@@ -308,15 +319,18 @@ class Typesetter {
     const lead = this.setup.leading;
     const isChapter = section.level === this.chapterLevel;
     if (isChapter) {
-      this.chapter = inlineToPlain(section.title) || undefined;
+      this.chapter = plainOf(parseInline(section.title).text) || undefined;
       if (this.style.footnoteNumbering === `perChapter`) this.counter = 1;
     }
     const breakBefore = isChapter && this.style.chapterBreak === `level1` && !this.firstChapter;
     if (isChapter) this.firstChapter = false;
     this.space(lead * (section.level <= 1 ? 1.6 : section.level === 2 ? 1.2 : 0.8), { breakBefore });
     const before = this.rows.length;
-    this.paragraph(section.title || `(sans titre)`, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false });
-    if (isChapter && this.rows.length > before) this.rows[before].chapterStart = true;
+    this.paragraph(section.title || `(sans titre)`, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: `bold` });
+    if (this.rows.length > before) {
+      this.rows[before].heading = { level: section.level, title: plainOf(parseInline(section.title).text) || `(sans titre)` };
+      if (isChapter) this.rows[before].chapterStart = true;
+    }
     this.space(lead * 0.5);
     this.rows[this.rows.length - 1].breakAfter = INF_PENALTY;
   }
@@ -348,21 +362,23 @@ class Typesetter {
         this.codeRows(b.text.split(`\n`));
         break;
       case `table`:
-        this.codeRows(b.rows.map((r) => r.map(inlineToPlain).join(` | `)));
+        this.codeRows(b.rows.map((r) => r.map((c) => plainOf(parseInline(c).text)).join(` | `)));
         break;
       case `figure`:
         this.stats.lines++;
-        this.push({ kind: `figure`, text: `[Figure : ${inlineToPlain(b.caption) || b.target}]`, x: 0, width: this.textWidth, fontSize: size, height: lead * 1.5, wordSpacing: 0, align: `center` });
+        this.push({ kind: `figure`, text: `[Figure : ${plainOf(parseInline(b.caption).text) || b.target}]`, x: 0, width: this.textWidth, fontSize: size, height: lead * 1.5, wordSpacing: 0, align: `center` });
         this.space(lead * 0.5);
         break;
     }
   }
 
-  // Code et tableaux : provisoirement en chasse fixe, coupes aux 80 caracteres, sans composition.
+  // Code et tableaux : provisoirement en chasse fixe, coupes a la largeur de la colonne, sans composition.
   private codeRows(lines: string[]): void {
+    const columns = Math.max(10, Math.floor(this.textWidth / measureText(`0`, 9, `mono`).width));
     for (const line of lines) {
-      for (let i = 0; i === 0 || i < line.length; i += 80) {
-        this.push({ kind: `code`, text: line.slice(i, i + 80), x: 0, width: this.textWidth, fontSize: 9, height: 11.5, wordSpacing: 0, align: `left` });
+      for (let i = 0; i === 0 || i < line.length; i += columns) {
+        const text = line.slice(i, i + columns);
+        this.push({ kind: `code`, text, x: 0, width: this.textWidth, fontSize: 9, height: 11.5, wordSpacing: 0, align: `left`, runs: [{ text, style: `mono` }] });
       }
     }
     this.space(this.setup.leading * 0.5);

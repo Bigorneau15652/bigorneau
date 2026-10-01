@@ -40,8 +40,8 @@ test(`les puces et numeros sont places en marge des elements de liste`, () => {
 test(`une note en anglais n'a pas les espaces fines francaises`, () => {
   const fr = typesetDoc(buildExportDoc(`# A\nIs it done ? Yes ; done !`, `A.md`));
   const en = typesetDoc(buildExportDoc(`---\nlang: en\n---\n# A\nIs it done ? Yes ; done !`, `A.md`));
-  assert.ok(fr.rows.some((r) => r.text.includes(` `)));
-  assert.ok(en.rows.every((r) => !r.text.includes(` `)));
+  assert.ok(fr.rows.some((r) => r.text.includes(`\u202f`)));
+  assert.ok(en.rows.every((r) => !r.text.includes(`\u202f`)));
   assert.equal(languageOf(`en-GB`), `en`);
   assert.equal(languageOf(undefined), `fr`);
 });

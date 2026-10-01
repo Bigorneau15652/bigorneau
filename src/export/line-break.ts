@@ -9,13 +9,14 @@ import { AWFUL_DEMERITS, DECENT, Fitness, INF_BAD, INF_PENALTY, LOOSE, TexParams
 export type Item =
   // Mot ou morceau de mot, de largeur fixe.
   // `sup` : appel de note de bas de page en exposant ; `note` : cle de la note appelee.
-  | { type: `box`; width: number; text: string; sup?: boolean; note?: number }
+  // `style` et `link` : police du texte et numero de son lien, que l'algorithme ne lit pas.
+  | { type: `box`; width: number; text: string; sup?: boolean; note?: number; style?: string; link?: number }
   // Espace : largeur naturelle, etirement et compression. `fil` indique un etirement infini (fin de paragraphe).
-  | { type: `glue`; width: number; stretch: number; shrink: number; fil?: boolean; text: string }
+  | { type: `glue`; width: number; stretch: number; shrink: number; fil?: boolean; text: string; style?: string }
   // Endroit de coupure possible. `width` est la largeur ajoutee a la ligne si l'on coupe ici (le tiret d'une cesure).
   // `flagged` marque une coupure sur un tiret (pour les demerites de cesures consecutives). `hyphen` marque une cesure
   // automatique, ignoree par la premiere passe.
-  | { type: `penalty`; width: number; penalty: number; flagged: boolean; hyphen?: boolean; text: string };
+  | { type: `penalty`; width: number; penalty: number; flagged: boolean; hyphen?: boolean; text: string; style?: string; link?: number };
 
 export interface BreakLine {
   // Indice du premier element de la ligne et de l'element ou elle se termine (la colle ou la penalite de coupure).

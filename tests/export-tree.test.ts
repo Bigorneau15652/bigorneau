@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildExportDoc, inlineToPlain, parseBlocks, stripComments } from "../src/export/doc-tree";
+import { buildExportDoc, parseBlocks, stripComments } from "../src/export/doc-tree";
 
 test(`les commentaires du plugin disparaissent, y compris sur plusieurs lignes`, () => {
   const text = [`avant`, `%% mmw {"hidden":true} %%`, `milieu %% cache %% fin`, `%% debut`, `suite`, `fin %%`, `apres`].join(`\n`);
@@ -72,12 +72,6 @@ test(`citations, code, tableaux et figures`, () => {
     { type: `figure`, target: `carte.png`, caption: `Carte du site` },
     { type: `figure`, target: `https://exemple.fr/v.png`, caption: `Vue` },
   ]);
-});
-
-test(`le Markdown en ligne devient du texte brut`, () => {
-  assert.equal(inlineToPlain(`un **gras**, un *italique*, du \`code\` et un [lien](http://a.fr)`), `un gras, un italique, du code et un lien`);
-  assert.equal(inlineToPlain(`voir [[Dossier/Note#Titre|ce texte]] puis [[Note]] et [[Autre#Partie]]`), `voir ce texte puis Note et Partie`);
-  assert.equal(inlineToPlain(`image ![[a.png]] retiree, snake_case reste`), `image  retiree, snake_case reste`);
 });
 
 const NOTE = [
@@ -161,4 +155,10 @@ test(`les definitions de notes de bas de page sont retirees du texte et rassembl
 test(`une definition ecrite dans un bloc de code reste du code`, () => {
   const blocks = parseBlocks([`\`\`\``, `[^1]: pas une note`, `\`\`\``].join(`\n`));
   assert.deepEqual(blocks, [{ type: `code`, lang: ``, text: `[^1]: pas une note` }]);
+});
+
+test(`l'auteur est lu dans les proprietes de la note`, () => {
+  assert.equal(buildExportDoc(`---\nauthor: Olivier H.\n---\n# A`, `N.md`).author, `Olivier H.`);
+  assert.equal(buildExportDoc(`---\nauteur: "Marie Curie"\n---\n# A`, `N.md`).author, `Marie Curie`);
+  assert.equal(buildExportDoc(`# A`, `N.md`).author, undefined);
 });

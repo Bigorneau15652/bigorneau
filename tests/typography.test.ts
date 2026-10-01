@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { frenchSpacing } from "../src/export/typography";
-import { charUnits, displayChar, hasGlyph, measureText } from "../src/export/font-metrics";
+import { charUnits, hasGlyph, measureText } from "../src/export/font-metrics";
 
 const FINE = ` `;
 const NB = ` `;
@@ -33,13 +33,22 @@ test(`abreviations et unites ne se coupent pas`, () => {
   assert.equal(frenchSpacing(`en 2030 les batiments`), `en 2030 les batiments`);
 });
 
-test(`la police contient les caracteres francais et mesure en points`, () => {
+test(`la police contient les caracteres francais, y compris l'espace fine insecable, et mesure en points`, () => {
   for (const ch of `œŒéÈçàùûôîêëïü«»’–—`) assert.ok(hasGlyph(ch.codePointAt(0)!), ch);
-  // L'espace fine insecable est mesuree et affichee comme l'espace fine de la police.
-  assert.equal(displayChar(FINE), ` `);
-  assert.equal(charUnits(0x202f), charUnits(0x2009));
-  // Libertinus : espace de 250 unites sur 1000, soit 2,75 pt a 11 pt.
+  assert.ok(hasGlyph(0x202f));
+  // Libertinus : espace de 250 unites sur 1000, soit 2,75 pt a 11 pt ; espace fine de 125 unites.
   assert.equal(measureText(` `, 11).width, 2.75);
+  assert.equal(charUnits(0x202f), 125);
   assert.deepEqual(measureText(`a\u0001`, 10).missing, [1]);
   assert.ok(measureText(`mot`, 11).width > measureText(`m`, 11).width);
+});
+
+test(`les ligatures et le crenage sont appliques aux largeurs`, () => {
+  // « ffi » forme une seule ligature : « office » est plus etroit que la somme de ses lettres.
+  const letters = [...`office`].reduce((a, c) => a + measureText(c, 1000).width, 0);
+  assert.ok(measureText(`office`, 1000).width < letters);
+  // « AV » est creno : plus etroit que A + V.
+  assert.ok(measureText(`AV`, 1000).width < measureText(`A`, 1000).width + measureText(`V`, 1000).width);
+  // Le gras est plus large que le normal.
+  assert.ok(measureText(`mot`, 11, `bold`).width > measureText(`mot`, 11).width);
 });

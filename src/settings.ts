@@ -155,6 +155,8 @@ export interface MmSettings {
   // Dossier des notes creees depuis la carte : un dossier choisi, le dossier de la note courante ou la racine du coffre.
   newNoteMode: NewNoteFolderMode;
   newNoteFolder: string;
+  // Auteur ecrit dans les metadonnees du PDF quand la note n'a pas de propriete author.
+  exportAuthor: string;
   // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
   iconExternal: string;
   iconInternal: string;
@@ -222,6 +224,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   language: `auto`,
   newNoteMode: `current`,
   newNoteFolder: ``,
+  exportAuthor: ``,
   iconExternal: `chain`,
   iconInternal: `return`,
   iconWeb: `globe`,
@@ -296,6 +299,7 @@ export function migrateSettings(stored: unknown): MmSettings {
     if (typeof merged[k] !== `string` || (merged[k] !== `` && !TAG_HEX.test(merged[k]))) merged[k] = ``;
   }
   merged.newNoteFolder = typeof merged.newNoteFolder === `string` ? merged.newNoteFolder.replace(/^\/+|\/+$/g, ``) : ``;
+  merged.exportAuthor = typeof merged.exportAuthor === `string` ? merged.exportAuthor.trim() : ``;
   merged.settingsVersion = SETTINGS_VERSION;
   return merged;
 }
