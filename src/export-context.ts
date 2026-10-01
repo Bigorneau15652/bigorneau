@@ -1,9 +1,10 @@
 // Export de haute qualite, cote Obsidian : choix de mise en page tires des reglages, chargement des images des figures et
 // libelles du compte rendu. Le calcul de la mise en page est dans src/export (sans Obsidian).
-import { App, finishRenderMath, loadMathJax, renderMath, TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
-import { MathAsset, mathKey, parseMathSvg } from "./export/math";
+import { MathAsset, mathKey } from "./export/math";
+import { renderTex } from "./export/mathjax";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
 import { t } from "./i18n";
 import type { MmSettings } from "./settings";
@@ -117,37 +118,13 @@ async function loadOne(app: App, file: TFile, requestedWidth: number | undefined
   return { naturalWidth, naturalHeight, pixelWidth: pw, pixelHeight: ph, kind: `rgb`, data: rgb, ...(translucent ? { alpha } : {}), previewUrl: url };
 }
 
-// Dessin des formules de la note par MathJax (celui d'Obsidian), puis lecture du SVG obtenu. Une formule que MathJax refuse, ou dont
-// le dessin est illisible, n'a pas d'entree : la composition garde son texte et le signale.
+// Dessin des formules de la note par MathJax (integre au plugin). Une formule que MathJax refuse n'a pas d'entree : la composition
+// garde son texte et le signale.
 async function loadFormulas(text: string, fileName: string): Promise<Map<string, MathAsset>> {
   const out = new Map<string, MathAsset>();
-  const targets = formulaTargets(text, fileName);
-  if (targets.length === 0) return out;
-  try {
-    await loadMathJax();
-    for (const { tex, display } of targets) {
-      try {
-        const el = renderMath(tex, display);
-        await finishRenderMath();
-        const svg = el.querySelector(`svg`);
-        if (!svg) continue;
-        let source = svg.outerHTML;
-        // Les contours des symboles peuvent etre dans un cache commun du document plutot que dans le dessin : on les y retrouve.
-        const missing = new Set<string>();
-        for (const m of source.matchAll(/<use\b[^>]*?href="#([^"]+)"/g)) if (!source.includes(`id="${m[1]}"`)) missing.add(m[1]);
-        if (missing.size > 0) {
-          let extra = ``;
-          for (const id of missing) extra += document.getElementById(id)?.outerHTML ?? ``;
-          source = source.replace(/(<svg\b[^>]*>)/, `$1<defs>${extra}</defs>`);
-        }
-        const asset = parseMathSvg(source, tex, display);
-        if (asset) out.set(mathKey(tex, display), asset);
-      } catch {
-        // Formule illisible : traitee comme absente.
-      }
-    }
-  } catch {
-    // MathJax indisponible : aucune formule n'est dessinee.
+  for (const { tex, display } of formulaTargets(text, fileName)) {
+    const asset = renderTex(tex, display);
+    if (asset) out.set(mathKey(tex, display), asset);
   }
   return out;
 }

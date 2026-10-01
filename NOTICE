@@ -12,3 +12,7 @@ licence MIT (licences/hyph-utf8-motifs.txt). Source : projet hyph-utf8, https://
 
 Les algorithmes de coupure de lignes (Knuth et Plass, 1981) et de cesure (Liang, 1983) sont reimplementes d'apres leurs
 descriptions publiees et d'apres la lecture de tex.web, sans reprise de code.
+
+Bibliotheque MathJax (mathjax-full 3.2.2), copyright The MathJax Consortium, licence Apache 2.0 (licences/Apache-2.0-MathJax.txt).
+Source : https://github.com/mathjax/MathJax-src. Elle dessine les formules de l'export ; ses polices mathematiques (MathJax TeX)
+sont sous licence SIL Open Font License 1.1. Incorporee a main.js.
