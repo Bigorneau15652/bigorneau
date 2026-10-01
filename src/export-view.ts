@@ -14,7 +14,6 @@ const PX_PER_PT = 96 / 72;
 
 export class ExportPreviewView extends ItemView {
   private token = 0;
-  private showQuality = false;
   private sheets: HTMLElement[] = [];
   private observer: ResizeObserver | null = null;
 
@@ -72,10 +71,6 @@ export class ExportPreviewView extends ItemView {
     el.style.width = `${row.width + row.x}pt`;
     if (row.align === `center`) el.style.textAlign = `center`;
     if (row.wordSpacing !== 0) el.style.wordSpacing = `${row.wordSpacing}pt`;
-    if (row.quality?.loose) el.addClass(`mmw-q-loose`);
-    if (row.quality?.tight) el.addClass(`mmw-q-tight`);
-    if (row.quality?.overfull) el.addClass(`mmw-q-over`);
-    if (row.quality?.hyphenated) el.addClass(`mmw-q-hyph`);
     if (row.marker !== undefined) {
       const m = el.createSpan({ cls: row.kind === `footnote` ? `mmw-row-marker mmw-row-note-marker` : `mmw-row-marker`, text: row.marker });
       m.style.left = `${row.kind === `footnote` ? 0 : row.x - 16}pt`;
@@ -125,7 +120,6 @@ export class ExportPreviewView extends ItemView {
     const pages = composed.pages;
     const s = typeset.stats;
     root.empty();
-    root.toggleClass(`mmw-show-quality`, this.showQuality);
 
     const head = root.createDiv({ cls: `mmw-export-head` });
     head.createDiv({ cls: `mmw-export-title`, text: t(`Aperçu de l'export : {0}`, file.basename) });
@@ -150,14 +144,6 @@ export class ExportPreviewView extends ItemView {
     head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de l'export : le PDF reprend exactement ces pages. Les titres masqués et les sujets flottants ne sont pas exportés.`) });
     const exportBtn = head.createEl(`button`, { cls: `mod-cta mmw-export-button`, text: t(`Exporter en PDF…`) });
     exportBtn.addEventListener(`click`, () => void this.plugin.exportPdf());
-    const toggle = head.createEl(`label`, { cls: `mmw-export-toggle` });
-    const box = toggle.createEl(`input`, { type: `checkbox` });
-    box.checked = this.showQuality;
-    toggle.appendText(` ${t(`Indicateurs de qualité`)}`);
-    box.addEventListener(`change`, () => {
-      this.showQuality = box.checked;
-      root.toggleClass(`mmw-show-quality`, this.showQuality);
-    });
 
     const host = root.createDiv({ cls: `mmw-export-pages` });
     this.sheets = [];

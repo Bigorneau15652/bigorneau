@@ -1414,16 +1414,9 @@
 
 .mmw-export-stats,
 .mmw-export-hint,
-.mmw-export-message,
-.mmw-export-toggle {
+.mmw-export-message {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
-}
-
-.mmw-export-toggle {
-  display: inline-block;
-  margin-top: 4px;
-  cursor: pointer;
 }
 
 .mmw-export-pages {
@@ -1530,21 +1523,4 @@
   text-align: center;
   font-size: 10pt;
   color: #666;
-}
-
-/* Indicateurs de qualite : lignes tres etirees, comprimees, trop longues, ou finissant par une cesure. */
-.mmw-show-quality .mmw-q-loose {
-  background: rgba(255, 170, 0, 0.35);
-}
-
-.mmw-show-quality .mmw-q-tight {
-  background: rgba(60, 130, 255, 0.3);
-}
-
-.mmw-show-quality .mmw-q-over {
-  background: rgba(255, 0, 0, 0.4);
-}
-
-.mmw-show-quality .mmw-q-hyph {
-  box-shadow: inset -3px 0 0 rgba(0, 150, 60, 0.7);
 }
