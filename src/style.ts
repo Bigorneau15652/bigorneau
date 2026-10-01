@@ -5,7 +5,7 @@
 //   %% mmw {"tags":["k3f9"],"short":"Budget","comment":"A revoir en mars"} %%
 // (sans dependance a Obsidian pour pouvoir etre teste hors de l'application).
 import { t } from "./i18n";
-import type { Corners, FontFamily, Roughness, StrokeDash, TextAlign } from "./settings";
+import type { Corners, FontFamily, Roughness, Shape, StrokeDash, TextAlign } from "./settings";
 
 export interface NodeStyle {
   strokeColor: string;
@@ -14,6 +14,7 @@ export interface NodeStyle {
   strokeDash: StrokeDash;
   roughness: Roughness;
   corners: Corners;
+  shape: Shape;
   showFrames: boolean;
   fontFamily: FontFamily;
   fontScale: number;
@@ -48,6 +49,7 @@ export const STYLE_KEYS: (keyof NodeStyle)[] = [
   `strokeDash`,
   `roughness`,
   `corners`,
+  `shape`,
   `showFrames`,
   `fontFamily`,
   `fontScale`,
@@ -61,7 +63,8 @@ export function globalStyle(s: NodeStyle): NodeStyle {
 }
 
 // Style effectif d'une case : reglages de la carte, puis style de son niveau, puis style de la case.
-export function resolveStyle(base: NodeStyle, levels: Record<string, StylePatch> | undefined, level: number, own: StylePatch | undefined): NodeStyle {
+// `level` : niveau du titre, ou `f` pour la racine d'un sujet flottant.
+export function resolveStyle(base: NodeStyle, levels: Record<string, StylePatch> | undefined, level: number | string, own: StylePatch | undefined): NodeStyle {
   return { ...base, ...(levels?.[String(level)] ?? {}), ...(own ?? {}) };
 }
 
@@ -90,6 +93,7 @@ export function sanitizePatch(raw: unknown): StylePatch {
   if (inList(r.strokeDash, [`solid`, `dashed`, `dotted`] as const)) out.strokeDash = r.strokeDash;
   if (inList(r.roughness, [0, 1, 2] as const)) out.roughness = r.roughness;
   if (inList(r.corners, [`sharp`, `round`] as const)) out.corners = r.corners;
+  if (inList(r.shape, [`frame`, `oval`, `underline`, `parallelogram`, `diamond`] as const)) out.shape = r.shape;
   if (typeof r.showFrames === `boolean`) out.showFrames = r.showFrames;
   if (inList(r.fontFamily, [`default`, `handwritten`, `mono`] as const)) out.fontFamily = r.fontFamily;
   if (inRange(r.fontScale, 0.5, 2)) out.fontScale = r.fontScale;
@@ -110,7 +114,7 @@ export function sanitizeMeta(raw: unknown): MmMeta {
   if (r.levels && typeof r.levels === `object`) {
     const levels: Record<string, StylePatch> = {};
     for (const [k, v] of Object.entries(r.levels as Record<string, unknown>)) {
-      if (!/^[0-6]$/.test(k)) continue;
+      if (!/^(?:[0-6]|f)$/.test(k)) continue;
       const p = sanitizePatch(v);
       if (!isEmptyPatch(p)) levels[k] = p;
     }
@@ -177,12 +181,29 @@ export function formatMetaLine(meta: MmMeta): string {
 }
 
 // Libelle de la portee d'une modification de style, pour le panneau d'apparence.
+// Les sujets flottants comptent pour le niveau -1.
 export function describeScope(levels: number[], count: number, allSelected: boolean, individual: boolean): string {
   if (count === 0 || (allSelected && !individual)) return t(`toute la carte`);
   if (individual) return count === 1 ? t(`cette case seulement`) : t(`les {0} cases sélectionnées`, count);
+  if (levels.every((l) => l === -1)) return t(`tous les sujets flottants`);
   const names = [...new Set(levels)].sort((a, b) => a - b);
   const label = (n: number): string => (n === 0 ? t(`principal`) : String(n));
   if (names.length === 1) return names[0] === 0 ? t(`le titre principal`) : t(`tous les titres de niveau {0}`, names[0]);
   const list = names.map(label);
   return t(`tous les titres de niveaux {0} et {1}`, list.slice(0, -1).join(`, `), list[list.length - 1]);
+}
+
+// Choix de forme proposes a l'utilisateur : un cadre aux angles aigus ou arrondis, ou une autre forme.
+export type ShapeChoice = `rect` | `rounded` | `oval` | `underline` | `parallelogram` | `diamond`;
+export const SHAPE_CHOICES: ShapeChoice[] = [`rect`, `rounded`, `oval`, `underline`, `parallelogram`, `diamond`];
+
+export function shapeChoice(st: { shape: Shape; corners: Corners }): ShapeChoice {
+  if (st.shape === `frame`) return st.corners === `sharp` ? `rect` : `rounded`;
+  return st.shape;
+}
+
+export function shapePatch(choice: ShapeChoice): StylePatch {
+  if (choice === `rect`) return { shape: `frame`, corners: `sharp` };
+  if (choice === `rounded`) return { shape: `frame`, corners: `round` };
+  return { shape: choice };
 }

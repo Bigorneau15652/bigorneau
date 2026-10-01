@@ -101,3 +101,33 @@ test(`un sujet flottant qui entre dans la carte prend le niveau de sa place`, ()
   const doc2 = parseNote(top.text, `N.md`);
   assert.deepEqual(doc2.root.children.map((c) => [c.title, c.level]), [[`Idee`, 2], [`A`, 2], [`B`, 2]]);
 });
+
+test(`le style d'un sujet flottant : seul, ou pour tous les sujets flottants`, async () => {
+  const { planStyle, planReset, metaEditsFor } = await import(`../src/style-edit`);
+  const { createFloat: create } = await import(`../src/float`);
+  const text = create(create(NOTE, `N.md`, 2, { x: 1, y: 1 }, `Un`)!.text, `N.md`, 2, { x: 5, y: 5 }, `Deux`)!.text;
+  const doc = parseNote(text, `N.md`);
+  // Seul : le commentaire de style va sous le titre du sujet.
+  const one = planStyle(doc, [`f0`], { fillColor: `#b2f2bb` }, true);
+  const out = applyTo(text, doc, one.changes, metaEditsFor);
+  assert.deepEqual(parseNote(out, `N.md`).floats[0].meta?.style, { fillColor: `#b2f2bb` });
+  assert.equal(parseNote(out, `N.md`).floats[1].meta, undefined);
+  // Tous les sujets flottants : un style de niveau f sur la racine de la note.
+  const all = planStyle(doc, [`f0`, `f1`], { shape: `diamond` }, false);
+  const out2 = applyTo(text, doc, all.changes, metaEditsFor);
+  assert.deepEqual(parseNote(out2, `N.md`).root.meta?.levels, { f: { shape: `diamond` } });
+  // Retirer ce style.
+  const reset = planReset(parseNote(out2, `N.md`), [`f0`], false);
+  assert.deepEqual(reset.changes.length, 1);
+});
+
+function applyTo(text: string, doc: ReturnType<typeof parseNote>, changes: { key: string; meta: unknown }[], edits: (d: ReturnType<typeof parseNote>, c: never) => { kind: `insert` | `replace` | `delete`; line: number; text: string }[]): string {
+  const lines = edits(doc, changes as never);
+  let out = text.split(`\n`);
+  for (const e of [...lines].sort((a, b) => b.line - a.line)) {
+    if (e.kind === `delete`) out.splice(e.line, 1);
+    else if (e.kind === `replace`) out[e.line] = e.text;
+    else out.splice(e.line, 0, e.text);
+  }
+  return out.join(`\n`);
+}

@@ -1367,12 +1367,22 @@
   min-width: 96px;
 }
 
-.mmw-node.mmw-float-oval {
+.mmw-node.mmw-shape-rect,
+.mmw-node.mmw-shape-underline {
+  border-radius: 0;
+}
+
+.mmw-node.mmw-shape-oval {
   border-radius: 999px;
 }
 
-.mmw-node.mmw-float-sharp {
-  border-radius: 0;
+/* Le losange (parallelogramme) et le diamant : la mise en evidence suit le contour. */
+.mmw-node.mmw-shape-diamond {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.mmw-node.mmw-shape-parallelogram {
+  clip-path: polygon(var(--mmw-skew, 12px) 0, 100% 0, calc(100% - var(--mmw-skew, 12px)) 100%, 0 100%);
 }
 
 .mmw-ghost.mmw-ghost-float {

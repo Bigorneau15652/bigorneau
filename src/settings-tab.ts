@@ -6,7 +6,6 @@ import type MindmapWritingPlugin from "./main";
 import {
   appearanceDefaults,
   BranchStyle,
-  Corners,
   CursorPosition,
   DEFAULT_SETTINGS,
   FontFamily,
@@ -18,6 +17,7 @@ import {
   Roughness,
   ViewMode,
 } from "./settings";
+import { SHAPE_CHOICES, ShapeChoice, shapeChoice, shapePatch } from "./style";
 
 type KeyField = `keyPrev` | `keyNext` | `keyParent` | `keyChild`;
 type IconField = `iconExternal` | `iconInternal` | `iconWeb`;
@@ -168,10 +168,27 @@ export class MmSettingTab extends PluginSettingTab {
       [`straight`, t(`Droites`)],
     ], (v) => v as BranchStyle);
     this.toggle(el, t(`Contour des cases`), t(`Dessine un cadre autour de chaque titre.`), `showFrames`);
-    this.dropdown(el, t(`Angles`), t(`Forme des angles des cadres.`), `corners`, [
-      [`round`, t(`Angles arrondis`)],
-      [`sharp`, t(`Angles aigus`)],
-    ], (v) => v as Corners);
+    new Setting(el)
+      .setName(t(`Forme`))
+      .setDesc(t(`Forme des cases de la carte. Chaque titre ou chaque niveau peut ensuite avoir sa propre forme depuis le bouton Apparence de la carte.`))
+      .addDropdown((d) => {
+        for (const c of SHAPE_CHOICES) d.addOption(c, this.shapeLabel(c));
+        d.setValue(shapeChoice(s)).onChange(async (v) => {
+          await this.plugin.updateSettings(shapePatch(v as ShapeChoice) as Partial<MmSettings>);
+        });
+      });
+    this.colorSetting(el, t(`Couleur du trait`), t(`Contour et texte des cases. Vide : couleur du thème.`), `strokeColor`);
+    this.colorSetting(el, t(`Couleur de fond`), t(`Fond des cases. Vide : transparent.`), `fillColor`);
+    this.dropdown(el, t(`Type de ligne`), t(`Trait du contour des cases.`), `strokeDash`, [
+      [`solid`, t(`Continu`)],
+      [`dashed`, t(`Tirets`)],
+      [`dotted`, t(`Pointillés`)],
+    ], (v) => v as MmSettings[`strokeDash`]);
+    this.dropdown(el, t(`Alignement du texte`), t(`Position du texte dans les cases.`), `textAlign`, [
+      [`left`, t(`À gauche`)],
+      [`center`, t(`Centré`)],
+      [`right`, t(`À droite`)],
+    ], (v) => v as MmSettings[`textAlign`]);
     this.dropdown(el, t(`Style de tracé`), t(`Netteté du trait.`), `roughness`, [
       [`0`, t(`Architecte : trait net`)],
       [`1`, t(`Artiste : trait de crayon`)],
@@ -186,14 +203,26 @@ export class MmSettingTab extends PluginSettingTab {
     this.slider(el, t(`Taille de la police`), t(`Multiplicateur appliqué à la taille du texte.`), `fontScale`, 0.6, 2, 0.05);
     new Setting(el)
       .setName(t(`Apparence`))
-      .setDesc(t(`Les couleurs, les traits, les angles, la police et la taille du texte se règlent aussi avec le bouton en forme de palette de la carte.`))
+      .setDesc(t(`Les couleurs, les traits, les formes, la police et la taille du texte se règlent aussi avec le bouton en forme de palette de la carte.`))
       .addButton((b) =>
         b.setButtonText(t(`Réinitialiser l'apparence`)).onClick(async () => {
           await this.plugin.updateSettings(appearanceDefaults());
           this.display();
         })
       );
-    void s;
+  }
+
+  // Libelle d'une forme proposee.
+  private shapeLabel(c: ShapeChoice): string {
+    const names: Record<ShapeChoice, string> = {
+      rect: t(`Rectangle`),
+      rounded: t(`Rectangle arrondi`),
+      oval: t(`Ovale`),
+      underline: t(`Trait dessous`),
+      parallelogram: t(`Losange`),
+      diamond: t(`Diamant`),
+    };
+    return names[c];
   }
 
   private buildList(el: HTMLElement): void {
@@ -270,11 +299,14 @@ export class MmSettingTab extends PluginSettingTab {
       });
     this.dropdown(el, t(`Forme`), t(`Forme de la case d'un sujet flottant. Une fois dans la carte, il prend la forme des titres de son niveau.`), `floatShape`, [
       [`oval`, t(`Ovale`)],
-      [`round`, t(`Angles arrondis`)],
-      [`sharp`, t(`Angles aigus`)],
+      [`round`, t(`Rectangle arrondi`)],
+      [`sharp`, t(`Rectangle`)],
+      [`underline`, t(`Trait dessous`)],
+      [`parallelogram`, t(`Losange`)],
+      [`diamond`, t(`Diamant`)],
     ], (v) => v as MmSettings[`floatShape`]);
-    this.floatColor(el, t(`Couleur du trait`), t(`Contour et texte. Vide : comme la carte.`), `floatStrokeColor`);
-    this.floatColor(el, t(`Couleur de fond`), t(`Fond de la case. Vide : comme la carte.`), `floatFillColor`);
+    this.colorSetting(el, t(`Couleur du trait`), t(`Contour et texte. Vide : comme la carte.`), `floatStrokeColor`);
+    this.colorSetting(el, t(`Couleur de fond`), t(`Fond de la case. Vide : comme la carte.`), `floatFillColor`);
     this.dropdown(el, t(`Type de ligne`), t(`Trait du contour.`), `floatStrokeDash`, [
       [``, t(`Comme la carte`)],
       [`solid`, t(`Continu`)],
@@ -289,7 +321,7 @@ export class MmSettingTab extends PluginSettingTab {
     ], (v) => v as MmSettings[`floatFontFamily`]);
   }
 
-  private floatColor(el: HTMLElement, name: string, desc: string, field: `floatStrokeColor` | `floatFillColor`): void {
+  private colorSetting(el: HTMLElement, name: string, desc: string, field: `strokeColor` | `fillColor` | `floatStrokeColor` | `floatFillColor`): void {
     const s = this.plugin.settings;
     new Setting(el)
       .setName(name)
@@ -303,7 +335,7 @@ export class MmSettingTab extends PluginSettingTab {
       .addExtraButton((b) =>
         b
           .setIcon(`reset`)
-          .setTooltip(t(`Comme la carte`))
+          .setTooltip(field.startsWith(`float`) ? t(`Comme la carte`) : t(`Valeur d'origine`))
           .onClick(async () => {
             s[field] = ``;
             await this.plugin.saveSettings();

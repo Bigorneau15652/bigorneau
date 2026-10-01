@@ -3,7 +3,7 @@
 // N'utilise que le DOM standard.
 import { MmSettings, makeTag, PanePosition, TagDef } from "./settings";
 import { t } from "./i18n";
-import type { NodeStyle, StylePatch } from "./style";
+import { NodeStyle, ShapeChoice, shapeChoice, shapePatch, StylePatch } from "./style";
 
 export interface ControlActions {
   zoomIn: () => void;
@@ -22,6 +22,8 @@ export interface ControlActions {
   // Style montre dans le panneau et libelle de la portee de la modification.
   currentStyle: () => NodeStyle;
   scopeLabel: (individual: boolean) => string;
+  // Nature de la selection : toute la carte (ou rien), des titres, ou des sujets flottants.
+  selectionKind: () => `all` | `nodes` | `floats`;
   // Bouton Lien (relier deux titres) et bouton Retour (revenir a la carte precedente).
   toggleLink: () => void;
   back: () => void;
@@ -75,6 +77,12 @@ const OPT = {
   rough2: svg(`<path d="M3 15c2-9 4 7 6-2s4 7 6-2 4 5 6-1"/>`, 20),
   sharp: svg(`<rect x="5" y="5" width="14" height="14" rx="0" stroke-dasharray="3 3"/>`, 20),
   round: svg(`<rect x="5" y="5" width="14" height="14" rx="5" stroke-dasharray="3 3"/>`, 20),
+  shapeRect: svg(`<rect x="3" y="6" width="18" height="12" rx="0"/>`, 20),
+  shapeRounded: svg(`<rect x="3" y="6" width="18" height="12" rx="4"/>`, 20),
+  shapeOval: svg(`<rect x="3" y="6" width="18" height="12" rx="6"/>`, 20),
+  shapeUnderline: svg(`<path d="M4 17h16"/><path d="M8 11h8" stroke-width="1" stroke-dasharray="1 2"/>`, 20),
+  shapeParallelogram: svg(`<path d="M7 6h14l-4 12H3z"/>`, 20),
+  shapeDiamond: svg(`<path d="M12 4l9 8-9 8-9-8z"/>`, 20),
   elbow: svg(`<path d="M6 4v10a4 4 0 0 0 4 4h8"/>`, 20),
   curve: svg(`<path d="M6 4c0 11 4 14 12 14"/>`, 20),
   straight: svg(`<path d="M6 5 18 17"/>`, 20),
@@ -155,6 +163,8 @@ export class MapControls {
   // Champ du nom a activer apres l'ajout d'une etiquette.
   private focusTagIndex: number | null = null;
   private tipTimer: number | null = null;
+  // Portee choisie dans le panneau d'apparence (null : automatique, qui depend de la selection).
+  private scopeMode: `level` | `single` | null = null;
   private helpRoot!: HTMLElement;
   private helpPanel!: HTMLElement;
   private helpBtn!: HTMLButtonElement;
@@ -316,6 +326,14 @@ export class MapControls {
     this.refresh();
   }
 
+  // Vrai si la modification ne concerne que la case selectionnee : Cmd (ou Ctrl) maintenu, ou portee choisie. Par defaut,
+  // un sujet flottant se regle seul (un vert, un rouge), un titre ordinaire se regle avec tout son niveau.
+  private single(): boolean {
+    if (this.mod) return true;
+    if (this.scopeMode !== null) return this.scopeMode === `single`;
+    return this.actions.selectionKind() === `floats`;
+  }
+
   private setModifier(value: boolean): void {
     if (this.mod === value) return;
     this.mod = value;
@@ -323,7 +341,7 @@ export class MapControls {
   }
 
   private updateScope(): void {
-    if (this.scopeEl) this.scopeEl.textContent = this.actions.scopeLabel(this.mod);
+    if (this.scopeEl) this.scopeEl.textContent = this.actions.scopeLabel(this.single());
   }
 
   // ---------------------------------------------------------------- etiquettes
@@ -630,17 +648,33 @@ export class MapControls {
   private buildStylePanel(): HTMLElement {
     const a = this.actions;
     const st = a.currentStyle();
-    const apply = (patch: StylePatch): void => a.style(patch, this.mod);
+    const kind = a.selectionKind();
+    const apply = (patch: StylePatch): void => a.style(patch, this.single());
     const panel = h(`div`, `mmw-style`);
 
     // Portee de la modification : toute la carte, un niveau de titre ou une case.
     const scope = h(`div`, `mmw-scope`);
     scope.append(h(`span`, `mmw-scope-label`, t(`Appliqué à : `)));
-    this.scopeEl = h(`strong`, `mmw-scope-value`, a.scopeLabel(this.mod));
+    this.scopeEl = h(`strong`, `mmw-scope-value`, a.scopeLabel(this.single()));
     scope.append(this.scopeEl);
     panel.append(scope);
-    if (a.scopeLabel(false) !== `toute la carte`) {
-      panel.append(h(`div`, `mmw-scope-hint`, t(`Maintenez {0} en cliquant pour ne modifier que la case sélectionnée.`, isMac() ? `Cmd` : `Ctrl`)));
+    if (kind !== `all`) {
+      // Choix visible entre tout le niveau et le titre seul (Cmd ou Ctrl maintenu pendant un clic fait de meme).
+      const floats = kind === `floats`;
+      panel.append(
+        this.options(
+          [
+            { value: `level`, text: floats ? t(`Tous les sujets flottants`) : t(`Tout le niveau`) },
+            { value: `single`, text: floats ? t(`Ce sujet seulement`) : t(`Ce titre seulement`) },
+          ],
+          this.single() ? `single` : `level`,
+          (v) => {
+            this.scopeMode = v as `level` | `single`;
+            this.refresh();
+          },
+          true
+        )
+      );
     }
 
     const section = (title: string, ...content: HTMLElement[]): void => {
@@ -690,7 +724,8 @@ export class MapControls {
       );
       const resetList = h(`button`, `mmw-reset`, t(`Réinitialiser l'apparence`));
       resetList.type = `button`;
-      resetList.addEventListener(`click`, () => a.resetStyle(this.mod));
+      resetList.addEventListener(`click`, () => a.resetStyle(this.single()));
+      panel.append(h(`div`, `mmw-scope-hint`, t(`Vue Liste : les formes, cadres et fonds se règlent en vue Mindmap.`)));
       panel.append(resetList);
       return panel;
     }
@@ -730,14 +765,18 @@ export class MapControls {
       )
     );
     section(
-      t(`Angles`),
+      t(`Forme`),
       this.options(
         [
-          { value: `sharp`, html: OPT.sharp, title: t(`Angles aigus`) },
-          { value: `round`, html: OPT.round, title: t(`Angles arrondis`) },
+          { value: `rect`, html: OPT.shapeRect, title: t(`Rectangle`) },
+          { value: `rounded`, html: OPT.shapeRounded, title: t(`Rectangle arrondi`) },
+          { value: `oval`, html: OPT.shapeOval, title: t(`Ovale`) },
+          { value: `underline`, html: OPT.shapeUnderline, title: t(`Trait dessous`) },
+          { value: `parallelogram`, html: OPT.shapeParallelogram, title: t(`Losange`) },
+          { value: `diamond`, html: OPT.shapeDiamond, title: t(`Diamant`) },
         ],
-        st.corners,
-        (v) => apply({ corners: v as NodeStyle[`corners`] })
+        shapeChoice(st),
+        (v) => apply(shapePatch(v as ShapeChoice))
       )
     );
     section(
@@ -797,10 +836,10 @@ export class MapControls {
       )
     );
 
-    const hasSelection = a.scopeLabel(false) !== `toute la carte`;
+    const hasSelection = kind !== `all`;
     const reset = h(`button`, `mmw-reset`, hasSelection ? t(`Rétablir le style de la sélection`) : t(`Réinitialiser l'apparence`));
     reset.type = `button`;
-    reset.addEventListener(`click`, () => a.resetStyle(this.mod));
+    reset.addEventListener(`click`, () => a.resetStyle(this.single()));
     panel.append(reset);
     return panel;
   }
