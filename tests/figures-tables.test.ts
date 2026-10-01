@@ -112,10 +112,11 @@ test(`une image absente, du web ou un autre media est remplacee par un repere et
   const texts = t.rows.filter((r) => r.kind === `figure`).map((r) => r.text);
   assert.ok(texts[0].includes(`Image introuvable`) && texts[0].includes(`absent.png`));
   assert.ok(texts[1].includes(`Image du web`));
-  assert.ok(texts[2].includes(`film.mp4`));
+  assert.equal(texts.length, 2);
+  assert.ok(t.rows.some((r) => r.kind === `media` && r.text.includes(`film.mp4`)));
   assert.ok(t.warnings.includes(`image:absent.png`));
   assert.ok(t.warnings.includes(`webimage:https://exemple.fr/a.png`));
-  assert.ok(!t.warnings.some((w) => w.includes(`film`)));
+  assert.ok(t.warnings.includes(`media:film.mp4`));
 });
 
 test(`en mode flottant, la figure est un repere dans le texte et se place en haut de page`, () => {
@@ -181,7 +182,7 @@ test(`un tableau long est coupe entre deux rangees avec son en-tete repete et se
 
 test(`les renvois vers un titre ou une figure sont cliquables et la table des matieres donne les bonnes pages`, () => {
   const text = `---\ntoc: true\n---\n# Premier\n\n${paras(4)}\nVoir [[#Second]] et la [[#^plan]].\n\n# Second\n\n${paras(3)}\n![[p.png|Plan du site]] ^plan\n\n## Detail\n\n${paras(2)}`;
-  const c = composeNote(text, `A.md`, A4_SETUP, DEFAULT_PAGE_STYLE, new Map([[`p.png`, image()]]));
+  const c = composeNote(text, `A.md`, A4_SETUP, DEFAULT_PAGE_STYLE, { images: new Map([[`p.png`, image()]]) });
   const map = anchorPages(c.pages);
   const toc = c.typeset.rows.filter((r) => r.toc && r.toc.page >= 0);
   assert.equal(toc.length, 3);
@@ -213,7 +214,7 @@ test(`un renvoi vers une cible absente est signale`, () => {
 
 test(`le PDF contient l'image, ses destinations internes et les filets du tableau`, async () => {
   const text = `# Premier\n\nVoir [[#Second]].\n\n![[p.png|Plan]] ^plan\n\nTableau : Valeurs\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n# Second\n\nTexte avec renvoi [[#^plan]].`;
-  const c = composeNote(text, `A.md`, A4_SETUP, DEFAULT_PAGE_STYLE, new Map([[`p.png`, image()]]));
+  const c = composeNote(text, `A.md`, A4_SETUP, DEFAULT_PAGE_STYLE, { images: new Map([[`p.png`, image()]]) });
   const pdf = Buffer.from(await composeToPdf(c, REQ)).toString(`latin1`);
   assert.ok(/\/Subtype \/Image \/Width 2 \/Height 2 \/ColorSpace \/DeviceRGB \/BitsPerComponent 8 \/SMask \d+ 0 R/.test(pdf));
   assert.ok(/\/XObject << \/Im1 \d+ 0 R >>/.test(pdf));
@@ -224,7 +225,7 @@ test(`le PDF contient l'image, ses destinations internes et les filets du tablea
 
 test(`une image JPEG est ecrite telle quelle`, async () => {
   const jpeg: ImageAsset = { naturalWidth: 10, naturalHeight: 10, pixelWidth: 10, pixelHeight: 10, kind: `jpeg`, data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]) };
-  const c = composeNote(`# A\n\n![[p.jpg|Photo]]`, `A.md`, A4_SETUP, DEFAULT_PAGE_STYLE, new Map([[`p.jpg`, jpeg]]));
+  const c = composeNote(`# A\n\n![[p.jpg|Photo]]`, `A.md`, A4_SETUP, DEFAULT_PAGE_STYLE, { images: new Map([[`p.jpg`, jpeg]]) });
   const pdf = Buffer.from(await composeToPdf(c, REQ)).toString(`latin1`);
   assert.ok(pdf.includes(`/Filter /DCTDecode /Length 4`));
 });

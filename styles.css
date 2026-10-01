@@ -1507,6 +1507,24 @@
   max-width: none;
 }
 
+.mmw-row-math {
+  display: inline-block;
+  overflow: visible;
+}
+
+/* Cadre d'un media : trace par dessus la ligne, sur toute la largeur du texte. */
+.mmw-row-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0 solid #8c8c8c;
+  border-right-width: 0.5pt;
+  border-left-width: 0.5pt;
+  pointer-events: none;
+}
+
 .mmw-row-toc {
   cursor: pointer;
 }

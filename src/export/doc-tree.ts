@@ -22,7 +22,13 @@ export type DocBlock =
   // La premiere ligne est l'en-tete. `caption` : texte de la ligne « Tableau : ... » placee juste au-dessus.
   | { type: `table`; rows: string[][]; align: ColumnAlign[]; caption?: string; id?: string }
   // `width` : largeur demandee en pixels (![[image.png|400]]).
-  | { type: `figure`; target: string; caption: string; width?: number; id?: string };
+  | { type: `figure`; target: string; caption: string; width?: number; id?: string }
+  // Formule en bloc ($$ ... $$), ecrite en TeX.
+  | { type: `math`; tex: string; id?: string }
+  // Media qui ne se lit pas sur papier (video, son, document, contenu integre) : `target` est un fichier du coffre ou une adresse.
+  | { type: `media`; kind: MediaKind; target: string; caption: string; id?: string };
+
+export type MediaKind = `video` | `audio` | `document` | `embed`;
 
 export interface DocSection {
   level: number;
@@ -65,6 +71,22 @@ const MD_FIGURE_RE = /^!\[([^\]]*)\]\(([^)]+)\)(?:[ \t]+\^([A-Za-z0-9-]+))?[ \t]
 const BLOCK_ID_RE = /[ \t]+\^([A-Za-z0-9-]+)[ \t]*$/;
 const BLOCK_ID_LINE_RE = /^\^([A-Za-z0-9-]+)[ \t]*$/;
 const TABLE_CAPTION_RE = /^(?:Tableau|Table)[ \t\u00a0]*:[ \t\u00a0]*(.+)$/i;
+
+const VIDEO_EXT = /\.(mp4|webm|ogv|mov|m4v|mkv)$/i;
+const AUDIO_EXT = /\.(mp3|wav|m4a|ogg|oga|flac|aac|opus)$/i;
+const VIDEO_HOST = /^https?:\/\/(?:[\w-]+\.)*(?:youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly)(?:[\/?#:]|$)/i;
+const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|svg|bmp|avif)$/i;
+
+// Sorte de media d'une cible de figure ![[...]] ou ![](...), ou undefined si c'est une image.
+export function mediaKindOf(target: string): MediaKind | undefined {
+  const path = target.split(/[?#]/)[0];
+  if (IMAGE_EXT_RE.test(path)) return undefined;
+  if (VIDEO_EXT.test(path) || VIDEO_HOST.test(target)) return `video`;
+  if (AUDIO_EXT.test(path)) return `audio`;
+  if (/\.pdf$/i.test(path)) return `document`;
+  if (/^https?:\/\//i.test(target)) return `embed`;
+  return undefined;
+}
 
 const stripEol = (s: string): string => s.replace(/(\r\n|\n|\r)$/, ``);
 
@@ -232,6 +254,44 @@ export function parseBlocks(text: string): DocBlock[] {
       continue;
     }
 
+    // Formule en bloc : $$ ... $$ sur une ou plusieurs lignes.
+    if (line.trim().startsWith(`$$`)) {
+      flushPara();
+      let body = line.trim().slice(2);
+      let end = body.indexOf(`$$`);
+      i++;
+      while (end < 0 && i < lines.length) {
+        body += `\n${lines[i++]}`;
+        end = body.indexOf(`$$`);
+      }
+      const tex = (end < 0 ? body : body.slice(0, end)).trim();
+      const rest = end < 0 ? `` : body.slice(end + 2);
+      const idm = BLOCK_ID_RE.exec(` ${rest}`);
+      if (tex !== ``) blocks.push({ type: `math`, tex, ...(idm ? { id: idm[1] } : {}) });
+      continue;
+    }
+
+    // Contenu integre en HTML : <iframe>, <video>, <audio>.
+    const html = /^\s*<(iframe|video|audio)\b/i.exec(line);
+    if (html) {
+      flushPara();
+      let tag = line;
+      i++;
+      while (!/>/.test(tag) && i < lines.length) tag += ` ${lines[i++]}`;
+      const src = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] ?? ``;
+      const title = /\btitle\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1] ?? ``;
+      // Le contenu et la balise fermante, s'ils sont sur les lignes suivantes, sont passes.
+      const closer = new RegExp(`</${html[1]}>`, `i`);
+      if (!closer.test(tag) && !/\/>\s*$/.test(tag)) {
+        let j = i;
+        while (j < lines.length && !closer.test(lines[j]) && lines[j].trim() !== ``) j++;
+        if (j < lines.length && closer.test(lines[j])) i = j + 1;
+      }
+      const kind: MediaKind = html[1].toLowerCase() === `audio` ? `audio` : mediaKindOf(src) ?? (html[1].toLowerCase() === `video` ? `video` : `embed`);
+      if (src !== ``) blocks.push({ type: `media`, kind, target: src, caption: title });
+      continue;
+    }
+
     const wiki = WIKI_FIGURE_RE.exec(line);
     const md = wiki ? null : MD_FIGURE_RE.exec(line);
     if (wiki || md) {
@@ -247,7 +307,9 @@ export function parseBlocks(text: string): DocBlock[] {
       const caption = (wiki ? parts.join(`|`) : parts.join(`|`)).trim();
       const target = wiki ? wiki[1].trim() : md![2].trim();
       const id = wiki ? wiki[3] : md![3];
-      blocks.push({ type: `figure`, target, caption, ...(width ? { width } : {}), ...(id ? { id } : {}) });
+      const kind = mediaKindOf(target);
+      if (kind) blocks.push({ type: `media`, kind, target, caption, ...(id ? { id } : {}) });
+      else blocks.push({ type: `figure`, target, caption, ...(width ? { width } : {}), ...(id ? { id } : {}) });
       i++;
       continue;
     }

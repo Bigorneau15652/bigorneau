@@ -3,6 +3,7 @@
 // la composition lit ces reperes pour choisir la police de chaque morceau de mot. Les liens web gardent leur adresse dans
 // une table, referencee par un numero.
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
+import { INLINE_MATH_RE, MathAsset } from "./math";
 
 export const BOLD_ON = ``;
 export const BOLD_OFF = ``;
@@ -13,11 +14,17 @@ export const LINK_ON = ``;
 export const LINK_NUM_END = ``;
 export const LINK_OFF = ``;
 
+// Formule en ligne : repere, numero de la formule dans la table, repere de fin du numero.
+export const MATH_ON = `\uE017`;
+export const MATH_END = `\uE018`;
+
 // Texte a mettre en forme : le texte repere, et les adresses des liens. Une adresse qui commence par # est un renvoi a un
 // endroit du document (#hid:3 : titre numero 3, #b:plan : bloc d'identifiant plan).
 export interface InlineText {
   text: string;
   links: string[];
+  // Formules en ligne, dans l'ordre des reperes MATH_ON du texte.
+  maths?: MathAsset[];
 }
 
 // Ce que la mise en forme doit savoir du document pour traiter les renvois internes ([[#Titre]], [[#^bloc]]).
@@ -34,6 +41,8 @@ export interface InlineContext {
   pageRefs: boolean;
   // Signale un renvoi qui ne mene nulle part.
   warn?(message: string): void;
+  // Dessin de la formule en ligne ecrite $tex$, s'il est connu.
+  math?(tex: string): MathAsset | undefined;
 }
 
 // Forme normalisee du texte d'un titre pour retrouver le titre vise par un renvoi (casse, signes et espaces ignores).
@@ -63,6 +72,19 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
   s = s.replace(/`([^`]*)`/g, (_m, c: string) => {
     codes.push(c);
     return `${CODE_ON}${codes.length - 1}${CODE_OFF}`;
+  });
+  // Formules : le dessin est remplace par un repere ; sans dessin, le texte source est garde tel quel (et signale).
+  const maths: MathAsset[] = [];
+  s = s.replace(INLINE_MATH_RE, (m: string, display: string | undefined, inline: string | undefined) => {
+    const tex = (display ?? inline ?? ``).trim();
+    const asset = ctx?.math?.(tex);
+    if (!asset) {
+      if (ctx?.math) ctx.warn?.(`formule:${tex}`);
+      codes.push(m);
+      return `${CODE_ON}${codes.length - 1}${CODE_OFF}`;
+    }
+    maths.push(asset);
+    return `${MATH_ON}${maths.length - 1}${MATH_END}`;
   });
   // Images integrees ![[fichier]] et ![texte](adresse).
   s = s.replace(/!\[\[[^\]]*\]\]/g, ``).replace(/!\[([^\]]*)\]\([^)]*\)/g, `$1`);
@@ -113,10 +135,12 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
     .replace(/~~(?=\S)(.+?)(?<=\S)~~/g, `$1`)
     .replace(/==(?=\S)(.+?)(?<=\S)==/g, `$1`);
   s = s.replace(new RegExp(`${CODE_ON}(\\d+)${CODE_OFF}`, `g`), (_m, i: string) => codes[Number(i)]);
-  return { text: s, links };
+  return { text: s, links, ...(maths.length > 0 ? { maths } : {}) };
 }
 
 // Texte brut d'un texte repere, pour les endroits qui n'affichent pas de mise en forme (signets, tableaux).
 export function plainOf(text: string): string {
-  return text.replace(new RegExp(`${LINK_ON}\\d+${LINK_NUM_END}`, `g`), ``).replace(/[-]/g, ``);
+  return text
+    .replace(new RegExp(`${LINK_ON}\\d+${LINK_NUM_END}|${MATH_ON}\\d+${MATH_END}`, `g`), ``)
+    .replace(/[\uE010-\uE016]/g, ``);
 }

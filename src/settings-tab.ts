@@ -463,6 +463,17 @@ export class MmSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings(false);
         });
       });
+    new Setting(el)
+      .setName(t(`Vidéos, sons et contenus intégrés`))
+      .setDesc(t(`Un média ne se lit pas sur papier : il est remplacé par son titre et son adresse, cliquable dans le PDF.`))
+      .addDropdown((d) => {
+        d.addOption(`frame`, t(`Dans un cadre`));
+        d.addOption(`text`, t(`En simple texte`));
+        d.setValue(s.exportMedia).onChange(async (v) => {
+          s.exportMedia = v === `text` ? `text` : `frame`;
+          await this.plugin.saveSettings(false);
+        });
+      });
   }
 
   private buildKeys(el: HTMLElement): void {

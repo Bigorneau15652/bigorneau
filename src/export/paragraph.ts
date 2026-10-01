@@ -4,7 +4,8 @@
 // l'espacement de chaque ligne justifiee d'apres la largeur reelle du texte affiche (ligatures et crenage compris).
 import { FINE_SPACE, FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
 import { getLanguage, HyphenationLanguage, hyphenPoints, LanguageCode } from "./hyphenate";
-import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON } from "./inline";
+import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON, MATH_END, MATH_ON } from "./inline";
+import type { MathAsset } from "./math";
 import { breakParagraph, Item } from "./line-break";
 import { DEFAULT_TEX_PARAMS, DECENT, Fitness, INF_PENALTY, TexParams } from "./tex-params";
 import { frenchSpacing } from "./typography";
@@ -39,6 +40,8 @@ export interface LineRun {
   link?: string;
   // Numero d'appel de note en exposant.
   sup?: boolean;
+  // Formule en ligne : dessinee a la place du texte (qui est vide).
+  math?: MathAsset;
 }
 
 export interface TypesetLine {
@@ -76,6 +79,8 @@ export interface TypesetParagraph {
 export const NOTE_CALL = /(\d+),(\d+)/g;
 // Taille d'un numero d'appel, en fraction du corps du texte.
 export const SUP_SCALE = 0.7;
+// Appel de note ou formule en ligne dans un mot.
+const SPECIAL = new RegExp(`${NOTE_CALL.source}|${MATH_ON}(\\d+)${MATH_END}`, `g`);
 
 // Vrai si le mot a autre chose que des reperes de style (et le numero qui suit un repere de lien) a afficher.
 function hasContent(w: string): boolean {
@@ -206,15 +211,27 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
     items.push({ type: `box`, width: m.width, text: label, sup: true, note: key, style: `regular` });
   };
 
+  // Formule en ligne : un seul bloc insecable, colle au mot qui precede.
+  const pushMath = (asset: MathAsset): void => {
+    if (gluePending) {
+      items.push(glue(` `));
+      gluePending = false;
+    }
+    items.push({ type: `box`, width: (asset.width * size) / 1000, text: ``, style: base, math: asset });
+  };
+
   const pushPieceWithCalls = (piece: string, hyphenOk: boolean): void => {
     let last = 0;
     const text = (s: string): void => {
       const { plain, meta } = readMarks(s);
       if (plain !== ``) pushPiece(plain, meta, hyphenOk);
     };
-    for (const m of piece.matchAll(NOTE_CALL)) {
+    for (const m of piece.matchAll(SPECIAL)) {
       text(piece.slice(last, m.index));
-      pushCall(Number(m[1]), m[2]);
+      if (m[3] !== undefined) {
+        const asset = input.maths?.[Number(m[3])];
+        if (asset) pushMath(asset);
+      } else pushCall(Number(m[1]), m[2]);
       last = (m.index ?? 0) + m[0].length;
     }
     text(piece.slice(last));
@@ -271,11 +288,15 @@ function lineRuns(items: Item[], from: number, to: number, base: FontStyle, link
     if (text === ``) return;
     const url = link !== undefined && link >= 0 ? links[link] : undefined;
     const prev = runs[runs.length - 1];
-    if (prev && !sup && !prev.sup && prev.style === style && prev.link === url) prev.text += text;
+    if (prev && !prev.math && !sup && !prev.sup && prev.style === style && prev.link === url) prev.text += text;
     else runs.push({ text, style, ...(url !== undefined ? { link: url } : {}), ...(sup ? { sup: true } : {}) });
   };
   for (let i = from; i < to; i++) {
     const it = items[i];
+    if (it.type === `box` && it.math) {
+      runs.push({ text: ``, style: (it.style as FontStyle | undefined) ?? base, math: it.math });
+      continue;
+    }
     if (it.type === `box`) add(it.text, (it.style as FontStyle | undefined) ?? base, it.link, it.sup === true);
     else if (it.type === `glue` && it.text !== ``) add(it.text, base, undefined, false);
   }
@@ -333,7 +354,7 @@ function finishLine(
   for (const r of runs) {
     if (r.sup) sups.push([text.length, text.length + r.text.length]);
     text += r.text;
-    width += measureText(r.text, o.fontSize * (r.sup ? SUP_SCALE : 1), r.style).width;
+    width += r.math ? (r.math.width * o.fontSize) / 1000 : measureText(r.text, o.fontSize * (r.sup ? SUP_SCALE : 1), r.style).width;
     if (!r.sup) for (const ch of r.text) if (ch === ` ` || ch === NO_BREAK_SPACE) spaces++;
   }
   const offset = bl.from === 0 && o.indent > 0 && firstItem.type === `box` && firstItem.text === `` ? o.indent : 0;
@@ -351,6 +372,6 @@ function singleLine(items: Item[], o: ParagraphOptions, links: string[]): Typese
   const base: FontStyle = o.style ?? `regular`;
   const runs = lineRuns(items, 0, items.length - 1, base, links);
   const text = runs.map((r) => r.text).join(``);
-  const width = runs.reduce((a, r) => a + measureText(r.text, o.fontSize * (r.sup ? SUP_SCALE : 1), r.style).width, 0);
+  const width = runs.reduce((a, r) => a + (r.math ? (r.math.width * o.fontSize) / 1000 : measureText(r.text, o.fontSize * (r.sup ? SUP_SCALE : 1), r.style).width), 0);
   return [{ text, runs, offset: 0, wordSpacing: 0, width, ratio: 0, badness: 0, fitness: DECENT, hyphenated: false, overfull: width > o.lineWidth, last: true, notes: [], sups: [] }];
 }

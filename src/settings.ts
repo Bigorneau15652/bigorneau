@@ -161,6 +161,8 @@ export interface MmSettings {
   exportFloats: `float` | `inline`;
   // Renvois de l'export : ajouter le numero de page apres le texte cliquable.
   exportPageRefs: boolean;
+  // Medias (video, son, contenu integre) : un cadre avec le titre et l'adresse, ou une simple ligne de texte.
+  exportMedia: `frame` | `text`;
   // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
   iconExternal: string;
   iconInternal: string;
@@ -231,6 +233,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportAuthor: ``,
   exportFloats: `float`,
   exportPageRefs: false,
+  exportMedia: `frame`,
   iconExternal: `chain`,
   iconInternal: `return`,
   iconWeb: `globe`,
@@ -308,6 +311,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.exportAuthor = typeof merged.exportAuthor === `string` ? merged.exportAuthor.trim() : ``;
   if (merged.exportFloats !== `float` && merged.exportFloats !== `inline`) merged.exportFloats = `float`;
   merged.exportPageRefs = merged.exportPageRefs === true;
+  if (merged.exportMedia !== `frame` && merged.exportMedia !== `text`) merged.exportMedia = `frame`;
   merged.settingsVersion = SETTINGS_VERSION;
   return merged;
 }

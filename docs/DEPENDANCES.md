@@ -13,3 +13,5 @@ Les motifs de césure de Liang du français (hyph-fr.tex) et de l'anglais britan
 ## Aucune bibliothèque JavaScript
 
 À ce stade, aucune bibliothèque n'a été ajoutée à package.json : l'algorithme de Knuth et Plass, les motifs de Liang, la lecture des polices (largeurs, ligatures, crénage), la composition et l'écriture du PDF sont écrits dans le plugin. Le seul outil de fabrication qui n'est pas intégré à Node est fonttools (Python, licence MIT), utilisé à la main par tools/make-fonts.py.
+
+Formules : la version 0.1.5 utilise MathJax, le moteur de formules fourni avec Obsidian (appelé par les fonctions loadMathJax et renderMath de l'interface du plugin). Rien n'est ajouté à package.json ni au fichier main.js. Le plugin lit seulement le dessin SVG que MathJax produit et le recopie en tracé vectoriel dans le PDF. MathJax est sous licence Apache 2.0 ; les polices mathématiques qu'il dessine (MathJax TeX) sont sous licence SIL OFL.

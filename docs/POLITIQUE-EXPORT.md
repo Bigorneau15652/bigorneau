@@ -135,3 +135,9 @@ Les types de documents visés et leurs formats (A4 courant, A5 de livre, rapport
 ## 6. Références à consulter
 
 L'article de Donald Knuth et Michael Plass, « Breaking Paragraphs into Lines », Software: Practice and Experience, 1981 et le chapitre 14 du TeXbook. Le programme tex.web de Donald Knuth, qui est le programme de référence de TeX. La thèse de Franklin Liang sur la césure, 1983. La thèse de Michael Plass sur la coupure des pages, 1981. La documentation de l'extension microtype. La documentation de babel pour le français et les règles de l'Imprimerie nationale. Le dépôt de Typst (crates/typst-layout/src/inline/linebreak.rs). Les dépôts de Hyphenopoly, de tex-linebreak (lecture seule) et de Paged.js. La documentation des polices SIL Open Font License.
+
+## 7. Demandes de l'utilisateur à traiter dans les phases suivantes
+
+Table des matières : choix du nombre de niveaux (1, 2, 3 ou plus) et de l'emplacement. Pour les gros documents, l'utilisateur souhaite une table des matières générale de niveau 1 au début du document et, dans chaque chapitre de niveau 1, une table des matières complémentaire limitée à ce chapitre. Ces options sont à prévoir dans le panneau de réglages de la phase 7.
+
+Options et raccourcis : à définir pour la table des matières, les notes de bas de page et les autres éléments de l'export, dans le panneau de réglages de la phase 7.

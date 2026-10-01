@@ -7,6 +7,8 @@ import { FontStyle, measureText } from "./font-metrics";
 import { LanguageCode } from "./hyphenate";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget } from "./image";
 import { InlineContext, InlineText, normalizeHeading, parseInline, plainOf } from "./inline";
+import type { MathAsset } from "./math";
+import { mathKey } from "./math";
 import { LineRun, typesetParagraph, TypesetLine } from "./paragraph";
 import { layoutTable } from "./table";
 import { DEFAULT_TEX_PARAMS, INF_PENALTY, TexParams } from "./tex-params";
@@ -59,6 +61,8 @@ export interface PageStyle {
   floats: `float` | `inline`;
   // Renvois vers un titre, une figure ou un tableau : ajoutent « (page N) » apres le texte du renvoi.
   pageRefs: boolean;
+  // Medias (video, son, contenu integre) : un cadre avec le titre et l'adresse, ou une simple ligne de texte.
+  media: `frame` | `text`;
 }
 
 export const DEFAULT_PAGE_STYLE: PageStyle = {
@@ -69,9 +73,10 @@ export const DEFAULT_PAGE_STYLE: PageStyle = {
   footnoteNumbering: `continuous`,
   floats: `float`,
   pageRefs: false,
+  media: `frame`,
 };
 
-export type RowKind = `title` | `heading` | `text` | `list` | `quote` | `code` | `figure` | `caption` | `table` | `toc` | `float` | `space` | `footnote`;
+export type RowKind = `title` | `heading` | `text` | `list` | `quote` | `code` | `figure` | `math` | `media` | `caption` | `table` | `toc` | `float` | `space` | `footnote`;
 
 export interface RowQuality {
   badness: number;
@@ -143,6 +148,10 @@ export interface Row {
   toc?: { anchor: string; page: number };
   // Repere de flottant : la figure ou le tableau se place a la page, pas ici.
   float?: FloatBlock;
+  // Formule en bloc : dessin et corps (taille de l'em, en points) ; elle est centree dans la ligne.
+  math?: { asset: MathAsset; size: number };
+  // Cadre d'un media : bords gauche et droit sur toute la largeur du texte, bord haut et bord bas sur la premiere et la derniere ligne.
+  frame?: { width: number; top: boolean; bottom: boolean };
 }
 
 // Note de bas de page composee : ses lignes et leur hauteur totale.
@@ -182,6 +191,8 @@ export interface TypesetDoc {
 export interface TypesetOptions {
   // Images des figures, par cible (nom ecrit dans la note).
   images?: Map<string, ImageAsset>;
+  // Dessins des formules (voir mathKey).
+  formulas?: Map<string, MathAsset>;
   // Numero de page d'une ancre, connu apres une premiere mise en page (table des matieres, renvois avec page).
   pageOf?: (anchor: string) => number | undefined;
 }
@@ -211,7 +222,7 @@ function collectAnchors(doc: ExportDoc, language: LanguageCode): Anchors {
       if (b.type === `figure` && (isImageTarget(b.target) || isWebTarget(b.target))) label = `${words.figure} ${++figures}`;
       else if (b.type === `table` && b.caption) label = `${words.table} ${++tables}`;
       if (label) a.labels.set(b, label);
-      if ((b.type === `paragraph` || b.type === `quote` || b.type === `table` || b.type === `figure`) && b.id) a.blocks.set(b.id, { anchor: `b:${b.id}`, ...(label ? { label } : {}) });
+      if ((b.type === `paragraph` || b.type === `quote` || b.type === `table` || b.type === `figure` || b.type === `math` || b.type === `media`) && b.id) a.blocks.set(b.id, { anchor: `b:${b.id}`, ...(label ? { label } : {}) });
     }
   };
   const walk = (s: DocSection): void => {
@@ -265,6 +276,7 @@ class Typesetter {
       pageOf: (anchor) => this.opts.pageOf?.(anchor),
       pageRefs: style.pageRefs,
       warn: (m) => this.warnings.push(m),
+      math: (tex) => this.opts.formulas?.get(mathKey(tex, false)) ?? this.opts.formulas?.get(mathKey(tex, true)),
     };
   }
 
@@ -310,13 +322,16 @@ class Typesetter {
       if (loose) this.stats.looseLines++;
       if (tight) this.stats.tightLines++;
       if (l.overfull) this.stats.overfullLines++;
+      // Une formule plus haute que l'interligne agrandit la ligne.
+      let lineHeight = height;
+      for (const r of l.runs) if (r.math) lineHeight = Math.max(lineHeight, ((r.math.ascent + r.math.descent) * fontSize) / 1000 + 2);
       this.push({
         kind,
         text: l.text,
         x: x + l.offset,
         width: width - l.offset,
         fontSize,
-        height,
+        height: lineHeight,
         wordSpacing: l.wordSpacing,
         breakAfter: opts.keep ? INF_PENALTY : this.penaltyFor(i, lines.length, l.hyphenated),
         align: `left`,
@@ -481,7 +496,79 @@ class Typesetter {
       case `figure`:
         this.figure(b);
         break;
+      case `math`:
+        this.math(b);
+        break;
+      case `media`:
+        this.media(b);
+        break;
     }
+  }
+
+  // Formule en bloc : centree, mise a l'echelle de la colonne si elle est trop large. Un dessin absent est remplace par le texte
+  // TeX et signale.
+  private math(b: Extract<DocBlock, { type: `math` }>): void {
+    const lead = this.setup.leading;
+    const size = this.setup.fontSize;
+    const from = this.sink.length;
+    const asset = this.opts.formulas?.get(mathKey(b.tex, true));
+    if (!asset) {
+      this.warnings.push(`formule:${b.tex}`);
+      const text = `$$ ${b.tex.replace(/\s+/g, ` `)} $$`;
+      this.codeRows([text]);
+      this.anchorFrom(from, b.id);
+      return;
+    }
+    const scale = Math.min(1, this.textWidth / ((asset.width * size) / 1000));
+    const k = (size * scale) / 1000;
+    const pad = lead * 0.4;
+    const width = asset.width * k;
+    this.stats.lines++;
+    this.push({ kind: `math`, text: ``, x: (this.textWidth - width) / 2, width, fontSize: size, height: Math.max(lead, (asset.ascent + asset.descent) * k) + 2 * pad, wordSpacing: 0, align: `left`, math: { asset, size: size * scale } });
+    this.anchorFrom(from, b.id);
+    this.space(lead * 0.2);
+  }
+
+  // Media : cadre (ou ligne de texte) avec la sorte de media, son titre, et son adresse cliquable quand c'est une adresse web.
+  private media(b: Extract<DocBlock, { type: `media` }>): void {
+    const lead = this.setup.leading;
+    const size = this.setup.fontSize;
+    const en = this.language === `en`;
+    const labels: Record<string, string> = en ? { video: `Video`, audio: `Audio`, document: `PDF document`, embed: `Embedded content` } : { video: `Vidéo`, audio: `Audio`, document: `Document PDF`, embed: `Contenu intégré` };
+    const web = isWebTarget(b.target);
+    const caption = plainOf(parseInline(b.caption).text) || (web ? `` : (b.target.split(/[\\/]/).pop() ?? b.target));
+    this.warnings.push(`media:${b.target}`);
+    const framed = this.style.media === `frame`;
+    const inner = framed ? 10 : 0;
+    const innerWidth = this.textWidth - 2 * inner;
+    this.space(lead * 0.4);
+    const start = this.sink.length;
+    if (framed) this.space(5);
+    this.paragraph(`**${labels[b.kind]}**${en ? `:` : ` :`}${caption === `` ? `` : ` ${caption}`}`, `media`, inner, innerWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false });
+    // Adresse en chasse fixe, coupee a la largeur du cadre apres un signe de ponctuation d'adresse quand c'est possible.
+    const charWidth = measureText(`0`, 9, `mono`).width;
+    const columns = Math.max(8, Math.floor(innerWidth / charWidth));
+    let rest = b.target;
+    while (rest.length > 0) {
+      let cut = Math.min(columns, rest.length);
+      if (rest.length > columns) {
+        const at = Math.max(rest.lastIndexOf(`/`, cut), rest.lastIndexOf(`&`, cut), rest.lastIndexOf(`?`, cut), rest.lastIndexOf(`-`, cut), rest.lastIndexOf(`.`, cut));
+        if (at > columns * 0.5) cut = at + 1;
+      }
+      const piece = rest.slice(0, cut);
+      rest = rest.slice(cut);
+      this.push({ kind: `media`, text: piece, x: inner, width: innerWidth, fontSize: 9, height: 12, wordSpacing: 0, align: `left`, breakAfter: INF_PENALTY, runs: [{ text: piece, style: `mono`, ...(web ? { link: b.target } : {}) }] });
+    }
+    if (framed) this.space(5);
+    const end = this.sink.length;
+    // Les lignes du bloc restent ensemble ; le cadre est trace sur toutes.
+    for (let k = start; k < end; k++) {
+      this.sink[k].breakAfter = k === end - 1 ? 0 : INF_PENALTY;
+      if (framed) this.sink[k].frame = { width: this.textWidth, top: k === start, bottom: k === end - 1 };
+    }
+    this.anchorFrom(start, b.id);
+    this.space(lead * 0.5);
+    this.stats.lines++;
   }
 
   // Legende « Figure 1 : texte » ou « Tableau 2 : texte » : etiquette en gras, centree si elle tient sur une ligne.

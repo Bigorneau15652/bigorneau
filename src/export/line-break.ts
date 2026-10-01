@@ -4,13 +4,15 @@
 // demerites est le plus faible. Reimplementation d'apres l'article « Breaking Paragraphs into Lines » (1981) et les
 // paragraphes 813 a 890 de tex.web (programme de reference de TeX), sans reprise de code.
 // Ce module ne depend ni d'Obsidian ni d'une police : il ne manipule que des largeurs.
+import type { MathAsset } from "./math";
 import { AWFUL_DEMERITS, DECENT, Fitness, INF_BAD, INF_PENALTY, LOOSE, TexParams, TIGHT, VERY_LOOSE } from "./tex-params";
 
 export type Item =
   // Mot ou morceau de mot, de largeur fixe.
   // `sup` : appel de note de bas de page en exposant ; `note` : cle de la note appelee.
   // `style` et `link` : police du texte et numero de son lien, que l'algorithme ne lit pas.
-  | { type: `box`; width: number; text: string; sup?: boolean; note?: number; style?: string; link?: number }
+  // `math` : formule en ligne, dessinee a la place du texte.
+  | { type: `box`; width: number; text: string; sup?: boolean; note?: number; style?: string; link?: number; math?: MathAsset }
   // Espace : largeur naturelle, etirement et compression. `fil` indique un etirement infini (fin de paragraphe).
   | { type: `glue`; width: number; stretch: number; shrink: number; fil?: boolean; text: string; style?: string }
   // Endroit de coupure possible. `width` est la largeur ajoutee a la ligne si l'on coupe ici (le tiret d'une cesure).

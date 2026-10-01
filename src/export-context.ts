@@ -1,14 +1,15 @@
 // Export de haute qualite, cote Obsidian : choix de mise en page tires des reglages, chargement des images des figures et
 // libelles du compte rendu. Le calcul de la mise en page est dans src/export (sans Obsidian).
-import { App, TFile } from "obsidian";
-import { imageTargets } from "./export/compose";
+import { App, finishRenderMath, loadMathJax, renderMath, TFile } from "obsidian";
+import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
+import { MathAsset, mathKey, parseMathSvg } from "./export/math";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
 import { t } from "./i18n";
 import type { MmSettings } from "./settings";
 
-export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportPageRefs`>): PageStyle {
-  return { ...DEFAULT_PAGE_STYLE, floats: settings.exportFloats, pageRefs: settings.exportPageRefs };
+export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportPageRefs` | `exportMedia`>): PageStyle {
+  return { ...DEFAULT_PAGE_STYLE, floats: settings.exportFloats, pageRefs: settings.exportPageRefs, media: settings.exportMedia };
 }
 
 // Messages du compte rendu d'export, d'apres les signalements de la composition.
@@ -19,12 +20,15 @@ export function warningLines(warnings: string[]): string[] {
     else if (w.startsWith(`image:`)) out.push(t(`Image introuvable : {0}`, w.slice(6)));
     else if (w.startsWith(`webimage:`)) out.push(t(`Image du web non téléchargée, remplacée par son adresse : {0}`, w.slice(9)));
     else if (w.startsWith(`renvoi:`)) out.push(t(`Renvoi sans cible dans la note : {0}`, w.slice(7)));
+    else if (w.startsWith(`formule:`)) out.push(t(`Formule non dessinée, son texte est gardé tel quel : {0}`, w.slice(8)));
+    else if (w.startsWith(`media:`)) out.push(t(`Média remplacé par un cadre avec son adresse : {0}`, w.slice(6)));
   }
   return out;
 }
 
-export interface LoadedImages {
+export interface LoadedAssets {
   images: Map<string, ImageAsset>;
+  formulas: Map<string, MathAsset>;
   // Adresses a liberer quand l'apercu se ferme.
   urls: string[];
 }
@@ -45,7 +49,8 @@ function fileFor(app: App, target: string, sourcePath: string): TFile | null {
 // Charge les images des figures de la note : lues dans le coffre, decodees par le navigateur, reduites a 300 points par pouce au
 // plus de la taille affichee. Les JPEG en couleurs sont gardes tels quels. Les images absentes ou illisibles n'ont pas d'entree :
 // la composition les remplace par un repere et les signale.
-export async function loadImages(app: App, text: string, fileName: string, sourcePath: string): Promise<LoadedImages> {
+export async function loadAssets(app: App, text: string, fileName: string, sourcePath: string): Promise<LoadedAssets> {
+  const formulas = await loadFormulas(text, fileName);
   const images = new Map<string, ImageAsset>();
   const urls: string[] = [];
   const bounds = figureBounds(A4_SETUP);
@@ -62,7 +67,7 @@ export async function loadImages(app: App, text: string, fileName: string, sourc
       // Image illisible : traitee comme absente.
     }
   }
-  return { images, urls };
+  return { images, formulas, urls };
 }
 
 async function loadOne(app: App, file: TFile, requestedWidth: number | undefined, bounds: { maxWidth: number; maxHeight: number }, urls: string[]): Promise<ImageAsset | null> {
@@ -110,4 +115,39 @@ async function loadOne(app: App, file: TFile, requestedWidth: number | undefined
     if (rgba[q + 3] !== 255) translucent = true;
   }
   return { naturalWidth, naturalHeight, pixelWidth: pw, pixelHeight: ph, kind: `rgb`, data: rgb, ...(translucent ? { alpha } : {}), previewUrl: url };
+}
+
+// Dessin des formules de la note par MathJax (celui d'Obsidian), puis lecture du SVG obtenu. Une formule que MathJax refuse, ou dont
+// le dessin est illisible, n'a pas d'entree : la composition garde son texte et le signale.
+async function loadFormulas(text: string, fileName: string): Promise<Map<string, MathAsset>> {
+  const out = new Map<string, MathAsset>();
+  const targets = formulaTargets(text, fileName);
+  if (targets.length === 0) return out;
+  try {
+    await loadMathJax();
+    for (const { tex, display } of targets) {
+      try {
+        const el = renderMath(tex, display);
+        await finishRenderMath();
+        const svg = el.querySelector(`svg`);
+        if (!svg) continue;
+        let source = svg.outerHTML;
+        // Les contours des symboles peuvent etre dans un cache commun du document plutot que dans le dessin : on les y retrouve.
+        const missing = new Set<string>();
+        for (const m of source.matchAll(/<use\b[^>]*?href="#([^"]+)"/g)) if (!source.includes(`id="${m[1]}"`)) missing.add(m[1]);
+        if (missing.size > 0) {
+          let extra = ``;
+          for (const id of missing) extra += document.getElementById(id)?.outerHTML ?? ``;
+          source = source.replace(/(<svg\b[^>]*>)/, `$1<defs>${extra}</defs>`);
+        }
+        const asset = parseMathSvg(source, tex, display);
+        if (asset) out.set(mathKey(tex, display), asset);
+      } catch {
+        // Formule illisible : traitee comme absente.
+      }
+    }
+  } catch {
+    // MathJax indisponible : aucune formule n'est dessinee.
+  }
+  return out;
 }
