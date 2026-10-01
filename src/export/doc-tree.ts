@@ -28,6 +28,8 @@ export interface DocSection {
 export interface ExportDoc {
   // Nom de la note.
   title: string;
+  // Langue indiquee par la propriete lang (ou langue, language) en en-tete de la note, par exemple fr ou en-GB.
+  language?: string;
   // Texte place avant le premier titre.
   blocks: DocBlock[];
   sections: DocSection[];
@@ -187,7 +189,11 @@ export function parseBlocks(text: string): DocBlock[] {
       flushPara();
       const rows: string[][] = [];
       while (i < lines.length && lines[i].trim().startsWith(`|`)) {
-        if (!TABLE_SEP_RE.test(lines[i])) rows.push(splitRow(lines[i]));
+        if (!TABLE_SEP_RE.test(lines[i])) {
+          const cells = splitRow(lines[i]);
+          // Une ligne dont toutes les cellules sont vides n'apporte rien a l'export.
+          if (cells.some((c) => c !== ``)) rows.push(cells);
+        }
         i++;
       }
       blocks.push({ type: `table`, rows });
@@ -266,5 +272,6 @@ export function buildExportDoc(text: string, fileName: string, opts: ExtractOpti
   if (opts.includeFloats) {
     for (const f of doc.floats) if (opts.includeHidden || !f.meta?.hidden) sections.push(buildSection(f, opts));
   }
-  return { title: doc.root.title, blocks: parseBlocks(doc.root.body), sections };
+  const lang = /^(?:lang|langue|language)[ \t]*:[ \t]*[\x22\x27\x60]?([A-Za-z]{2}(?:-[A-Za-z]+)?)/m.exec(doc.frontmatter);
+  return { title: doc.root.title, ...(lang ? { language: lang[1] } : {}), blocks: parseBlocks(doc.root.body), sections };
 }

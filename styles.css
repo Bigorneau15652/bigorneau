@@ -1414,9 +1414,16 @@
 
 .mmw-export-stats,
 .mmw-export-hint,
-.mmw-export-message {
+.mmw-export-message,
+.mmw-export-toggle {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
+}
+
+.mmw-export-toggle {
+  display: inline-block;
+  margin-top: 4px;
+  cursor: pointer;
 }
 
 .mmw-export-pages {
@@ -1426,31 +1433,83 @@
   gap: 16px;
 }
 
-.mmw-export-page {
+/* La feuille a la taille reduite de la page ; la page, composee en points, est reduite par transformation. */
+.mmw-export-sheet {
   position: relative;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 640px;
-  padding: 28px 24px 36px;
-  background: var(--background-primary-alt);
+  flex: none;
+  overflow: hidden;
+  background: #fff;
+  color: #1a1a1a;
   border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
 
-.mmw-export-page pre {
-  margin: 0;
-  white-space: pre-wrap;
+.mmw-export-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.mmw-export-body {
+  position: absolute;
+}
+
+/* Les lignes sont composees avec les largeurs de la police, sans crenage ni ligature : l'affichage doit leur correspondre. */
+.mmw-row {
+  box-sizing: border-box;
+  white-space: pre;
+  overflow: visible;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "kern" 0, "liga" 0, "clig" 0;
+  text-rendering: geometricPrecision;
+}
+
+.mmw-row-title,
+.mmw-row-heading {
+  font-weight: normal;
+}
+
+.mmw-row-code {
   font-family: var(--font-monospace);
-  font-size: 12px;
-  line-height: 1.5;
-  background: transparent;
+}
+
+.mmw-row-marker {
+  position: absolute;
+}
+
+.mmw-row-list {
+  position: relative;
+}
+
+.mmw-row-quote {
+  background: linear-gradient(#999, #999) 12pt 0 / 2px 100% no-repeat;
 }
 
 .mmw-export-number {
   position: absolute;
-  right: 12px;
-  bottom: 8px;
-  color: var(--text-faint);
-  font-size: 11px;
+  right: 0;
+  bottom: 30pt;
+  left: 0;
+  text-align: center;
+  font-size: 10pt;
+  color: #666;
+}
+
+/* Indicateurs de qualite : lignes tres etirees, comprimees, trop longues, ou finissant par une cesure. */
+.mmw-show-quality .mmw-q-loose {
+  background: rgba(255, 170, 0, 0.35);
+}
+
+.mmw-show-quality .mmw-q-tight {
+  background: rgba(60, 130, 255, 0.3);
+}
+
+.mmw-show-quality .mmw-q-over {
+  background: rgba(255, 0, 0, 0.4);
+}
+
+.mmw-show-quality .mmw-q-hyph {
+  box-shadow: inset -3px 0 0 rgba(0, 150, 60, 0.7);
 }
