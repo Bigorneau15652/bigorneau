@@ -7,7 +7,9 @@ import { revealRange } from "./reveal";
 import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
-import { activeLines, applyLineEdits, flattenDoc, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
+import { resolveFixed } from "./fixed";
+import { branchToFloat, createFloat, floatToBranch, moveFloat } from "./float";
+import { activeLines, applyLineEdits, flattenDoc, isFloatKey, isFloatRoot, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
 import { insertLink, insertWebLink, linkHeading, MapLink, moveLinkTo, parseLinks, removeLink, removeWebLink, replaceLink, replaceWebLink, sameHeading, WebLink, webLinks } from "./links";
 import type { DialogValues } from "./node-dialog";
 import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
@@ -266,15 +268,44 @@ export class MindmapView extends ItemView {
       }
       let parentKey = edit.key;
       let index = Number.MAX_SAFE_INTEGER;
-      if (edit.kind === `pasteAfter`) {
+      if (edit.kind === `pasteAfter` && !isFloatRoot(edit.key)) {
         const parts = edit.key.split(`.`);
         index = Number(parts.pop()) + 1;
         parentKey = parts.join(`.`);
       }
-      result = edit.kind === `pasteAfter` && edit.key === `r` ? null : insertBranches(before, file.name, parentKey, index, clip);
+      result = edit.kind === `pasteAfter` && (edit.key === `r` || isFloatRoot(edit.key)) ? null : insertBranches(before, file.name, parentKey, index, clip);
       if (!result) new Notice(t(`Le presse-papiers ne contient pas de titres Markdown à coller ici (ou le niveau 6 serait dépassé).`));
+    } else if (edit.kind === `createFloat`) {
+      result = createFloat(before, file.name, this.plugin.settings.floatLevel, { x: edit.x, y: edit.y });
+    } else if (edit.kind === `float`) {
+      // Un titre de la carte tire a l'exterieur devient un sujet flottant ; un sujet flottant change de place.
+      const pos = { x: edit.x, y: edit.y };
+      result = isFloatRoot(edit.key) ? moveFloat(before, file.name, edit.key, pos) : branchToFloat(before, file.name, edit.key, pos);
+      if (!result) new Notice(t(`Ce titre ne peut pas devenir un sujet flottant.`));
     } else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
     else if (edit.kind === `move`) {
+      if (isFloatRoot(edit.key) && !edit.dir) {
+        // Un sujet flottant depose pres de la structure entre dans la carte : son niveau s'adapte a sa nouvelle place.
+        result = floatToBranch(before, file.name, edit.key, edit.parentKey ?? `r`, edit.index ?? 0);
+        if (!result) new Notice(t(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`));
+        if (!result) {
+          renderer.resetPreview();
+          return;
+        }
+        await this.writeText(file, before, result.text);
+        const doc = parseNote(result.text, file.name);
+        this.doc = doc;
+        renderer.setDoc(doc, this.mapKey, serializeNote(doc) === result.text);
+        if (result.key) {
+          this.selectedKey = result.key;
+          renderer.reveal(result.key);
+          renderer.select(result.key, false);
+          await this.revealInNote(result.key, false);
+          this.updateActiveRange();
+        }
+        renderer.focus();
+        return;
+      }
       const target = edit.dir
         ? arrowTarget(parseNote(before, file.name), edit.key, edit.dir)
         : { parentKey: edit.parentKey ?? `r`, index: edit.index ?? 0 };
@@ -285,6 +316,11 @@ export class MindmapView extends ItemView {
         renderer.resetPreview();
         return;
       }
+    } else if (edit.kind === `sibling` && isFloatRoot(edit.key)) {
+      // Entree sur un sujet flottant : un autre sujet flottant, juste a cote.
+      const node = nodeByKey(parseNote(before, file.name), edit.key);
+      const at = node?.float;
+      result = createFloat(before, file.name, this.plugin.settings.floatLevel, { x: (at?.x ?? 0) + 40, y: (at?.y ?? 0) + 50 });
     } else {
       result = addNode(before, file.name, edit.key, edit.kind === `sibling` ? `sibling` : `child`);
       if (!result) new Notice(t(`Le niveau de titre maximum (6) est atteint : impossible d'ajouter un sous-titre.`));
@@ -307,7 +343,7 @@ export class MindmapView extends ItemView {
       this.updateActiveRange();
     }
     // Une case creee s'ouvre en saisie ; apres les autres operations, le clavier reste sur la carte.
-    if (edit.kind === `child` || edit.kind === `sibling`) {
+    if (edit.kind === `child` || edit.kind === `sibling` || edit.kind === `createFloat`) {
       if (key) renderer.startRename(key);
     } else if (edit.kind !== `rename`) {
       renderer.focus();
@@ -829,6 +865,35 @@ export class MindmapView extends ItemView {
     this.plugin.addFixed(leaf, { path: file.path, key, title: node.title });
   }
 
+  // Note et chapitre que montre la note dynamique en ce moment (pour la figer en note fixe).
+  currentChapter(): { path: string; key: string; title: string } | null {
+    const file = this.currentFile;
+    const key = this.selectedKey;
+    if (!file || !key || !this.doc) return null;
+    const node = nodeByKey(this.doc, key);
+    if (!node || isHiddenKey(this.doc, key)) return null;
+    return { path: file.path, key, title: node.title };
+  }
+
+  // Une note fixe devient la note dynamique : la carte reprend son chapitre et la suit de nouveau.
+  async takeOver(leaf: WorkspaceLeaf, target: { path: string; key: string; title: string }) {
+    const file = this.app.vault.getAbstractFileByPath(target.path);
+    if (!(file instanceof TFile)) return;
+    this.noteLeaf = leaf;
+    this.notePosition = this.plugin.settings.panePosition;
+    if (this.plugin.lastFile?.path !== file.path) this.plugin.lastFile = file;
+    await this.refresh();
+    const renderer = this.renderer;
+    if (!renderer || !this.doc) return;
+    const found = resolveFixed(this.doc, target, false);
+    const key = found ? found.key : nodeByKey(this.doc, target.key) ? target.key : `r`;
+    this.selectedKey = key;
+    this.lastNoteLine = -1;
+    renderer.reveal(key);
+    renderer.select(key, false);
+    this.updateActiveRange();
+  }
+
   getNoteView(): MarkdownView | null {
     const view = this.noteLeaf?.view;
     return view instanceof MarkdownView ? view : null;
@@ -926,7 +991,9 @@ export class MindmapView extends ItemView {
     // Titre masque selectionne : rien n'est actif dans la note, tout y est grise.
     const hiddenSelection = !!this.selectedKey && !!this.doc && isHiddenKey(this.doc, this.selectedKey);
     // Le chapitre actif sert au grisage et au masquage des chapitres inactifs.
-    const range = (s.contrastEnabled || s.hideInactive) && this.selectedKey && this.doc && !hiddenSelection ? activeLines(this.doc, this.selectedKey, s.includeSubtitles) : null;
+    // Un sujet flottant n'apparait dans la note que lorsqu'il est actif : le reste de la note est alors masque.
+    const inFloat = !!this.selectedKey && isFloatKey(this.selectedKey);
+    const range = (s.contrastEnabled || s.hideInactive || inFloat) && this.selectedKey && this.doc && !hiddenSelection ? activeLines(this.doc, this.selectedKey, s.includeSubtitles) : null;
     if (hiddenSelection && s.contrastEnabled) {
       cm.dispatch({ effects: [...hideOn, setHideInactive.of(false), setActiveRange.of({ from: 0, to: 0 })] });
     } else if (!range) {
@@ -935,7 +1002,7 @@ export class MindmapView extends ItemView {
       const d = cm.state.doc;
       const from = d.line(Math.min(range.startLine, d.lines - 1) + 1).from;
       const to = range.endLine >= d.lines ? d.length : d.line(range.endLine + 1).from;
-      cm.dispatch({ effects: [...hideOn, setHideInactive.of(s.hideInactive), setActiveRange.of({ from, to })] });
+      cm.dispatch({ effects: [...hideOn, setHideInactive.of(s.hideInactive || inFloat), setActiveRange.of({ from, to })] });
     }
     moveCursorOutOfHidden(cm);
   }

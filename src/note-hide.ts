@@ -33,6 +33,11 @@ function compute(state: EditorState, meta: boolean, inactive: boolean): Decorati
     const parsed = parseNote(text, `note.md`);
     for (const r of hiddenLineRanges(parsed)) ranges.push({ start: r.start, end: Math.max(r.start, r.end) });
     if (meta) for (const line of metaLineNumbers(parsed)) ranges.push({ start: line, end: line });
+    // La zone des sujets flottants est masquee dans la note, sauf quand le chapitre actif est un sujet flottant.
+    if (parsed.floatStart !== undefined) {
+      const zoneFrom = doc.line(Math.min(parsed.floatStart + 1, doc.lines)).from;
+      if (!(active && active.from >= zoneFrom)) ranges.push({ start: parsed.floatStart, end: doc.lines - 1 });
+    }
   }
   // Seul le chapitre actif reste visible : tout ce qui le precede et tout ce qui le suit est masque.
   if (active) {

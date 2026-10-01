@@ -1,6 +1,6 @@
 // Affichage de la carte : cases, branches, zoom, deplacement, pliage et selection.
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
-import { computeStats, flattenDoc, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
+import { computeStats, flattenDoc, isFloatKey, isFloatRoot, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
 import { t } from "./i18n";
 import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
 import { buildLayoutTree, Bounds, childIndent, computeLayout, computeListLayout, flatten, listIndent, LNode, sequential, trunkX } from "./layout";
@@ -17,7 +17,7 @@ import { describeScope, globalStyle, NodeStyle, resolveStyle, StylePatch } from 
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
 export interface MapEdit {
-  kind: `child` | `sibling` | `rename` | `delete` | `move` | `copy` | `cut` | `paste` | `pasteAfter` | `duplicate`;
+  kind: `child` | `sibling` | `rename` | `delete` | `move` | `copy` | `cut` | `paste` | `pasteAfter` | `duplicate` | `createFloat` | `float`;
   key: string;
   keys: string[];
   title?: string;
@@ -25,6 +25,9 @@ export interface MapEdit {
   parentKey?: string;
   index?: number;
   dir?: MoveDir;
+  // Sujets flottants : position sur la carte (absente dans la vue Liste).
+  x?: number;
+  y?: number;
 }
 
 export interface MapCallbacks {
@@ -139,6 +142,11 @@ export class MapRenderer {
   private selected: string | null = null;
   private selectedKeys = new Set<string>();
   private root: LNode | null = null;
+  private floatRoots: LNode[] = [];
+  // Cadre de la carte principale (sans les sujets flottants) et, en vue Liste, ordonnee du trait qui ouvre la zone flottante.
+  private mainBounds: Bounds | null = null;
+  private floatZoneY = 0;
+  private lastBg: { time: number; x: number; y: number } | null = null;
   private list: LNode[] = [];
   private els = new Map<string, HTMLElement>();
   private bounds: Bounds | null = null;
@@ -192,6 +200,8 @@ export class MapRenderer {
     keyOf: Map<MmNode, string>;
     targetId: string;
     target: MoveTarget | null;
+    // Depot libre (hors de la structure) : le titre devient un sujet flottant, ou le sujet flottant change de place.
+    free: { x: number; y: number } | null;
   } | null = null;
   private previewDoc: MmDoc | null = null;
   private previewCollapsed: Set<string> | null = null;
@@ -344,6 +354,16 @@ export class MapRenderer {
   private styleOf(n: LNode): NodeStyle {
     const s = this.getSettings();
     const level = n.depth === 0 ? 0 : n.node.level;
+    if (isFloatRoot(n.key)) {
+      // Un sujet flottant a ses propres reglages par defaut, que le style de la case peut encore modifier.
+      const own: StylePatch = {};
+      if (s.floatStrokeColor) own.strokeColor = s.floatStrokeColor;
+      if (s.floatFillColor) own.fillColor = s.floatFillColor;
+      if (s.floatStrokeDash) own.strokeDash = s.floatStrokeDash;
+      if (s.floatFontFamily) own.fontFamily = s.floatFontFamily;
+      if (s.floatShape !== `oval`) own.corners = s.floatShape;
+      return resolveStyle({ ...globalStyle(s), ...own }, undefined, level, n.node.meta?.style);
+    }
     return resolveStyle(globalStyle(s), this.doc?.root.meta?.levels, level, n.node.meta?.style);
   }
 
@@ -414,6 +434,9 @@ export class MapRenderer {
     this.worldEl.replaceChildren(this.svgEl);
     this.root = buildLayoutTree((this.previewDoc ?? this.doc).root, `r`, 0, this.previewCollapsed ?? this.collapsed);
     this.list = flatten(this.root);
+    const collapsedSet = this.previewCollapsed ?? this.collapsed;
+    this.floatRoots = (this.previewDoc ?? this.doc).floats.map((f, i) => buildLayoutTree(f, `f${i}`, 1, collapsedSet));
+    for (const fr of this.floatRoots) this.list.push(...flatten(fr));
     this.links = parseLinks(this.previewDoc ?? this.doc!, this.callbacks.getFileName?.() ?? `Note.md`);
     if (this.pendingLink && this.links.some((l) => this.linkId(l) === this.pendingLink)) {
       this.selectedLink = this.pendingLink;
@@ -436,7 +459,7 @@ export class MapRenderer {
     this.list.forEach((n, i) => {
       const el = this.createNodeEl(n, s);
       if (list) {
-        el.style.width = `${Math.max(40, this.listWidth - n.depth * indent)}px`;
+        el.style.width = `${Math.max(40, this.listWidth - (isFloatKey(n.key) ? n.depth - 1 : n.depth) * indent)}px`;
         if (i % 2 === 1) el.classList.add(`mmw-odd`);
       }
       this.worldEl.appendChild(el);
@@ -448,6 +471,17 @@ export class MapRenderer {
       n.h = el.offsetHeight;
     }
     this.bounds = list ? computeListLayout(this.root, indent, this.listWidth) : computeLayout(this.root, s.compactness);
+    this.mainBounds = { ...this.bounds };
+    this.layoutFloats(s, list, indent);
+    if (list) {
+      // Trait qui ouvre la zone des sujets flottants.
+      const sep = document.createElement(`div`);
+      sep.className = `mmw-float-sep`;
+      sep.title = t(`Sujets flottants : glissez un titre ici pour le sortir de la carte`);
+      sep.style.top = `${this.floatZoneY}px`;
+      sep.style.width = `${this.listWidth}px`;
+      this.worldEl.appendChild(sep);
+    }
     for (const n of this.list) {
       const el = this.els.get(n.key)!;
       el.style.left = `${n.x}px`;
@@ -493,11 +527,54 @@ export class MapRenderer {
     else this.applyTransform();
   }
 
+  // Sujets flottants. Carte : chaque sujet est pose a sa position (ceux qui n'en ont pas encore sont ranges a droite de la
+  // carte). Liste : ils sont empiles sous un trait, dans une zone qui reste visible meme vide.
+  private layoutFloats(s: MmSettings, list: boolean, indent: number): void {
+    const b = this.bounds!;
+    this.floatZoneY = 0;
+    if (list) {
+      const top = b.maxY + 16;
+      this.floatZoneY = top;
+      let y = top + 12;
+      for (const fr of this.floatRoots) {
+        for (const n of flatten(fr)) {
+          n.x = (n.depth - 1) * indent;
+          n.y = y;
+          n.w = Math.max(40, this.listWidth - n.x);
+          y += n.h + 2;
+        }
+      }
+      b.maxY = Math.max(y, top + 40);
+      return;
+    }
+    let autoY = b.minY;
+    const autoX = b.maxX + 90;
+    this.floatRoots.forEach((fr) => {
+      const rel = computeLayout(fr, s.compactness);
+      const pos = fr.node.float;
+      const hasPos = pos?.x !== undefined && pos?.y !== undefined;
+      const dx = hasPos ? pos!.x! : autoX;
+      const dy = hasPos ? pos!.y! : autoY;
+      for (const n of flatten(fr)) {
+        n.x += dx;
+        n.y += dy;
+      }
+      if (!hasPos) autoY += rel.maxY - rel.minY + 30;
+      for (const n of flatten(fr)) {
+        b.minX = Math.min(b.minX, n.x);
+        b.minY = Math.min(b.minY, n.y);
+        b.maxX = Math.max(b.maxX, n.x + n.w);
+        b.maxY = Math.max(b.maxY, n.y + n.h);
+      }
+    });
+  }
+
   private createNodeEl(n: LNode, s: MmSettings): HTMLElement {
     const el = document.createElement(`div`);
     el.className = `mmw-node mmw-depth-${Math.min(n.depth, 3)}`;
     el.dataset.key = n.key;
     if (this.isHidden(n)) el.classList.add(`mmw-hidden`);
+    if (isFloatRoot(n.key)) el.classList.add(`mmw-float-root`, `mmw-float-${s.floatShape}`);
     const st = this.styleOf(n);
     el.style.setProperty(`--mmw-node-color`, st.strokeColor || `var(--text-normal)`);
     const list = s.viewMode === `list`;
@@ -596,7 +673,7 @@ export class MapRenderer {
 
   // Oeil de masquage, en haut a droite de la case. Pas d'oeil sur la racine ni sur un sous-titre masque par son parent.
   private createEye(n: LNode): HTMLElement | null {
-    if (n.depth < 1) return null;
+    if (n.depth < 1 || isFloatRoot(n.key)) return null;
     const own = !!n.node.meta?.hidden;
     if (!own && n.parent && this.isHidden(n.parent)) return null;
     const el = document.createElement(`div`);
@@ -668,7 +745,8 @@ export class MapRenderer {
     for (const n of this.list) {
       const st = styleOf(n);
       if (!st.showFrames) continue;
-      const shape = framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, st.corners, st.roughness);
+      const oval = isFloatRoot(n.key) && s.floatShape === `oval`;
+      const shape = framePath(n.x, n.y, n.w, n.h, n.key, n.depth === 0, st.corners, st.roughness, oval);
       const cls = `mmw-frame` + (this.isHidden(n) ? ` mmw-frame-hidden` : ``);
       const css = strokeCss(st, n.depth === 0 ? 1.45 : 1) + `fill:${st.fillColor || `transparent`};`;
       if (shape.kind === `path`) this.path(shape.d, cls, css);
@@ -1279,6 +1357,7 @@ export class MapRenderer {
             keyOf: new Map(),
             targetId: ``,
             target: null,
+            free: null,
           };
         }
         const now = Date.now();
@@ -1393,7 +1472,21 @@ export class MapRenderer {
       return;
     }
     if (!this.drag) return;
-    if (!this.drag.moved) this.select(null);
+    if (!this.drag.moved) {
+      // Double clic sur le fond : nouveau sujet flottant a cet endroit (detection maison, comme pour les cases).
+      const now = Date.now();
+      const last = this.lastBg;
+      if (last && now - last.time < 450 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 8) {
+        this.lastBg = null;
+        const rect = this.mapEl.getBoundingClientRect();
+        const wx = (e.clientX - rect.left - this.tx) / this.scale;
+        const wy = (e.clientY - rect.top - this.ty) / this.scale;
+        this.callbacks.onEdit?.({ kind: `createFloat`, key: `r`, keys: [], ...(this.isList() ? {} : { x: wx, y: wy }) });
+      } else {
+        this.lastBg = { time: now, x: e.clientX, y: e.clientY };
+        this.select(null);
+      }
+    }
     this.drag = null;
     this.mapEl.classList.remove(`mmw-panning`);
     if (this.mapEl.hasPointerCapture(e.pointerId)) this.mapEl.releasePointerCapture(e.pointerId);
@@ -1609,7 +1702,7 @@ export class MapRenderer {
     const d = this.nodeDrag!;
     if (!d.started) {
       // La racine ne se deplace pas : seul le clic (saisie du titre) lui est utile.
-      if (d.key === `r` || Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= 5) return;
+      if (d.key === `r` || (isFloatKey(d.key) && !isFloatRoot(d.key)) || Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= 5) return;
       this.startNodeDrag();
       if (!d.started) return;
     }
@@ -1619,6 +1712,23 @@ export class MapRenderer {
       d.ghost.style.left = `${left - rect.left}px`;
       d.ghost.style.top = `${e.clientY - d.grabY - rect.top}px`;
     }
+    // Hors de la structure : depot libre. Pres d'elle : la case s'y integre a l'endroit montre.
+    const wx = (e.clientX - rect.left - this.tx) / this.scale;
+    const wy = (e.clientY - rect.top - this.ty) / this.scale;
+    const outside = this.isList() ? wy > this.floatZoneY : this.mainBounds ? !(wx >= this.mainBounds.minX - 70 && wx <= this.mainBounds.maxX + 70 && wy >= this.mainBounds.minY - 50 && wy <= this.mainBounds.maxY + 50) : false;
+    if (outside) {
+      // Dans la zone flottante de la liste, un sujet flottant ne se deplace pas : il n'y a pas d'ordre a choisir.
+      d.free = this.isList() ? (isFloatKey(d.key) ? null : { x: 0, y: 0 }) : { x: (left - rect.left - this.tx) / this.scale, y: (e.clientY - d.grabY - rect.top - this.ty) / this.scale };
+      d.ghost?.classList.toggle(`mmw-ghost-float`, d.free !== null);
+      d.ghost?.classList.toggle(`mmw-ghost-invalid`, d.free === null);
+      if (d.targetId !== `free`) {
+        d.targetId = `free`;
+        this.showPreview(null);
+      }
+      return;
+    }
+    d.free = null;
+    d.ghost?.classList.remove(`mmw-ghost-float`);
     const target = this.isList() ? this.dropTargetList(e.clientY, left, rect) : this.dropTarget(e.clientY, left, rect);
     const id = target ? `${target.parentKey}|${target.index}` : `none`;
     if (id === d.targetId) return;
@@ -1633,7 +1743,7 @@ export class MapRenderer {
     const d = this.nodeDrag!;
     if (!this.doc || !this.root) return null;
     const shown = this.previewDragKey ?? d.key;
-    const rows = this.list.filter((n) => n.key !== shown && !n.key.startsWith(`${shown}.`));
+    const rows = this.list.filter((n) => !isFloatKey(n.key) && n.key !== shown && !n.key.startsWith(`${shown}.`));
     if (rows.length === 0) return null;
     const wy = (clientY - rect.top - this.ty) / this.scale;
     let index = 0;
@@ -1672,7 +1782,7 @@ export class MapRenderer {
     const d = this.nodeDrag!;
     this.dropLine = null;
     if (!this.doc || !this.root) return null;
-    const rows = this.list.filter((n) => n.key !== d.key && !n.key.startsWith(`${d.key}.`));
+    const rows = this.list.filter((n) => !isFloatKey(n.key) && n.key !== d.key && !n.key.startsWith(`${d.key}.`));
     if (rows.length === 0) return null;
     const wy = (clientY - rect.top - this.ty) / this.scale;
     let index = 0;
@@ -1765,7 +1875,10 @@ export class MapRenderer {
     this.dropLineEl = null;
     if (!d.started) return;
     const target = cancel ? null : d.target;
-    if (target && this.isList()) {
+    if (!cancel && d.free) {
+      this.resetPreview();
+      this.callbacks.onEdit?.({ kind: `float`, key: d.key, keys: [d.key], ...(this.isList() ? {} : d.free) });
+    } else if (target && this.isList()) {
       this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: [d.key], parentKey: target.parentKey, index: target.index });
     } else if (target && this.previewDoc) {
       // L'apercu reste affiche jusqu'a ce que la note ait ete modifiee et la carte relue.

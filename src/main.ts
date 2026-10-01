@@ -2,7 +2,7 @@ import type { EditorView } from "@codemirror/view";
 import { setLanguage, t } from "./i18n";
 import { debounce, Editor, MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
-import { applyFixedState, clearFixedState } from "./fixed-editor";
+import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
@@ -78,6 +78,7 @@ export default class MindmapWritingPlugin extends Plugin {
     this.registerView(VIEW_TYPE_MINDMAP, (leaf) => new MindmapView(leaf, this));
 
     this.registerEvent(this.app.workspace.on(`layout-change`, () => this.syncFixed()));
+    this.registerEvent(this.app.workspace.on(`active-leaf-change`, (leaf) => void this.swapIfFixed(leaf)));
     this.registerEvent(this.app.workspace.on(`file-open`, () => this.syncFixed()));
     this.app.workspace.onLayoutReady(() => {
       this.syncFixed();
@@ -270,11 +271,51 @@ export default class MindmapWritingPlugin extends Plugin {
   // Apres une modification venue d'ailleurs (note dynamique, carte) : le chapitre est recalcule quand on n'ecrit pas dedans.
   private refreshFixedLater = debounce(
     (cm: EditorView) => {
-      if (this.editorViews.has(cm) && !cm.hasFocus) this.applyFixed(cm);
+      if (!this.editorViews.has(cm)) return;
+      if (!cm.hasFocus) {
+        this.applyFixed(cm);
+        return;
+      }
+      // On ecrit dans la note fixe : si le titre est renomme, la note fixe le suit.
+      const f = this.fixedFor(cm);
+      const target = f ? currentFixedTarget(cm) : null;
+      if (f && target && (target.key !== f.entry.key || target.title !== f.entry.title)) {
+        f.entry.key = target.key;
+        f.entry.title = target.title;
+        this.persistFixed();
+      }
     },
     800,
     true
   );
+
+  // Un clic dans une note fixe la rend dynamique : la note qui l'etait devient fixe sur le chapitre qu'elle montrait.
+  private swapping = false;
+
+  private async swapIfFixed(leaf: WorkspaceLeaf | null) {
+    if (!leaf || this.swapping || this.fixed.length === 0) return;
+    const f = this.fixed.find((x) => this.fixedLeaf(x) === leaf);
+    if (!f) return;
+    let view: MindmapView | null = null;
+    this.forEachView((v) => {
+      if (!view) view = v;
+    });
+    const map = view as MindmapView | null;
+    if (!map) return;
+    const dynamic = map.getNoteLeaf();
+    if (dynamic === leaf) return;
+    const attached = this.app.workspace.getLeavesOfType(`markdown`);
+    const previous = dynamic && attached.includes(dynamic) ? map.currentChapter() : null;
+    this.swapping = true;
+    try {
+      this.removeFixed(f);
+      for (const cm of this.editorViews) if (leaf.view.containerEl.contains(cm.dom)) clearFixedState(cm);
+      await map.takeOver(leaf, f.entry);
+      if (dynamic && previous) this.addFixed(dynamic, previous);
+    } finally {
+      this.swapping = false;
+    }
+  }
 
   // Volets fermes ou changes de note : retires de la liste. Si la note dynamique est fermee alors qu'il reste des notes
   // fixes, la plus recente devient la note dynamique : il y a toujours une vue dynamique.
