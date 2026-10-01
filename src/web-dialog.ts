@@ -1,6 +1,8 @@
 // Petite fenetre de saisie d'un lien web ou d'une video integree : adresse, texte facultatif, integration.
 // N'utilise que le DOM standard, pour pouvoir etre verifiee hors d'Obsidian.
 
+import { t } from "./i18n";
+
 export interface WebDialogOptions {
   title: string;
   url: string;
@@ -46,19 +48,19 @@ export class WebDialog {
     this.urlInput.value = opts.url;
     this.urlInput.placeholder = `https://…`;
     this.urlInput.spellcheck = false;
-    field(`Adresse (page web, vidéo YouTube…)`, this.urlInput);
+    field(t(`Adresse (page web, vidéo YouTube…)`), this.urlInput);
 
     this.labelInput = el(`input`, `mmw-dlg-input mmw-web-label`);
     this.labelInput.type = `text`;
     this.labelInput.value = opts.label;
-    this.labelInput.placeholder = `Facultatif`;
-    field(`Texte du lien`, this.labelInput);
+    this.labelInput.placeholder = t(`Facultatif`);
+    field(t(`Texte du lien`), this.labelInput);
 
     const embedWrap = el(`label`, `mmw-web-embed`);
     this.embedInput = el(`input`, `mmw-web-embed-input`);
     this.embedInput.type = `checkbox`;
     this.embedInput.checked = opts.embed;
-    embedWrap.append(this.embedInput, el(`span`, ``, ` Intégrer dans la note (vidéo ou image) au lieu d'un simple lien`));
+    embedWrap.append(this.embedInput, el(`span`, ``, t(` Intégrer dans la note (vidéo ou image) au lieu d'un simple lien`)));
     this.root.append(embedWrap);
 
     this.errorEl = el(`div`, `mmw-web-error`);
@@ -67,15 +69,15 @@ export class WebDialog {
 
     const actions = el(`div`, `mmw-dlg-actions`);
     if (opts.onDelete) {
-      const del = el(`button`, `mmw-dlg-btn mod-warning`, `Supprimer le lien`);
+      const del = el(`button`, `mmw-dlg-btn mod-warning`, t(`Supprimer le lien`));
       del.type = `button`;
       del.addEventListener(`click`, () => this.finish(() => opts.onDelete!()));
       actions.append(del);
     }
-    const cancel = el(`button`, `mmw-dlg-btn`, `Annuler`);
+    const cancel = el(`button`, `mmw-dlg-btn`, t(`Annuler`));
     cancel.type = `button`;
     cancel.addEventListener(`click`, () => this.cancel());
-    const ok = el(`button`, `mmw-dlg-btn mod-cta`, `Enregistrer`);
+    const ok = el(`button`, `mmw-dlg-btn mod-cta`, t(`Enregistrer`));
     ok.type = `button`;
     ok.addEventListener(`click`, () => this.submit());
     actions.append(cancel, ok);
@@ -124,7 +126,7 @@ export class WebDialog {
   private submit(): void {
     const url = this.urlInput.value.trim();
     if (!URL_RE.test(url)) {
-      this.errorEl.textContent = `L'adresse doit commencer par http:// ou https://.`;
+      this.errorEl.textContent = t(`L'adresse doit commencer par http:// ou https://.`);
       this.errorEl.hidden = false;
       this.urlInput.focus();
       return;

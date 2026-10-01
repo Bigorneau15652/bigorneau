@@ -1194,3 +1194,170 @@
   gap: 6px;
   padding: 7px 6px;
 }
+
+/* Etiquettes au survol : nom du bouton puis description */
+.mmw-tip {
+  white-space: normal;
+  width: max-content;
+}
+
+.mmw-tip-name {
+  font-weight: var(--font-semibold, 600);
+}
+
+.mmw-tip-desc {
+  margin-top: 2px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* Bouton d'aide en bas a droite de la carte et sa fenetre */
+.mmw-help {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.mmw-help-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+  background: var(--background-secondary);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.3));
+}
+
+.mmw-help-panel {
+  box-sizing: border-box;
+  width: min(380px, calc(100vw - 40px));
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.3));
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-help-title {
+  margin: 8px 0 3px;
+  color: var(--text-muted);
+  font-weight: var(--font-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.85em;
+}
+
+.mmw-help-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.mmw-help-keys {
+  flex: none;
+  min-width: 128px;
+  color: var(--text-normal);
+  font-weight: var(--font-medium, 500);
+}
+
+.mmw-help-what {
+  color: var(--text-muted);
+}
+
+/* Question Oui ou Non du panneau de choix de note */
+.mmw-picker-confirm {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+/* Page des reglages : chapitres repliables */
+.mmw-settings .mmw-chapter {
+  margin: 0 0 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+}
+
+.mmw-settings .mmw-chapter-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+  padding-left: 30px;
+}
+
+.mmw-settings .mmw-chapter-summary::-webkit-details-marker {
+  display: none;
+}
+
+.mmw-settings .mmw-chapter-summary::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 16px;
+  border-style: solid;
+  border-width: 5px 0 5px 7px;
+  border-color: transparent transparent transparent var(--text-muted);
+  transition: transform 0.12s ease;
+}
+
+.mmw-settings .mmw-chapter[open] > .mmw-chapter-summary::before {
+  transform: rotate(90deg);
+}
+
+.mmw-settings .mmw-chapter-title {
+  font-weight: var(--font-semibold, 600);
+  font-size: var(--font-ui-medium);
+}
+
+.mmw-settings .mmw-chapter-desc {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-settings .mmw-chapter-body {
+  padding: 0 12px 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Galerie d'icones de liens */
+.mmw-icon-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 260px;
+}
+
+.mmw-icon-choice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--link-color, #7b6cd9);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.mmw-icon-choice:hover {
+  background: var(--background-modifier-hover);
+}
+
+.mmw-icon-choice.mmw-icon-on {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}

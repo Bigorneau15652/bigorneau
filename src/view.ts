@@ -1,4 +1,5 @@
 import { EditorView } from "@codemirror/view";
+import { t } from "./i18n";
 import { setActiveRange, tempLineField } from "./active-chapter";
 import { moveCursorOutOfHidden, setHideEnabled, setHideInactive, setHideMeta } from "./note-hide";
 import { openBlankLine, releaseTempLine } from "./temp-line";
@@ -24,12 +25,12 @@ class ConfirmDeleteModal extends Modal {
 
   onOpen() {
     const r = this.report;
-    const what = r.nodes === 1 ? `« ${r.titles[0]} »` : `${r.nodes} titres`;
-    this.titleEl.setText(`Supprimer ${what} ?`);
+    const what = r.nodes === 1 ? `« ${r.titles[0]} »` : t(`{0} titres`, r.nodes);
+    this.titleEl.setText(t(`Supprimer {0} ?`, what));
     const parts: string[] = [];
-    if (r.subtitles > 0) parts.push(`${r.subtitles} sous-titre${r.subtitles > 1 ? `s` : ``}`);
-    parts.push(`environ ${r.words} mot${r.words > 1 ? `s` : ``} de texte`);
-    this.contentEl.createEl(`p`, { text: `Cette suppression retire aussi ${parts.join(` et `)}. Vous pourrez l'annuler avec l'historique de la note (Cmd ou Ctrl + Z).` });
+    if (r.subtitles > 0) parts.push(r.subtitles > 1 ? t(`{0} sous-titres`, r.subtitles) : t(`1 sous-titre`));
+    parts.push(r.words > 1 ? t(`environ {0} mots de texte`, r.words) : t(`environ 1 mot de texte`));
+    this.contentEl.createEl(`p`, { text: t(`Cette suppression retire aussi {0}. Vous pourrez l'annuler avec l'historique de la note (Cmd ou Ctrl + Z).`, parts.join(t(` et `))) });
     let confirmButton: HTMLElement | null = null;
     new Setting(this.contentEl)
       .addButton((b) => {
@@ -81,7 +82,7 @@ export class MindmapView extends ItemView {
   }
 
   getDisplayText(): string {
-    return `Mindmap Note Writing`;
+    return t(`Mindmap Note Writing`);
   }
 
   getIcon(): string {
@@ -126,6 +127,8 @@ export class MindmapView extends ItemView {
       onLinkExternal: (from, path, heading, replace) => this.queue(() => this.createExternalLink(from, path, heading, replace)),
       getVaultFiles: () => this.vaultFiles(),
       getHeadings: (path) => this.vaultHeadings(path),
+      createNote: (name) => this.createNote(name),
+      getNewNoteFolder: () => this.newNoteFolder(),
       onWebOpen: (links, event) => this.openWeb(links, event),
       onLinkDelete: (link) => this.queue(() => this.deleteLink(link)),
       onLinkOpen: (links, event) => this.openLinks(links, event),
@@ -212,13 +215,13 @@ export class MindmapView extends ItemView {
     if (edit.kind === `copy` || edit.kind === `cut`) {
       const markdown = extractBranches(await readText(), file.name, edit.keys);
       if (markdown === null) {
-        new Notice(`Le nom de la note ne se copie pas : sélectionnez un titre.`);
+        new Notice(t(`Le nom de la note ne se copie pas : sélectionnez un titre.`));
         return;
       }
       try {
         await navigator.clipboard.writeText(markdown);
       } catch {
-        new Notice(`Impossible d'écrire dans le presse-papiers.`);
+        new Notice(t(`Impossible d'écrire dans le presse-papiers.`));
         return;
       }
       const count = countHeadings(markdown);
@@ -229,7 +232,7 @@ export class MindmapView extends ItemView {
     if (edit.kind === `delete`) {
       const report = describeDeletion(await readText(), file.name, edit.keys);
       if (report.nodes === 0) {
-        new Notice(`La racine ne peut pas être supprimée.`);
+        new Notice(t(`La racine ne peut pas être supprimée.`));
         return;
       }
       const ok = await new Promise<boolean>((resolve) => new ConfirmDeleteModal(this.app, report, resolve).open());
@@ -250,13 +253,13 @@ export class MindmapView extends ItemView {
     if (edit.kind === `delete` || edit.kind === `cut`) result = deleteNodes(before, file.name, edit.keys);
     else if (edit.kind === `duplicate`) {
       result = duplicateNodes(before, file.name, edit.keys);
-      if (!result) new Notice(`Le nom de la note ne se duplique pas : sélectionnez un titre.`);
+      if (!result) new Notice(t(`Le nom de la note ne se duplique pas : sélectionnez un titre.`));
     } else if (edit.kind === `paste` || edit.kind === `pasteAfter`) {
       let clip = ``;
       try {
         clip = await navigator.clipboard.readText();
       } catch {
-        new Notice(`Impossible de lire le presse-papiers.`);
+        new Notice(t(`Impossible de lire le presse-papiers.`));
         return;
       }
       let parentKey = edit.key;
@@ -267,7 +270,7 @@ export class MindmapView extends ItemView {
         parentKey = parts.join(`.`);
       }
       result = edit.kind === `pasteAfter` && edit.key === `r` ? null : insertBranches(before, file.name, parentKey, index, clip);
-      if (!result) new Notice(`Le presse-papiers ne contient pas de titres Markdown à coller ici (ou le niveau 6 serait dépassé).`);
+      if (!result) new Notice(t(`Le presse-papiers ne contient pas de titres Markdown à coller ici (ou le niveau 6 serait dépassé).`));
     } else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
     else if (edit.kind === `move`) {
       const target = edit.dir
@@ -275,14 +278,14 @@ export class MindmapView extends ItemView {
         : { parentKey: edit.parentKey ?? `r`, index: edit.index ?? 0 };
       result = target ? moveNode(before, file.name, edit.key, target.parentKey, target.index) : null;
       if (!target) new Notice(this.noMoveReason(edit.dir), 2500);
-      else if (!result) new Notice(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`);
+      else if (!result) new Notice(t(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`));
       if (!result || result.text === before) {
         renderer.resetPreview();
         return;
       }
     } else {
       result = addNode(before, file.name, edit.key, edit.kind === `sibling` ? `sibling` : `child`);
-      if (!result) new Notice(`Le niveau de titre maximum (6) est atteint : impossible d'ajouter un sous-titre.`);
+      if (!result) new Notice(t(`Le niveau de titre maximum (6) est atteint : impossible d'ajouter un sous-titre.`));
     }
     if (!result) {
       renderer.resetPreview();
@@ -394,7 +397,7 @@ export class MindmapView extends ItemView {
     const target = nodeByKey(doc, to);
     if (!target || !nodeByKey(doc, from)) return;
     if (linkHeading(target.title) === ``) {
-      new Notice(`Le titre d'arrivée est vide : donnez-lui un nom avant de le relier.`);
+      new Notice(t(`Le titre d'arrivée est vide : donnez-lui un nom avant de le relier.`));
       return;
     }
     let after: string | null;
@@ -439,6 +442,35 @@ export class MindmapView extends ItemView {
       .filter((p) => !current || p !== current.path);
   }
 
+  // Dossier des nouvelles notes, selon le reglage : dossier choisi, dossier de la note courante ou racine du coffre.
+  private newNoteFolder(): string {
+    const s = this.plugin.settings;
+    if (s.newNoteMode === `fixed`) return s.newNoteFolder;
+    if (s.newNoteMode === `current`) return this.plugin.lastFile?.parent?.path.replace(/^\/$/, ``) ?? ``;
+    return ``;
+  }
+
+  // Cree une note vide dans le dossier prevu (cree au besoin) et renvoie son chemin ; null si la creation echoue.
+  private async createNote(name: string): Promise<string | null> {
+    const folder = this.newNoteFolder();
+    try {
+      let built = ``;
+      for (const part of folder.split(`/`).filter((p) => p !== ``)) {
+        built = built === `` ? part : `${built}/${part}`;
+        if (!this.app.vault.getAbstractFileByPath(built)) await this.app.vault.createFolder(built);
+      }
+      const path = `${built === `` ? `` : `${built}/`}${name}.md`;
+      const existing = this.app.vault.getAbstractFileByPath(path);
+      if (existing instanceof TFile) return existing.path;
+      const file = await this.app.vault.create(path, ``);
+      new Notice(t(`Note créée : {0}`, file.path));
+      return file.path;
+    } catch {
+      new Notice(t(`La note n'a pas pu être créée.`));
+      return null;
+    }
+  }
+
   private async vaultHeadings(path: string): Promise<{ title: string; level: number }[]> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) return [];
@@ -468,7 +500,7 @@ export class MindmapView extends ItemView {
 
   private newWebLink(key: string) {
     this.renderer?.openWebDialog({
-      title: `Nouveau lien web`,
+      title: t(`Nouveau lien web`),
       url: ``,
       label: ``,
       embed: false,
@@ -478,7 +510,7 @@ export class MindmapView extends ItemView {
 
   private editWebLink(key: string, index: number, w: WebLink) {
     this.renderer?.openWebDialog({
-      title: `Modifier le lien web`,
+      title: t(`Modifier le lien web`),
       url: w.url,
       label: w.text,
       embed: w.embed,
@@ -498,7 +530,7 @@ export class MindmapView extends ItemView {
     else if (v) after = replaceWebLink(before, doc, key, index, v.url, v.label, v.embed);
     else after = removeWebLink(before, doc, key, index);
     if (after) await this.commitText(file, before, after);
-    else new Notice(`Ce lien n'a pas pu être modifié : vérifiez l'adresse.`);
+    else new Notice(t(`Ce lien n'a pas pu être modifié : vérifiez l'adresse.`));
   }
 
   // Clic droit > Modifier un lien : liens vers des notes ou des titres, et liens web, du titre clique.
@@ -508,7 +540,7 @@ export class MindmapView extends ItemView {
     if (!renderer || !file || !this.doc) return;
     const entries: { label: string; run: () => void }[] = [];
     for (const l of parseLinks(this.doc, file.name).filter((x) => x.from === key)) {
-      const label = l.external ? `Note : ${l.note}${l.heading ? ` › ${l.heading}` : ``}` : `Flèche vers ${l.heading ?? ``}`;
+      const label = l.external ? t(`Note : {0}`, `${l.note}${l.heading ? ` › ${l.heading}` : ``}`) : t(`Flèche vers {0}`, l.heading ?? ``);
       entries.push({ label, run: () => renderer.editLink(l) });
     }
     webLinks(this.doc, key).forEach((w, i) => entries.push({ label: `Web : ${w.label}`, run: () => this.editWebLink(key, i, w) }));
@@ -572,7 +604,7 @@ export class MindmapView extends ItemView {
     if (!current) return;
     const file = this.app.metadataCache.getFirstLinkpathDest(link.note, current.path);
     if (!file) {
-      new Notice(`La note « ${link.note} » est introuvable.`);
+      new Notice(t(`La note « {0} » est introuvable.`, link.note));
       return;
     }
     if (newTab) {
@@ -627,51 +659,51 @@ export class MindmapView extends ItemView {
     };
     const run = (kind: MapEdit[`kind`]) => () => this.onEdit({ kind, key, keys });
 
-    add(isRoot ? `Renommer la note (F2)` : `Titre, étiquettes et commentaire (F2)`, `pencil`, () => renderer.openDialog(key));
-    add(`Ajouter un sous-titre (Tab)`, `corner-down-right`, run(`child`));
-    add(`Ajouter un titre de même niveau (Entrée)`, `plus`, run(`sibling`), { disabled: isRoot });
+    add(isRoot ? t(`Renommer la note (F2)`) : t(`Titre, étiquettes et commentaire (F2)`), `pencil`, () => renderer.openDialog(key));
+    add(t(`Ajouter un sous-titre (Tab)`), `corner-down-right`, run(`child`));
+    add(t(`Ajouter un titre de même niveau (Entrée)`), `plus`, run(`sibling`), { disabled: isRoot });
     menu.addSeparator();
     add(`Dupliquer (${mod} + D)`, `files`, run(`duplicate`), { disabled: isRoot });
-    add(`Copier (${mod} + C)`, `copy`, run(`copy`), { disabled: isRoot });
-    add(`Couper (${mod} + X)`, `scissors`, run(`cut`), { disabled: isRoot });
-    add(`Coller dedans (${mod} + V)`, `clipboard-paste`, run(`paste`));
-    add(`Coller après`, `clipboard-list`, run(`pasteAfter`), { disabled: isRoot });
+    add(t(`Copier ({0} + C)`, mod), `copy`, run(`copy`), { disabled: isRoot });
+    add(t(`Couper ({0} + X)`, mod), `scissors`, run(`cut`), { disabled: isRoot });
+    add(t(`Coller dedans ({0} + V)`, mod), `clipboard-paste`, run(`paste`));
+    add(t(`Coller après`), `clipboard-list`, run(`pasteAfter`), { disabled: isRoot });
     menu.addSeparator();
     const hiddenNow = !!this.doc && !!nodeByKey(this.doc, key)?.meta?.hidden;
-    add(hiddenNow ? `Afficher dans la note` : `Masquer dans la note`, hiddenNow ? `eye` : `eye-off`, () => void this.toggleHidden(key), { disabled: isRoot });
+    add(hiddenNow ? t(`Afficher dans la note`) : t(`Masquer dans la note`), hiddenNow ? `eye` : `eye-off`, () => void this.toggleHidden(key), { disabled: isRoot });
     menu.addSeparator();
     const file = this.plugin.lastFile;
     const hasLinks = !isRoot && !!this.doc && !!file && (parseLinks(this.doc, file.name).some((l) => l.from === key) || webLinks(this.doc, key).length > 0);
-    add(`Nouveau lien vers une note ou un titre…`, `link`, () => renderer.startLinking(key), { disabled: isRoot });
-    add(`Nouveau lien web…`, `globe`, () => this.newWebLink(key), { disabled: isRoot });
-    add(`Modifier un lien…`, `link-2`, () => this.chooseLinkToEdit(key, event), { disabled: !hasLinks });
+    add(t(`Nouveau lien vers une note ou un titre…`), `link`, () => renderer.startLinking(key), { disabled: isRoot });
+    add(t(`Nouveau lien web…`), `globe`, () => this.newWebLink(key), { disabled: isRoot });
+    add(t(`Modifier un lien…`), `link-2`, () => this.chooseLinkToEdit(key, event), { disabled: !hasLinks });
     menu.addSeparator();
-    add(`Apparence…`, `palette`, () => renderer.openStylePanel());
+    add(t(`Apparence…`), `palette`, () => renderer.openStylePanel());
     menu.addSeparator();
-    add(`Supprimer (Suppr)`, `trash-2`, run(`delete`), { disabled: isRoot, warning: true });
+    add(t(`Supprimer (Suppr)`), `trash-2`, run(`delete`), { disabled: isRoot, warning: true });
     menu.showAtMouseEvent(event);
   }
 
   private noMoveReason(dir?: `up` | `down` | `left` | `right`): string {
-    if (dir === `up`) return `Ce titre est déjà le premier parmi les titres de même niveau.`;
-    if (dir === `down`) return `Ce titre est déjà le dernier parmi les titres de même niveau.`;
-    if (dir === `right`) return `Il n'y a pas de titre juste avant celui-ci au même niveau pour l'accueillir comme sous-titre.`;
-    if (dir === `left`) return `Ce titre est déjà au premier niveau.`;
-    return `Déplacement impossible à cet endroit.`;
+    if (dir === `up`) return t(`Ce titre est déjà le premier parmi les titres de même niveau.`);
+    if (dir === `down`) return t(`Ce titre est déjà le dernier parmi les titres de même niveau.`);
+    if (dir === `right`) return t(`Il n'y a pas de titre juste avant celui-ci au même niveau pour l'accueillir comme sous-titre.`);
+    if (dir === `left`) return t(`Ce titre est déjà au premier niveau.`);
+    return t(`Déplacement impossible à cet endroit.`);
   }
 
   // Le titre de la racine est le nom du fichier : le modifier renomme la note.
   private async renameFile(file: TFile, title: string) {
     const name = title.replace(/[\\/:*?"<>|#^\[\]]/g, ` `).replace(/\s+/g, ` `).trim();
     if (name === ``) {
-      new Notice(`Le nom de la note ne peut pas être vide.`);
+      new Notice(t(`Le nom de la note ne peut pas être vide.`));
       return;
     }
     const folder = file.parent && file.parent.path !== `/` ? `${file.parent.path}/` : ``;
     const path = `${folder}${name}.${file.extension}`;
     if (path === file.path) return;
     if (this.app.vault.getAbstractFileByPath(path)) {
-      new Notice(`Une note porte déjà ce nom.`);
+      new Notice(t(`Une note porte déjà ce nom.`));
       return;
     }
     await this.app.fileManager.renameFile(file, path);
@@ -906,7 +938,7 @@ export class MindmapView extends ItemView {
     const renderer = this.renderer;
     const key = renderer?.getSelectedKey();
     if (!renderer || !key) {
-      new Notice(`Sélectionnez d'abord un titre dans la carte.`);
+      new Notice(t(`Sélectionnez d'abord un titre dans la carte.`));
       return;
     }
     const keys = renderer.getSelection();
@@ -977,7 +1009,7 @@ export class MindmapView extends ItemView {
   private undoRedo(action: `undo` | `redo`) {
     const view = this.noteLeaf?.view;
     if (!(view instanceof MarkdownView)) {
-      new Notice(`Sélectionnez d'abord un titre : la note s'ouvre à côté de la carte.`);
+      new Notice(t(`Sélectionnez d'abord un titre : la note s'ouvre à côté de la carte.`));
       return;
     }
     if (action === `undo`) view.editor.undo();
@@ -1025,7 +1057,7 @@ export class MindmapView extends ItemView {
     if (!file || !this.doc || !nodeByKey(this.doc, key)) return;
     if (isHiddenKey(this.doc, key)) {
       // Un titre masque n'apparait pas dans la note : rien a y montrer.
-      if (focus) new Notice(`Ce titre est masqué dans la note. Cliquez sur l'œil de la carte pour l'afficher.`);
+      if (focus) new Notice(t(`Ce titre est masqué dans la note. Cliquez sur l'œil de la carte pour l'afficher.`));
       this.updateActiveRange();
       return;
     }

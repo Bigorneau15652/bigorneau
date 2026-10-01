@@ -1,4 +1,5 @@
 import type { EditorView } from "@codemirror/view";
+import { setLanguage, t } from "./i18n";
 import { debounce, Editor, MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
 import { comboMatches, isModEnter } from "./keys";
@@ -15,6 +16,7 @@ export default class MindmapWritingPlugin extends Plugin {
 
   async onload() {
     this.settings = migrateSettings(await this.loadData());
+    setLanguage(this.settings.language);
     this.addSettingTab(new MmSettingTab(this.app, this));
     this.applyBodySettings();
 
@@ -105,15 +107,15 @@ export default class MindmapWritingPlugin extends Plugin {
       })
     );
 
-    this.addRibbonIcon(`network`, `Ouvrir Mindmap Note Writing`, () => {
+    this.addRibbonIcon(`network`, t(`Ouvrir Mindmap Note Writing`), () => {
       void this.activateView();
     });
 
     const navCommands: { id: string; name: string; dir: `up` | `down` | `left` | `right` }[] = [
-      { id: `chapter-previous`, name: `Chapitre précédent`, dir: `up` },
-      { id: `chapter-next`, name: `Chapitre suivant`, dir: `down` },
-      { id: `chapter-parent`, name: `Chapitre parent`, dir: `left` },
-      { id: `chapter-first-child`, name: `Premier sous-titre du chapitre`, dir: `right` },
+      { id: `chapter-previous`, name: t(`Chapitre précédent`), dir: `up` },
+      { id: `chapter-next`, name: t(`Chapitre suivant`), dir: `down` },
+      { id: `chapter-parent`, name: t(`Chapitre parent`), dir: `left` },
+      { id: `chapter-first-child`, name: t(`Premier sous-titre du chapitre`), dir: `right` },
     ];
     for (const c of navCommands) {
       this.addCommand({
@@ -125,19 +127,19 @@ export default class MindmapWritingPlugin extends Plugin {
 
     this.addCommand({
       id: `focus-note-paragraph`,
-      name: `Aller à la rédaction du titre sélectionné`,
+      name: t(`Aller à la rédaction du titre sélectionné`),
       callback: () => this.forEachView((v) => v.focusNote()),
     });
 
     this.addCommand({
       id: `duplicate-selection`,
-      name: `Dupliquer le titre sélectionné`,
+      name: t(`Dupliquer le titre sélectionné`),
       callback: () => this.forEachView((v) => v.duplicateSelection()),
     });
 
     this.addCommand({
       id: `toggle-view-mode`,
-      name: `Basculer entre la vue Mindmap et la vue Liste`,
+      name: t(`Basculer entre la vue Mindmap et la vue Liste`),
       callback: async () => {
         this.settings.viewMode = this.settings.viewMode === `list` ? `map` : `list`;
         await this.saveSettings();
@@ -146,23 +148,23 @@ export default class MindmapWritingPlugin extends Plugin {
 
     this.addCommand({
       id: `toggle-hide-inactive`,
-      name: `Basculer l'affichage du seul chapitre actif dans la note`,
+      name: t(`Basculer l'affichage du seul chapitre actif dans la note`),
       callback: async () => {
         this.settings.hideInactive = !this.settings.hideInactive;
         await this.saveSettings();
-        new Notice(this.settings.hideInactive ? `La note ne montre que le chapitre actif.` : `La note montre tous les chapitres.`);
+        new Notice(this.settings.hideInactive ? t(`La note ne montre que le chapitre actif.`) : t(`La note montre tous les chapitres.`));
       },
     });
 
     this.addCommand({
       id: `focus-map`,
-      name: `Revenir à la carte`,
+      name: t(`Revenir à la carte`),
       callback: () => this.forEachView((v) => v.focusMap()),
     });
 
     this.addCommand({
       id: `open-mindmap-view`,
-      name: `Ouvrir la carte de la note active`,
+      name: t(`Ouvrir la carte de la note active`),
       callback: () => {
         void this.activateView();
       },

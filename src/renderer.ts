@@ -1,11 +1,13 @@
 // Affichage de la carte : cases, branches, zoom, deplacement, pliage et selection.
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
 import { computeStats, flattenDoc, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
+import { t } from "./i18n";
 import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
 import { buildLayoutTree, Bounds, childIndent, computeLayout, computeListLayout, flatten, listIndent, LNode, sequential, trunkX } from "./layout";
 import { framePath, hasTrunk, trunkBranch, trunkLine, trunkRadius } from "./sketch";
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
+import { iconSvg } from "./icons";
 import { makeTag, MmSettings, ViewMode } from "./settings";
 import { linkPath, loopPath, sidePath } from "./link-geom";
 import { MapLink, parseLinks, WebLink, webLinks } from "./links";
@@ -59,6 +61,9 @@ export interface MapCallbacks {
   // Notes du coffre proposees pour un lien (chemins) et titres d'une note.
   getVaultFiles?: () => string[];
   getHeadings?: (path: string) => Promise<HeadingItem[]>;
+  // Creation d'une note qui n'existe pas encore (renvoie son chemin) et dossier prevu pour elle.
+  createNote?: (name: string) => Promise<string | null>;
+  getNewNoteFolder?: () => string;
   // Clic sur la mappemonde d'un titre qui contient des liens web ou des videos integrees.
   onWebOpen?: (links: WebLink[], event: PointerEvent) => void;
   // Suppression d'un lien selectionne, et clic sur le repere d'un titre qui a des liens vers d'autres notes.
@@ -80,15 +85,10 @@ const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none
 // Symbole d'ouverture d'un lien vers une autre note (fleche qui sort d'un cadre).
 const OPEN_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h4v4M13 3 7.5 8.5M11 9.5V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.5"/></svg>`;
 
-// Reperes affiches sur un titre dont les liens sont replies : chaine (vers d'autres notes) et fleche (dans la note).
-const LINK_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-.7.7"/><path d="M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l.7-.7"/></svg>`;
-const INT_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v5a3 3 0 0 0 3 3h7"/><path d="m10 8 3 3-3 3"/></svg>`;
 
 // Triangle de repli de la vue Liste.
 const FOLD_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>`;
 
-// Mappemonde affichee sur un titre qui contient des liens web ou des videos integrees.
-const WEB_ICON = `<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.2 2.2 2.2 9.8 0 12M8 2c-2.2 2.2-2.2 9.8 0 12"/></svg>`;
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
 const MIN_SCALE = 0.15;
@@ -388,7 +388,7 @@ export class MapRenderer {
       this.worldEl.replaceChildren();
       this.root = null;
       this.list = [];
-      this.messageEl.textContent = `Ouvrez une note du coffre pour afficher sa carte.`;
+      this.messageEl.textContent = t(`Ouvrez une note du coffre pour afficher sa carte.`);
       this.messageEl.style.display = `block`;
       this.statusEl.textContent = ``;
       this.controls.refresh();
@@ -478,7 +478,7 @@ export class MapRenderer {
 
     const stats = computeStats(this.doc);
     this.statusEl.textContent = `${stats.nodeCount} nœud${stats.nodeCount > 1 ? `s` : ``}. ${
-      this.identical ? `Reconstruction de la note identique au fichier.` : `ATTENTION : reconstruction différente du fichier, ne rien modifier.`
+      this.identical ? t(`Reconstruction de la note identique au fichier.`) : t(`ATTENTION : reconstruction différente du fichier, ne rien modifier.`)
     }`;
     this.statusEl.classList.toggle(`mmw-ko`, !this.identical);
 
@@ -516,12 +516,13 @@ export class MapRenderer {
     }
     el.appendChild(label);
 
-    // Mappemonde bleue si le paragraphe du titre contient des liens web ou des videos integrees (avant les etiquettes).
+    // Mappemonde si le paragraphe du titre contient des liens web ou des videos integrees (avant les etiquettes).
     const web = this.webByKey.get(n.key);
     if (web) {
       const mark = document.createElement(`span`);
       mark.className = `mmw-web-mark`;
-      mark.innerHTML = WEB_ICON;
+      mark.innerHTML = iconSvg(`web`, s.iconWeb);
+      if (s.iconColorWeb) mark.style.color = s.iconColorWeb;
       mark.title = web.map((w) => `${w.label} (${w.url})`).join(`\n`);
       el.appendChild(mark);
     }
@@ -533,7 +534,8 @@ export class MapRenderer {
       if (ext.length > 0) {
         const mark = document.createElement(`span`);
         mark.className = `mmw-link-mark`;
-        mark.innerHTML = list ? OPEN_ICON : LINK_ICON;
+        mark.innerHTML = iconSvg(`external`, s.iconExternal);
+        if (s.iconColorExternal) mark.style.color = s.iconColorExternal;
         mark.title = ext.map((l) => (l.heading ? `${l.note} › ${l.heading}` : l.note)).join(`\n`);
         el.appendChild(mark);
       }
@@ -543,8 +545,9 @@ export class MapRenderer {
       if (inner.length > 0) {
         const mark = document.createElement(`span`);
         mark.className = `mmw-int-mark`;
-        mark.innerHTML = INT_ICON;
-        mark.title = inner.map((l) => `Aller à : ${l.heading ?? ``}`).join(`\n`);
+        mark.innerHTML = iconSvg(`internal`, s.iconInternal);
+        if (s.iconColorInternal) mark.style.color = s.iconColorInternal;
+        mark.title = inner.map((l) => t(`Aller à : {0}`, l.heading ?? ``)).join(`\n`);
         el.appendChild(mark);
       }
     }
@@ -594,7 +597,7 @@ export class MapRenderer {
     el.className = `mmw-eye` + (own ? ` mmw-eye-on` : ``);
     el.dataset.eye = n.key;
     el.innerHTML = own ? EYE_OFF_ICON : EYE_ICON;
-    el.title = own ? `Afficher ce titre dans la note` : `Masquer ce titre dans la note`;
+    el.title = own ? t(`Afficher ce titre dans la note`) : t(`Masquer ce titre dans la note`);
     if (this.isList()) {
       // Vue Liste : l'oeil est a l'extremite droite de la ligne.
       el.style.left = `${n.x + n.w - 28}px`;
@@ -619,7 +622,7 @@ export class MapRenderer {
     el.className = `mmw-lfold` + (n.collapsed ? ` mmw-lfold-collapsed` : ``);
     el.dataset.fold = n.key;
     el.innerHTML = FOLD_ICON;
-    el.title = n.collapsed ? `Déplier` : `Replier`;
+    el.title = n.collapsed ? t(`Déplier`) : t(`Replier`);
     el.style.left = `${n.x + 6}px`;
     el.style.top = `${n.y + n.h / 2 - 9}px`;
     return el;
@@ -630,7 +633,7 @@ export class MapRenderer {
     el.className = `mmw-fold` + (n.collapsed ? ` mmw-fold-collapsed` : ``);
     el.dataset.fold = n.key;
     el.textContent = n.collapsed ? String(countDescendants(n)) : `−`;
-    el.title = n.collapsed ? `Déplier la branche` : `Replier la branche`;
+    el.title = n.collapsed ? t(`Déplier la branche`) : t(`Replier la branche`);
     el.style.left = `${n.x + n.w + 4}px`;
     el.style.top = `${n.y + n.h / 2 - 9}px`;
     return el;
@@ -743,9 +746,9 @@ export class MapRenderer {
       const open = document.createElement(`span`);
       open.className = `mmw-ext-open`;
       open.innerHTML = OPEN_ICON;
-      open.title = `Ouvrir la carte de cette note (Cmd ou Ctrl : ouvrir la note dans un nouvel onglet)`;
+      open.title = t(`Ouvrir la carte de cette note (Cmd ou Ctrl : ouvrir la note dans un nouvel onglet)`);
       el.append(label, open);
-      el.title = `Cliquer pour sélectionner (glisser pour changer l'ordre, Suppr pour retirer), double clic pour modifier`;
+      el.title = t(`Cliquer pour sélectionner (glisser pour changer l'ordre, Suppr pour retirer), double clic pour modifier`);
       el.classList.toggle(`mmw-ext-on`, this.linkId(l) === this.selectedLink);
       this.worldEl.appendChild(el);
       made.push({ link: l, el });
@@ -771,9 +774,9 @@ export class MapRenderer {
   }
 
   // Fleches en pointille entre les titres relies, du bord droit au bord droit ; vers une note exterieure, du bord gauche
-  // a sa case. Elles sont neutres, ou bleues (couleur des liens du theme) selon le reglage ; toujours bleues quand elles
+  // a sa case. Elles sont neutres, ou colorees (couleur des liens du theme) selon le reglage ; toujours colorees quand elles
   // sont selectionnees, et pour les notes exterieures.
-  // Pointes de fleche, neutre et bleue.
+  // Pointes de fleche, neutre et coloree.
   private markerDefs(): SVGElement {
     const defs = document.createElementNS(SVG_NS, `defs`);
     const marker = (id: string, cls: string): string =>
@@ -800,7 +803,7 @@ export class MapRenderer {
       hit.setAttribute(`class`, `mmw-link-hit`);
       hit.setAttribute(`data-link`, id);
       const tip = document.createElementNS(SVG_NS, `title`);
-      tip.textContent = `Lien vers ${l.heading ?? l.note} (cliquer puis Suppr pour le retirer)`;
+      tip.textContent = t(`Lien vers {0} (cliquer puis Suppr pour le retirer)`, l.heading ?? l.note);
       hit.appendChild(tip);
       this.svgEl.appendChild(hit);
     };
@@ -907,10 +910,10 @@ export class MapRenderer {
     }
     const from = L.from !== null ? this.list.find((n) => n.key === L.from) : null;
     let text: string;
-    if (L.replace) text = `Modification du lien : cliquez sur le nouveau titre d'arrivée, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
-    else if (L.pending) text = `Note choisie : ${L.pending.path.replace(/^.*\//, ``).replace(/\.md$/i, ``)}. Cliquez sur le titre de départ. Échap pour annuler.`;
-    else if (from) text = `Départ : « ${from.node.title || `sans titre`} ». Cliquez sur le titre d'arrivée, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
-    else text = `Lien : cliquez sur le titre de départ, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`;
+    if (L.replace) text = t(`Modification du lien : cliquez sur le nouveau titre d'arrivée, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`);
+    else if (L.pending) text = t(`Note choisie : {0}. Cliquez sur le titre de départ. Échap pour annuler.`, L.pending.path.replace(/^.*\//, ``).replace(/\.md$/i, ``));
+    else if (from) text = t(`Départ : « {0} ». Cliquez sur le titre d'arrivée, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`, from.node.title || t(`sans titre`));
+    else text = t(`Lien : cliquez sur le titre de départ, ou choisissez une note dans la fenêtre (Tab). Échap pour annuler.`);
     this.linkHint.textContent = text;
   }
 
@@ -924,6 +927,8 @@ export class MapRenderer {
       headings: (path) => this.callbacks.getHeadings?.(path) ?? Promise.resolve([]),
       onPick: (path, heading) => this.pickExternal(path, heading),
       onClose: () => this.stopLinking(),
+      onCreate: this.callbacks.createNote,
+      createFolder: this.callbacks.getNewNoteFolder,
     });
   }
 
@@ -975,7 +980,7 @@ export class MapRenderer {
     }
     if (L.from === null) {
       if (key === `r`) {
-        this.callbacks.onMessage?.(`Le nom de la note ne peut pas être le départ d'un lien.`);
+        this.callbacks.onMessage?.(t(`Le nom de la note ne peut pas être le départ d'un lien.`));
         return;
       }
       if (L.pending) {
@@ -1006,7 +1011,7 @@ export class MapRenderer {
     this.stopLinking();
     if (!from) return;
     if (to === `r`) {
-      this.callbacks.onMessage?.(`Le lien doit viser un titre de la note, pas son nom.`);
+      this.callbacks.onMessage?.(t(`Le lien doit viser un titre de la note, pas son nom.`));
       return;
     }
     this.callbacks.onLinkCreate?.(from, to, replace);
