@@ -19,6 +19,9 @@ export interface MmNode {
   // Commentaire de style place juste sous le titre, et numero de sa ligne dans le fichier.
   meta?: MmMeta;
   metaLine?: number;
+  // Sujet flottant (racine d'un arbre de la zone flottante) : position sur la carte, ligne du repere qui l'ouvre dans
+  // le fichier et ligne qui suit la fin de son bloc. x et y manquent tant que le sujet n'a pas ete place.
+  float?: { x?: number; y?: number; markerLine: number; end: number };
 }
 
 export interface MmDoc {
@@ -27,6 +30,12 @@ export interface MmDoc {
   // y compris un titre de niveau 1 unique, sont des chapitres.
   root: MmNode;
   eol: string;
+  // Sujets flottants : arbres ecrits en fin de note, apres un repere `%% mmw-float {...} %%` qui ouvre chacun d'eux. Ils ne
+  // font pas partie de la carte principale ; `floatStart` est la ligne du premier repere (a partir de 0) et `floatRaw` le
+  // texte brut de toute la zone, reecrit tel quel.
+  floats: MmNode[];
+  floatStart?: number;
+  floatRaw: string;
 }
 
 export interface MmStats {
@@ -35,6 +44,9 @@ export interface MmStats {
   skippedLevels: number;
   emptyTitles: number;
 }
+
+// Repere qui ouvre un sujet flottant : `%% mmw-float {"x":120,"y":40} %%` (les coordonnees sont facultatives).
+const FLOAT_RE = /^%%[ \t]+mmw-float(?:[ \t]+(\{.*\}))?[ \t]+%%[ \t]*$/;
 
 const HEADING_RE = /^(#{1,6})(?:[ \t]+([^\r\n]*))?$/;
 const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
@@ -154,12 +166,79 @@ export function renderHeading(level: number, title: string, eol: string): string
 export interface ParseOptions {
   // Faux pour analyser un simple morceau de texte, sans chercher de proprietes YAML au debut.
   frontmatter?: boolean;
+  // Faux pour ignorer les reperes de sujets flottants (analyse d'un bloc deja isole).
+  floats?: boolean;
+}
+
+// Lignes des reperes de sujets flottants (hors blocs de code), a partir de la ligne `from`.
+function findFloatMarkers(allLines: string[], from: number): number[] {
+  const out: number[] = [];
+  let fence: Fence | null = null;
+  for (let i = from; i < allLines.length; i++) {
+    const s = stripEol(allLines[i]);
+    if (fence) {
+      const c = FENCE_CLOSE_RE.exec(s);
+      if (c && c[1][0] === fence.ch && c[1].length >= fence.len) fence = null;
+      continue;
+    }
+    const o = FENCE_OPEN_RE.exec(s);
+    if (o && !(o[1][0] === `\`` && o[2].includes(`\``))) {
+      fence = { ch: o[1][0], len: o[1].length };
+      continue;
+    }
+    if (FLOAT_RE.test(s)) out.push(i);
+  }
+  return out;
+}
+
+function shiftNode(n: MmNode, d: number): void {
+  if (n.line !== undefined) n.line += d;
+  if (n.endLine !== undefined) n.endLine += d;
+  if (n.metaLine !== undefined) n.metaLine += d;
+  for (const c of n.children) shiftNode(c, d);
+}
+
+function markerPosition(line: string): { x?: number; y?: number } {
+  const m = FLOAT_RE.exec(stripEol(line));
+  if (!m || !m[1]) return {};
+  try {
+    const raw = JSON.parse(m[1]) as Record<string, unknown>;
+    const ok = (v: unknown): v is number => typeof v === `number` && Number.isFinite(v) && Math.abs(v) < 1e6;
+    return { ...(ok(raw.x) ? { x: raw.x } : {}), ...(ok(raw.y) ? { y: raw.y } : {}) };
+  } catch {
+    return {};
+  }
+}
+
+// Arbres de la zone flottante : un par repere. Le premier titre du bloc est la racine du sujet ; les titres qui le suivent
+// sont ses enfants, quel que soit leur niveau. Un bloc sans titre n'est pas un sujet.
+function parseFloats(allLines: string[], markers: number[]): MmNode[] {
+  const out: MmNode[] = [];
+  markers.forEach((m, i) => {
+    const end = i + 1 < markers.length ? markers[i + 1] : allLines.length;
+    const block = parseNote(allLines.slice(m + 1, end).join(``), `x.md`, { frontmatter: false, floats: false });
+    const tops = block.root.children;
+    if (tops.length === 0) return;
+    const root = tops[0];
+    root.children.push(...tops.slice(1));
+    shiftNode(root, m + 1);
+    // La racine d'un sujet couvre tout son bloc.
+    root.float = { ...markerPosition(allLines[m]), markerLine: m, end };
+    out.push(root);
+  });
+  return out;
 }
 
 export function parseNote(text: string, fileName: string, opts: ParseOptions = {}): MmDoc {
   const eol = text.includes(`\r\n`) ? `\r\n` : `\n`;
-  const allLines = splitLines(text);
-  const fmCount = opts.frontmatter === false ? 0 : extractFrontmatter(allLines);
+  const allLinesFull = splitLines(text);
+  const fmCount = opts.frontmatter === false ? 0 : extractFrontmatter(allLinesFull);
+  // La zone flottante commence au premier repere : le reste de la note n'en fait pas partie.
+  const markers = opts.floats === false ? [] : findFloatMarkers(allLinesFull, fmCount);
+  const floatStart = markers.length > 0 ? markers[0] : undefined;
+  const allLines = floatStart === undefined ? allLinesFull : allLinesFull.slice(0, floatStart);
+  const floatRaw = floatStart === undefined ? `` : allLinesFull.slice(floatStart).join(``);
+  const floats = floatStart === undefined ? [] : parseFloats(allLinesFull, markers);
   const frontmatter = allLines.slice(0, fmCount).join(``);
   const lines = allLines.slice(fmCount);
   const matches = findHeadings(lines);
@@ -207,7 +286,7 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
     stack.push(node);
   }
 
-  return { frontmatter, root, eol };
+  return { frontmatter, root, eol, floats, floatRaw, ...(floatStart !== undefined ? { floatStart } : {}) };
 }
 
 function pushPiece(out: string[], piece: string, eol: string): void {
@@ -233,6 +312,7 @@ export function serializeNote(doc: MmDoc): string {
   const out: string[] = [];
   pushPiece(out, doc.frontmatter, doc.eol);
   emitNode(doc.root, out, doc.eol);
+  pushPiece(out, doc.floatRaw, doc.eol);
   return out.join(``);
 }
 
@@ -288,11 +368,26 @@ export function splitSections(text: string): Section[] {
   return out;
 }
 
+// Cle d'un noeud de la zone flottante : `f0` est la racine du premier sujet, `f0.1` son deuxieme enfant.
+export function isFloatKey(key: string): boolean {
+  return /^f\d+(\.\d+)*$/.test(key);
+}
+
+// Vrai pour la cle de la racine d'un sujet flottant.
+export function isFloatRoot(key: string): boolean {
+  return /^f\d+$/.test(key);
+}
+
 // Retrouve un noeud a partir de sa cle : `r` pour la racine, `r.2.0` pour le premier enfant du troisieme noeud.
 export function nodeByKey(doc: MmDoc, key: string): MmNode | null {
   const parts = key.split(`.`);
-  if (parts[0] !== `r`) return null;
-  let node: MmNode = doc.root;
+  let node: MmNode;
+  if (parts[0] === `r`) node = doc.root;
+  else if (isFloatKey(key)) {
+    const root = doc.floats[Number(parts[0].slice(1))];
+    if (!root) return null;
+    node = root;
+  } else return null;
   for (let i = 1; i < parts.length; i++) {
     const child = node.children[Number(parts[i])];
     if (!child) return null;
@@ -309,6 +404,7 @@ export function flattenDoc(doc: MmDoc): { key: string; node: MmNode }[] {
     node.children.forEach((c, i) => walk(c, `${key}.${i}`));
   };
   walk(doc.root, `r`);
+  doc.floats.forEach((f, i) => walk(f, `f${i}`));
   return out;
 }
 
@@ -316,7 +412,8 @@ export function flattenDoc(doc: MmDoc): { key: string; node: MmNode }[] {
 export function pathTitles(doc: MmDoc, key: string): string[] {
   const parts = key.split(`.`);
   const titles: string[] = [];
-  let node: MmNode | undefined = doc.root;
+  let node: MmNode | undefined = isFloatKey(key) ? doc.floats[Number(parts[0].slice(1))] : doc.root;
+  if (!node) return titles;
   titles.push(node.title);
   for (let i = 1; i < parts.length && node; i++) {
     node = node.children[Number(parts[i])];
@@ -365,7 +462,16 @@ export function locateInSections(text: string, cursor: number): { count: number;
 
 // Noeud dont le texte contient une ligne du fichier (numero a partir de 0), avec sa cle.
 export function nodeAtLine(doc: MmDoc, line: number): { key: string; node: MmNode } {
-  const flat = flattenDoc(doc);
+  const all = flattenDoc(doc);
+  // Une ligne de la zone flottante appartient a un sujet flottant ; sinon la zone n'entre pas dans le calcul.
+  const flat = all.filter((e) => !isFloatKey(e.key));
+  if (doc.floatStart !== undefined && line >= doc.floatStart) {
+    const inside = all.filter((e) => isFloatKey(e.key) && e.node.line !== undefined && e.node.endLine !== undefined && line >= e.node.line && line < branchEnd(e.node));
+    if (inside.length > 0) return inside[inside.length - 1];
+    const owner = doc.floats.findIndex((f) => f.float && line >= f.float.markerLine && line < f.float.end);
+    if (owner >= 0) return { key: `f${owner}`, node: doc.floats[owner] };
+    return flat[flat.length - 1];
+  }
   for (const entry of flat) {
     const n = entry.node;
     if (n.line !== undefined && n.endLine !== undefined && line >= n.line && line < n.endLine) return entry;
@@ -434,7 +540,7 @@ export function applyLineEdits(text: string, edits: LineEdit[], eol: string): st
 
 // Vrai si le titre est masque, lui-meme ou par l'un de ses parents.
 export function isHiddenKey(doc: MmDoc, key: string): boolean {
-  let node: MmNode = doc.root;
+  let node: MmNode = isFloatKey(key) ? doc.floats[Number(key.split(`.`)[0].slice(1))] ?? doc.root : doc.root;
   const parts = key === `r` ? [] : key.split(`.`).slice(1);
   for (const p of parts) {
     if (node.meta?.hidden && node !== doc.root) return true;
@@ -442,7 +548,7 @@ export function isHiddenKey(doc: MmDoc, key: string): boolean {
     if (!child) return false;
     node = child;
   }
-  return node !== doc.root && !!node.meta?.hidden;
+  return node !== doc.root && !(node.float && isFloatRoot(key)) && !!node.meta?.hidden;
 }
 
 // Plages de lignes (numeros a partir de 0, fin comprise) des titres masques, sous-titres compris.
@@ -457,6 +563,7 @@ export function hiddenLineRanges(doc: MmDoc): { start: number; end: number }[] {
     }
   };
   walk(doc.root);
+  for (const f of doc.floats) walk(f);
   return out;
 }
 
@@ -468,5 +575,6 @@ export function metaLineNumbers(doc: MmDoc): number[] {
     for (const c of n.children) walk(c);
   };
   walk(doc.root);
+  for (const f of doc.floats) walk(f);
   return out.sort((a, b) => a - b);
 }

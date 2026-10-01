@@ -48,6 +48,7 @@ export class MmSettingTab extends PluginSettingTab {
     this.chapter(`writing`, t(`Rédaction`), t(`Position de la note, curseur et commentaires du plugin`), (el) => this.buildWriting(el));
     this.chapter(`active`, t(`Chapitre actif`), t(`Grisage ou masquage des chapitres inactifs dans la note`), (el) => this.buildActive(el));
     this.chapter(`fixed`, t(`Notes fixes`), t(`Copies d'un chapitre dans leur propre volet`), (el) => this.buildFixed(el));
+    this.chapter(`floats`, t(`Sujets flottants`), t(`Sujets de notes libres, hors de la carte : niveau, forme, couleurs`), (el) => this.buildFloats(el));
     this.chapter(`links`, t(`Liens et icônes`), t(`Icônes et couleurs des repères de liens`), (el) => this.buildLinks(el));
     this.chapter(`notes`, t(`Nouvelles notes`), t(`Dossier des notes créées depuis la carte`), (el) => this.buildNotes(el));
     this.chapter(`keys`, t(`Navigation au clavier`), t(`Raccourcis pour passer d'un chapitre à l'autre depuis la note`), (el) => this.buildKeys(el));
@@ -253,6 +254,62 @@ export class MmSettingTab extends PluginSettingTab {
       t(`Désactivé : une note fixe ne montre que le paragraphe de son titre. Activé : elle se comporte comme la note dynamique, c'est-à-dire qu'elle montre aussi les sous-titres quand l'option Inclure les dépendances est active.`),
       `fixedLikeDynamic`
     );
+  }
+
+  private buildFloats(el: HTMLElement): void {
+    const s = this.plugin.settings;
+    new Setting(el)
+      .setName(t(`Niveau du titre`))
+      .setDesc(t(`Niveau de titre donné à un sujet flottant créé par double clic sur le fond de la carte. Il change de niveau quand on le fait entrer dans la carte.`))
+      .addDropdown((d) => {
+        for (let i = 1; i <= 6; i++) d.addOption(String(i), t(`Niveau {0}`, i));
+        d.setValue(String(s.floatLevel)).onChange(async (v) => {
+          s.floatLevel = Number(v);
+          await this.plugin.saveSettings();
+        });
+      });
+    this.dropdown(el, t(`Forme`), t(`Forme de la case d'un sujet flottant. Une fois dans la carte, il prend la forme des titres de son niveau.`), `floatShape`, [
+      [`oval`, t(`Ovale`)],
+      [`round`, t(`Angles arrondis`)],
+      [`sharp`, t(`Angles aigus`)],
+    ], (v) => v as MmSettings[`floatShape`]);
+    this.floatColor(el, t(`Couleur du trait`), t(`Contour et texte. Vide : comme la carte.`), `floatStrokeColor`);
+    this.floatColor(el, t(`Couleur de fond`), t(`Fond de la case. Vide : comme la carte.`), `floatFillColor`);
+    this.dropdown(el, t(`Type de ligne`), t(`Trait du contour.`), `floatStrokeDash`, [
+      [``, t(`Comme la carte`)],
+      [`solid`, t(`Continu`)],
+      [`dashed`, t(`Tirets`)],
+      [`dotted`, t(`Pointillés`)],
+    ], (v) => v as MmSettings[`floatStrokeDash`]);
+    this.dropdown(el, t(`Écriture`), t(`Police du texte des sujets flottants.`), `floatFontFamily`, [
+      [``, t(`Comme la carte`)],
+      [`default`, t(`Police de l'interface`)],
+      [`handwritten`, t(`Écriture manuscrite`)],
+      [`mono`, t(`Code`)],
+    ], (v) => v as MmSettings[`floatFontFamily`]);
+  }
+
+  private floatColor(el: HTMLElement, name: string, desc: string, field: `floatStrokeColor` | `floatFillColor`): void {
+    const s = this.plugin.settings;
+    new Setting(el)
+      .setName(name)
+      .setDesc(desc)
+      .addColorPicker((c) =>
+        c.setValue(s[field] || `#888888`).onChange(async (v) => {
+          s[field] = v;
+          await this.plugin.saveSettings();
+        })
+      )
+      .addExtraButton((b) =>
+        b
+          .setIcon(`reset`)
+          .setTooltip(t(`Comme la carte`))
+          .onClick(async () => {
+            s[field] = ``;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
   }
 
   private buildLinks(el: HTMLElement): void {

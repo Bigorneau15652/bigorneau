@@ -2,7 +2,7 @@
 // Chaque operation prend le texte de la note et renvoie le nouveau texte, sans rien ecrire elle-meme :
 // la vue applique le resultat dans l'editeur d'Obsidian (une seule transaction, donc annulable).
 import { t } from "./i18n";
-import { applyLineEdits, branchEnd, flattenDoc, MmDoc, MmNode, nodeAtLine, nodeByKey, parseNote, renderHeading, splitLines } from "./model";
+import { applyLineEdits, branchEnd, flattenDoc, isFloatRoot, MmDoc, MmNode, nodeAtLine, nodeByKey, parseNote, renderHeading, splitLines } from "./model";
 
 export interface EditResult {
   text: string;
@@ -99,7 +99,13 @@ export function deleteNodes(text: string, fileName: string, keys: string[]): Edi
   const doc = parseNote(text, fileName);
   const targets = topLevelTargets(doc, keys);
   if (targets.length === 0) return null;
-  const ranges = targets.map((t) => ({ from: t.node.line ?? 0, to: branchEnd(t.node) }));
+  // Un sujet flottant part avec son repere et tout son bloc.
+  const ranges = targets.map((t) => ({ from: t.node.float && isFloatRoot(t.key) ? t.node.float.markerLine : t.node.line ?? 0, to: t.node.float && isFloatRoot(t.key) ? t.node.float.end : branchEnd(t.node) }));
+  if (targets.some((t) => isFloatRoot(t.key))) {
+    const all = splitLines(text);
+    for (const r of [...ranges].sort((a, b) => b.from - a.from)) all.splice(r.from, r.to - r.from);
+    return { text: all.join(``), key: `r` };
+  }
 
   // Noeud a retenir : voisin du premier noeud supprime, repere par sa ligne avant la suppression.
   const first = targets[0];
@@ -156,7 +162,7 @@ function branchNodes(n: MmNode): MmNode[] {
 // Destination d'un deplacement au clavier (fleches) : monter ou descendre parmi les freres, entrer dans le
 // frere precedent, ou sortir apres le parent.
 export function arrowTarget(doc: MmDoc, key: string, dir: MoveDir): MoveTarget | null {
-  if (key === `r`) return null;
+  if (key === `r` || isFloatRoot(key)) return null;
   const parts = key.split(`.`);
   const index = Number(parts.pop());
   const parentKey = parts.join(`.`);
@@ -167,7 +173,7 @@ export function arrowTarget(doc: MmDoc, key: string, dir: MoveDir): MoveTarget |
   if (dir === `right`) {
     return index > 0 ? { parentKey: `${parentKey}.${index - 1}`, index: parent.children[index - 1].children.length } : null;
   }
-  if (parentKey === `r`) return null;
+  if (parentKey === `r` || isFloatRoot(parentKey)) return null;
   const up = parentKey.split(`.`);
   const parentIndex = Number(up.pop());
   return { parentKey: up.join(`.`), index: parentIndex + 1 };
@@ -284,7 +290,8 @@ export function previewMove(doc: MmDoc, key: string, parentKey: string, index: n
   const movedCopy = cloneTree(moved, origin, null);
   for (const n of branchNodes(movedCopy)) n.level += delta;
   parentCopy.children.splice(Math.max(0, Math.min(index, parentCopy.children.length)), 0, movedCopy);
-  const preview: MmDoc = { ...doc, root };
+  // Un sujet flottant qui entre dans la carte quitte la zone flottante.
+  const preview: MmDoc = { ...doc, root, floats: doc.floats.filter((f) => f !== moved) };
   const found = flattenDoc(preview).find((e) => e.node === movedCopy);
   return found ? { doc: preview, origin, key: found.key } : null;
 }

@@ -174,8 +174,8 @@ export function trunkBranch(
 export type FrameShape = { kind: `path`; d: string } | { kind: `rect`; rx: number };
 
 // Contour d'une case : un rectangle net ou un trace irregulier, avec des angles aigus ou arrondis.
-export function framePath(x: number, y: number, w: number, h: number, seed: string, isRoot: boolean, corners: Corners = `round`, rough: Roughness = 1): FrameShape {
-  const r = corners === `sharp` ? 0 : Math.min(isRoot ? 9 : 8, h / 2);
+export function framePath(x: number, y: number, w: number, h: number, seed: string, isRoot: boolean, corners: Corners = `round`, rough: Roughness = 1, pill = false): FrameShape {
+  const r = pill ? h / 2 : corners === `sharp` ? 0 : Math.min(isRoot ? 9 : 8, h / 2);
   if (rough === 0) return { kind: `rect`, rx: r };
   let pts: Pt[] = [];
   if (r === 0) {

@@ -368,6 +368,8 @@ export class MapControls {
       [t(`{0} + Maj + flèches`, mod), t(`Déplacer au clavier`)],
       [t(`Maj + glisser`), t(`Sélectionner plusieurs titres`)],
       [t(`Clic droit`), t(`Menu du titre`)],
+      [t(`Double clic sur le fond`), t(`Nouveau sujet flottant`)],
+      [t(`Glisser hors de la carte`), t(`Titre transformé en sujet flottant`)],
     ]);
     section(t(`Liens`), [
       [t(`Bouton lien`), t(`Relier deux titres ou une note du coffre`)],

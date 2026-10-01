@@ -26,12 +26,13 @@ export function sanitizeFixed(raw: unknown): FixedEntry[] {
   for (const r of raw as Record<string, unknown>[]) {
     if (!r || typeof r !== `object`) continue;
     if (typeof r.id !== `string` || typeof r.path !== `string` || typeof r.key !== `string` || typeof r.title !== `string`) continue;
-    if (r.id === `` || !/^r(\.\d+)*$/.test(r.key) || out.some((e) => e.id === r.id)) continue;
+    if (r.id === `` || !/^[rf]\d*(\.\d+)*$/.test(r.key) || out.some((e) => e.id === r.id)) continue;
     out.push({ id: r.id, path: r.path, key: r.key, title: r.title });
   }
   return out.slice(0, 30);
 }
 
+export type FloatShape = `oval` | `round` | `sharp`;
 export type NewNoteFolderMode = `fixed` | `current` | `root`;
 
 // Numero de la version du format des reglages enregistres.
@@ -164,6 +165,13 @@ export interface MmSettings {
   // des notes fixes ouvertes, pour les retrouver au redemarrage.
   fixedLikeDynamic: boolean;
   fixedViews: FixedEntry[];
+  // Sujets flottants : niveau du titre cree, forme, couleurs, trait et police par defaut (vide : comme la carte).
+  floatLevel: number;
+  floatShape: FloatShape;
+  floatStrokeColor: string;
+  floatFillColor: string;
+  floatStrokeDash: StrokeDash | ``;
+  floatFontFamily: FontFamily | ``;
 }
 
 export const DEFAULT_SETTINGS: MmSettings = {
@@ -219,6 +227,12 @@ export const DEFAULT_SETTINGS: MmSettings = {
   openChapters: [],
   fixedLikeDynamic: false,
   fixedViews: [],
+  floatLevel: 2,
+  floatShape: `oval`,
+  floatStrokeColor: ``,
+  floatFillColor: ``,
+  floatStrokeDash: ``,
+  floatFontFamily: ``,
 };
 
 // Reglages qui composent l'apparence de la carte (bouton palette).
@@ -264,6 +278,13 @@ export function migrateSettings(stored: unknown): MmSettings {
   const merged = { ...DEFAULT_SETTINGS, ...data } as MmSettings;
   merged.tags = sanitizeTags(data.tags);
   merged.fixedViews = sanitizeFixed(data.fixedViews);
+  merged.floatLevel = typeof merged.floatLevel === `number` && merged.floatLevel >= 1 && merged.floatLevel <= 6 ? Math.round(merged.floatLevel) : 2;
+  if (![`oval`, `round`, `sharp`].includes(merged.floatShape)) merged.floatShape = `oval`;
+  for (const k of [`floatStrokeColor`, `floatFillColor`] as const) {
+    if (typeof merged[k] !== `string` || (merged[k] !== `` && !TAG_HEX.test(merged[k]))) merged[k] = ``;
+  }
+  if (![``, `solid`, `dashed`, `dotted`].includes(merged.floatStrokeDash)) merged.floatStrokeDash = ``;
+  if (![``, `default`, `handwritten`, `mono`].includes(merged.floatFontFamily)) merged.floatFontFamily = ``;
   merged.openChapters = Array.isArray(data.openChapters) ? data.openChapters.filter((x): x is string => typeof x === `string`) : [];
   for (const k of [`iconColorExternal`, `iconColorInternal`, `iconColorWeb`] as const) {
     if (typeof merged[k] !== `string` || (merged[k] !== `` && !TAG_HEX.test(merged[k]))) merged[k] = ``;
