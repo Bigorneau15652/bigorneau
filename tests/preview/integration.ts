@@ -8,6 +8,7 @@ import { noteExtension } from "../../src/active-chapter";
 import { isModEnter } from "../../src/keys";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { webLinks } from "../../src/links";
+import { activeLines, parseNote } from "../../src/model";
 import { MindmapView } from "../../src/view";
 
 const w = window as unknown as Record<string, unknown>;
@@ -92,6 +93,9 @@ app.makeNoteView = (leaf: WorkspaceLeaf, f: TFile): MarkdownView => {
       click: (cm, e) => {
         if (view.ownsEditor(cm)) view.onNoteClick(cm, e);
       },
+      replaced: (cm) => {
+        if (view.ownsEditor(cm)) view.resyncNote(cm);
+      },
       key: (e, cm) => {
         if (!isModEnter(e) || !view.ownsEditor(cm)) return false;
         e.preventDefault();
@@ -112,6 +116,8 @@ mapLeaf.view = view as never;
 
 w.app = app;
 w.webLinksOf = webLinks;
+w.parseNoteFor = (t: string) => parseNote(t, `Note.md`);
+w.activeLinesFor = activeLines;
 w.view = view;
 w.plugin = plugin;
 w.noteView = () => view.getNoteView();

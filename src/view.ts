@@ -827,6 +827,30 @@ export class MindmapView extends ItemView {
     this.updateActiveRange();
   }
 
+  // L'editeur de la note a ete recree ou son texte entierement remplace : la carte relit la note et remet le grisage ou
+  // le masquage des chapitres inactifs, sans changer le titre selectionne.
+  resyncNote(cm: EditorView) {
+    const file = this.plugin.lastFile;
+    if (!file || !this.ownsEditor(cm)) return;
+    this.doc = parseNote(cm.state.doc.toString(), file.name);
+    this.lastNoteLine = -1;
+    // Un rechargement ramene le curseur en haut de la note : il revient dans le titre selectionne, pour que la carte ne
+    // saute pas sur un autre titre.
+    const key = this.selectedKey;
+    const node = key ? nodeByKey(this.doc, key) : null;
+    if (key && node && node.line !== undefined) {
+      const d = cm.state.doc;
+      const head = d.lineAt(cm.state.selection.main.head).number - 1;
+      const end = Math.min((node.endLine ?? node.line + 1) - 1, d.lines - 1);
+      if (head < node.line || head > end) {
+        const remembered = this.noteCursors.get(key);
+        const line = d.line(Math.max(node.line, Math.min(remembered?.line ?? end, end)) + 1);
+        cm.dispatch({ selection: { anchor: Math.min(line.from + (remembered?.ch ?? line.length), line.to) }, scrollIntoView: true });
+      }
+    }
+    this.updateActiveRange();
+  }
+
   // Grise les chapitres inactifs dans la note reliee, selon le noeud selectionne.
   updateActiveRange() {
     const cm = this.getNoteCm();

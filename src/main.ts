@@ -35,6 +35,11 @@ export default class MindmapWritingPlugin extends Plugin {
         changed: (cm) => {
           if (this.isLinkedEditor(cm)) notifyMoved(cm);
         },
+        replaced: (cm) => {
+          this.forEachView((v) => {
+            if (v.ownsEditor(cm)) v.resyncNote(cm);
+          });
+        },
         click: (cm, event) => {
           if (!this.isLinkedEditor(cm)) return;
           this.forEachView((v) => {
@@ -73,6 +78,12 @@ export default class MindmapWritingPlugin extends Plugin {
         if (this.rememberFile(file)) this.refreshViews();
       })
     );
+
+    // Filet de securite : quand Obsidian change d'onglet ou reorganise les volets, il peut recreer l'editeur de la note ;
+    // le grisage ou le masquage des chapitres inactifs est alors remis d'apres le titre selectionne.
+    const reapplyActive = debounce(() => this.forEachView((v) => v.updateActiveRange()), 150, true);
+    this.registerEvent(this.app.workspace.on(`active-leaf-change`, () => reapplyActive()));
+    this.registerEvent(this.app.workspace.on(`layout-change`, () => reapplyActive()));
 
     const refreshLater = debounce(() => this.refreshViews(), 400, true);
     this.registerEvent(

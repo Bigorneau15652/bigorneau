@@ -32,6 +32,9 @@ export interface NoteHooks {
   key: (event: KeyboardEvent, view: EditorView) => boolean;
   // Un clic de souris vient d'etre relache dans l'editeur (le curseur est deja place).
   click?: (view: EditorView, event: MouseEvent) => void;
+  // L'editeur vient d'etre cree, ou tout son texte a ete remplace (rechargement de la note par Obsidian) : la plage du
+  // chapitre actif, qui ne survit pas a ces cas, doit etre recalculee.
+  replaced?: (view: EditorView) => void;
 }
 
 function buildDecorations(view: EditorView): DecorationSet {
@@ -80,6 +83,16 @@ function syncBlocks(view: EditorView): void {
   });
 }
 
+// Vrai si la modification remplace l'essentiel du texte : la plage du chapitre actif suit alors des positions sans sens.
+function replacesWholeText(u: ViewUpdate): boolean {
+  const before = u.startState.doc.length;
+  let replaced = 0;
+  u.changes.iterChangedRanges((fromA, toA) => {
+    replaced += toA - fromA;
+  });
+  return before > 0 && replaced >= before * 0.6;
+}
+
 export function noteExtension(hooks: NoteHooks): Extension[] {
   const plugin = ViewPlugin.fromClass(
     class {
@@ -92,11 +105,15 @@ export function noteExtension(hooks: NoteHooks): Extension[] {
         this.observer = new MutationObserver(() => syncBlocks(this.view));
         this.observer.observe(view.contentDOM, { childList: true });
         syncBlocks(view);
+        // Un editeur recree par Obsidian repart sans chapitre actif : la carte le rappelle apres sa mise en place.
+        window.setTimeout(() => hooks.replaced?.(view), 60);
       }
       update(u: ViewUpdate): void {
         const effect = u.transactions.some((t) => t.effects.some((e) => e.is(setActiveRange)));
         if (u.docChanged || u.viewportChanged || effect) this.decorations = buildDecorations(u.view);
         if (u.docChanged || u.viewportChanged || u.geometryChanged || effect) syncBlocks(u.view);
+        // Pas de modification de l'editeur pendant sa mise a jour : le rappel part juste apres.
+        if (u.docChanged && replacesWholeText(u)) window.setTimeout(() => hooks.replaced?.(u.view), 0);
         if (u.selectionSet || u.docChanged) hooks.changed(u.view);
       }
       destroy(): void {
