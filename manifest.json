@@ -1,7 +1,7 @@
 {
   "id": "bigorneau",
   "name": "Bigorneau",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "minAppVersion": "1.5.0",
   "description": "Write long documents as a mind map: organise headings visually, then export a typeset PDF with the line breaking of TeX, footnotes, tables, figures and formulas. Suited to academic reports.",
   "author": "Olivier Holweck",

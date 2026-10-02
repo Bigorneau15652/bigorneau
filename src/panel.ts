@@ -57,7 +57,7 @@ export class ButtonPanel {
 
   // Fonctions disponibles sur cet appareil, dans l'ordre complet enregistre.
   private available(): PanelFunction<FunctionContext>[] {
-    const all = this.host.functions.all().filter((f) => !f.available || f.available());
+    const all = this.host.functions.all().filter((f) => f.button !== false && (!f.available || f.available()));
     const order = panelOrder(all.map((f) => f.id), this.host.settings.panelOrder);
     return order.map((id) => all.find((f) => f.id === id) as PanelFunction<FunctionContext>);
   }

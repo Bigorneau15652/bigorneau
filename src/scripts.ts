@@ -20,6 +20,8 @@ export interface ScriptFunction {
   icon?: string | string[];
   // La fonction ecrit dans la note : elle recoit l'editeur, et n'agit qu'en mode edition.
   needsEditor?: boolean;
+  // Faux : la fonction est une commande de la palette sans bouton dans le panneau.
+  button?: boolean;
   // Absente : disponible partout.
   available?: () => boolean;
   run: (ctx: FunctionContext) => void | Promise<void>;
@@ -102,7 +104,7 @@ export interface ScriptHost {
   obsidian: unknown;
   language(): HelpLang;
   notice(message: string): void;
-  registerFunction(fn: { id: string; name: () => string; icons: string[]; needsEditor: boolean; available: () => boolean; run: (ctx: FunctionContext) => void | Promise<void> }): void;
+  registerFunction(fn: { id: string; button?: boolean; name: () => string; icons: string[]; needsEditor: boolean; available: () => boolean; run: (ctx: FunctionContext) => void | Promise<void> }): void;
   addHelp(entries: HelpEntry[]): void;
   // Execute le texte d'un script ajoute a la main.
   runExternal(code: string, api: BigorneauApi, id: string): void | Promise<void>;
@@ -320,6 +322,7 @@ export class ScriptManager {
           name: () => pick(fn.name),
           icons: fn.icon === undefined ? [`file-text`] : Array.isArray(fn.icon) ? fn.icon : [fn.icon],
           needsEditor: fn.needsEditor === true,
+          ...(fn.button === false ? { button: false } : {}),
           available: () => this.isEnabled(owner) && (fn.available ? fn.available() : true),
           run: (ctx) => fn.run(ctx),
         });

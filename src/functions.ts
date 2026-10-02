@@ -11,6 +11,8 @@ export interface PanelFunction<Ctx> {
   icons: string[];
   // La fonction ecrit dans la note : il lui faut un editeur en mode edition.
   needsEditor: boolean;
+  // Faux : commande de la palette sans bouton dans le panneau ni ligne dans les reglages des boutons.
+  button?: boolean;
   // Absente : disponible partout. Sinon, faux sur les appareils ou la fonction n'existe pas (l'export, sur tablette).
   available?: () => boolean;
   run: (ctx: Ctx) => void | Promise<void>;
