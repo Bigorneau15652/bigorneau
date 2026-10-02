@@ -466,7 +466,6 @@ export class MmSettingTab extends PluginSettingTab {
 
   private buildExport(el: HTMLElement): void {
     const s = this.plugin.settings;
-    new Setting(el).setName(t(`Document`)).setHeading();
     new Setting(el)
       .setName(t(`Auteur du PDF`))
       .setDesc(t(`Nom écrit dans les propriétés du PDF quand la note n'a pas de propriété author ou auteur.`))

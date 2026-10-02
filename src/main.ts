@@ -1,6 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 import { setLanguage, t } from "./i18n";
-import { debounce, Editor, MarkdownView, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { debounce, Editor, MarkdownView, normalizePath, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
@@ -21,7 +21,14 @@ export default class MindmapWritingPlugin extends Plugin {
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
 
   async onload() {
-    this.settings = migrateSettings(await this.loadData());
+    const stored: unknown = await this.loadData();
+    // Premier lancement sous le nom Bigorneau : les reglages de l'ancien plugin (Mindmap Note Writing) sont repris une fois.
+    const legacy = stored === null || stored === undefined ? await this.legacyData() : null;
+    this.settings = migrateSettings(legacy ?? stored);
+    if (legacy) {
+      void this.saveData(this.settings);
+      new Notice(t(`Les réglages de l'ancien plugin Mindmap Note Writing ont été repris.`));
+    }
     setLanguage(this.settings.language);
     this.fixed = this.settings.fixedViews.map((entry) => ({ entry: { ...entry }, leaf: null }));
     this.addSettingTab(new MmSettingTab(this.app, this));
@@ -122,7 +129,7 @@ export default class MindmapWritingPlugin extends Plugin {
       })
     );
 
-    this.addRibbonIcon(`network`, t(`Ouvrir Mindmap Note Writing`), () => {
+    this.addRibbonIcon(`network`, t(`Ouvrir Bigorneau`), () => {
       void this.activateView();
     });
 
@@ -424,6 +431,18 @@ export default class MindmapWritingPlugin extends Plugin {
   }
 
   // Ecriture differee : evite d'enregistrer a chaque cran d'une reglette.
+  // Reglages enregistres par l'ancien plugin (identifiant mindmap-writing), s'il est encore present dans ce coffre. Les fichiers
+  // de configuration ne sont pas dans l'index du coffre : seul l'adaptateur peut les lire. A retirer dans une version ulterieure.
+  private async legacyData(): Promise<unknown> {
+    try {
+      const path = normalizePath(`${this.app.vault.configDir}/plugins/mindmap-writing/data.json`);
+      if (!(await this.app.vault.adapter.exists(path))) return null;
+      return JSON.parse(await this.app.vault.adapter.read(path)) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
   private persistLater = debounce(() => void this.saveData(this.settings), 400, true);
 
   // Enregistre les reglages et, si demande, redessine les cartes ouvertes.

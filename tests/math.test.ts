@@ -61,7 +61,7 @@ import { paginate } from "../src/export/paginate";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, typesetDoc } from "../src/export/typeset";
 import { buildExportDoc } from "../src/export/doc-tree";
 
-const REQ = { creator: `Mindmap Note Writing`, created: new Date(`2026-10-01T15:00:00Z`) };
+const REQ = { creator: `Bigorneau`, created: new Date(`2026-10-01T15:00:00Z`) };
 const inlineAsset = parseMathSvg(samples.inline, `x`, false)!;
 const displayAsset = parseMathSvg(samples.display, `y`, true)!;
 const FORMULAS = new Map([

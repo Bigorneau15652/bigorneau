@@ -1438,6 +1438,7 @@
 }
 
 .mmw-export-page {
+  font-family: "MMW Libertinus Serif", serif;
   position: absolute;
   top: 0;
   left: 0;
@@ -1527,6 +1528,24 @@
 
 .mmw-row-toc {
   cursor: pointer;
+}
+
+.mmw-row-toc-numbered {
+  display: flex;
+  white-space: pre;
+}
+
+/* Styles de police des morceaux de ligne de l'apercu : les polices Libertinus sont chargees par le plugin. */
+.mmw-run-mono {
+  font-family: "MMW Libertinus Mono", monospace;
+}
+
+.mmw-run-bold {
+  font-weight: 700;
+}
+
+.mmw-run-italic {
+  font-style: italic;
 }
 
 /* Points de conduite de la table des matieres. */

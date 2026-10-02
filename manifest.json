@@ -1,9 +1,9 @@
 {
-  "id": "mindmap-writing",
-  "name": "Mindmap Note Writing",
-  "version": "0.1.7",
+  "id": "bigorneau",
+  "name": "Bigorneau",
+  "version": "0.1.8",
   "minAppVersion": "1.5.0",
-  "description": "Ecriture en branche : redigez les chapitres d'une note sous forme de carte mentale.",
-  "author": "Bigorneau",
+  "description": "Write notes as mind maps, one real paragraph per node. Includes a long document composer with typeset PDF export.",
+  "author": "Olivier Holweck",
   "isDesktopOnly": false
 }

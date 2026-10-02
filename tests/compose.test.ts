@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { composeNote, composeToPdf } from "../src/export/compose";
 
-const REQ = { creator: `Mindmap Note Writing`, created: new Date(`2026-10-01T15:00:00Z`) };
+const REQ = { creator: `Bigorneau`, created: new Date(`2026-10-01T15:00:00Z`) };
 const text = (s: string): string => Buffer.from(s, `latin1`).toString(`latin1`);
 
 test(`la note devient des pages avec sa langue, son auteur et son titre`, () => {

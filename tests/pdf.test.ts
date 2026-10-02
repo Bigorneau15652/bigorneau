@@ -24,7 +24,7 @@ async function build(text: string, deflate = false): Promise<{ pdf: Uint8Array; 
     title: `Audit énergétique`,
     author: `Olivier`,
     language: `fr-FR`,
-    creator: `Mindmap Note Writing`,
+    creator: `Bigorneau`,
     created: new Date(`2026-10-01T15:00:00Z`),
     ...(deflate ? { deflate: async (d: Uint8Array) => new Uint8Array(deflateSync(d)) } : {}),
   });

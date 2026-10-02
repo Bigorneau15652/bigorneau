@@ -37,7 +37,7 @@ export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile)
     for (const u of urls) URL.revokeObjectURL(u);
     const pdf = await composeToPdf(composed, {
       defaultAuthor: plugin.settings.exportAuthor,
-      creator: `Mindmap Note Writing ${plugin.manifest.version}`,
+      creator: `Bigorneau ${plugin.manifest.version}`,
       created: new Date(),
       deflate,
     });
