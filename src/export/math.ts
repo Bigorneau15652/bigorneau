@@ -16,14 +16,51 @@ export interface MathAsset {
 export const mathKey = (tex: string, display: boolean): string => `${display ? `D` : `I`}:${tex}`;
 
 // Formules ecrites dans un texte : $...$ (le premier $ n'est pas suivi d'une espace, le dernier n'est pas precede d'une espace
-// ni suivi d'un chiffre, comme dans Obsidian) et $$...$$ dans un paragraphe.
-export const INLINE_MATH_RE = /\$\$([^$]+?)\$\$|(?<![\\$])\$(?![\s$])([^$\n]+?)(?<![\s\\])\$(?!\d)/g;
+// ni suivi d'un chiffre, comme dans Obsidian) et $$...$$ dans un paragraphe. Le $ d'ouverture d'une formule en ligne n'est pas
+// precede d'une barre oblique inverse ni d'un autre $. La condition sur le caractere precedent est verifiee a la main (et non
+// par une expression a « lookbehind », que les anciens iPhone et iPad ne savent pas lire).
+export interface MathMatch {
+  start: number;
+  end: number;
+  display: boolean;
+  // Formule TeX, sans les $.
+  tex: string;
+}
+
+const DISPLAY_AT = /\$\$([^$]+?)\$\$/y;
+const INLINE_AT = /\$(?![\s$])([^$\n]*[^$\n\s\\])\$(?!\d)/y;
+
+// Formules d'un texte, de gauche a droite, sans chevauchement.
+export function findMath(text: string): MathMatch[] {
+  const out: MathMatch[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const at = text.indexOf(`$`, i);
+    if (at < 0) break;
+    DISPLAY_AT.lastIndex = at;
+    let m = DISPLAY_AT.exec(text);
+    if (m) {
+      out.push({ start: at, end: at + m[0].length, display: true, tex: m[1] });
+      i = at + m[0].length;
+      continue;
+    }
+    const prev = at > 0 ? text[at - 1] : ``;
+    if (prev !== `\\` && prev !== `$`) {
+      INLINE_AT.lastIndex = at;
+      m = INLINE_AT.exec(text);
+      if (m) {
+        out.push({ start: at, end: at + m[0].length, display: false, tex: m[1] });
+        i = at + m[0].length;
+        continue;
+      }
+    }
+    i = at + 1;
+  }
+  return out;
+}
 
 export function inlineMathOf(text: string): string[] {
-  const out: string[] = [];
-  const clean = text.replace(/`[^`]*`/g, ``);
-  for (const m of clean.matchAll(INLINE_MATH_RE)) out.push((m[1] ?? m[2]).trim());
-  return out;
+  return findMath(text.replace(/`[^`]*`/g, ``)).map((m) => m.tex.trim());
 }
 
 type Matrix = [number, number, number, number, number, number];

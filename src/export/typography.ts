@@ -6,8 +6,18 @@ import { FINE_SPACE, NO_BREAK_SPACE } from "./font-metrics";
 const SPACES = `    `;
 
 // Abreviations apres lesquelles on ne coupe pas la ligne, et unites qui ne se separent pas du nombre qui les precede.
-const ABBREVIATIONS = /(?<![\p{L}\d])(M\.|MM\.|Mme|Mmes|Mlle|Dr|Pr|p\.|pp\.|art\.|fig\.|chap\.|vol\.|n°|N°)[ ]+(?=[\p{L}\d])/gu;
+const ABBREVIATIONS = /(M\.|MM\.|Mme|Mmes|Mlle|Dr|Pr|p\.|pp\.|art\.|fig\.|chap\.|vol\.|n°|N°)[ ]+(?=[\p{L}\d])/gu;
 const UNITS = /(\d)[ ]+(?=(?:kWh|MWh|GWh|kW|MW|W|Wh|m²|m³|m2|m3|%|€|°C|°|km|cm|mm|m|kg|t|g|h|min|s|an|ans|mois|jours?|euros?|k€|M€)(?![\p{L}\d]))/gu;
+
+// Espace insecable apres les abreviations (M., Mme, p., n°) qui ne font pas partie d'un mot plus long (« AM. » n'est pas « M. »).
+// Le caractere qui precede est verifie a la main, parce que les anciens iPhone et iPad ne savent pas lire les expressions a
+// « lookbehind ».
+export function abbreviationSpacing(text: string): string {
+  return text.replace(ABBREVIATIONS, (m: string, abbr: string, at: number, whole: string) => {
+    const prev = at > 0 ? (Array.from(whole.slice(Math.max(0, at - 2), at)).pop() as string) : ``;
+    return /[\p{L}\d]/u.test(prev) ? m : `${abbr}${NO_BREAK_SPACE}`;
+  });
+}
 
 // Insere ou normalise les espaces insecables : fine avant ; ! ? , insecable avant les deux-points et a l'interieur des
 // guillemets francais, insecable apres les abreviations (M., Mme, p., n°) et entre un nombre et son unite.
@@ -20,7 +30,7 @@ export function frenchSpacing(text: string): string {
   // Guillemets francais : insecable a l'interieur.
   out = out.replace(new RegExp(`«[${SPACES}]*`, `g`), `«${NO_BREAK_SPACE}`);
   out = out.replace(new RegExp(`[${SPACES}]*»`, `g`), `${NO_BREAK_SPACE}»`);
-  out = out.replace(ABBREVIATIONS, `$1${NO_BREAK_SPACE}`);
+  out = abbreviationSpacing(out);
   out = out.replace(UNITS, `$1${NO_BREAK_SPACE}`);
   return out;
 }

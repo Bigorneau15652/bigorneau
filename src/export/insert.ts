@@ -73,7 +73,8 @@ export function insertTableCaption(text: string, from: number): InsertResult {
 // Table des matieres de la note : bascule la propriete toc de l'en-tete (cree l'en-tete au besoin). Renvoie aussi le nouvel etat.
 export function toggleToc(text: string): InsertResult & { enabled: boolean } {
   const eol = eolOf(text);
-  const lines = text.split(/(?<=\n)/);
+  // Lignes avec leur fin de ligne.
+  const lines: string[] = text.match(/[^\n]*\n|[^\n]+/g) ?? [];
   const isFence = (l: string): boolean => /^---[ \t]*\r?\n?$/.test(l);
   let close = -1;
   if (lines.length > 1 && isFence(lines[0])) for (let i = 1; i < lines.length; i++) if (isFence(lines[i])) {
