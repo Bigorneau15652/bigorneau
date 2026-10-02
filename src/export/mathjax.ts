@@ -24,7 +24,7 @@ function getEngine(): Engine {
   RegisterHTMLHandler(adaptor);
   const packages = AllPackages.filter((p: string) => ![`autoload`, `require`, `noundefined`, `noerrors`].includes(p));
   const doc = mathjax.document(``, { InputJax: new TeX({ packages }), OutputJax: new SVG({ fontCache: `local` }) });
-  engine = { convert: (tex, display) => adaptor.outerHTML(doc.convert(tex, { display })) };
+  engine = { convert: (tex, display) => adaptor.serializeXML(doc.convert(tex, { display })) };
   return engine;
 }
 

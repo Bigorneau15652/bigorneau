@@ -18,6 +18,7 @@ import {
   ViewMode,
 } from "./settings";
 import { SHAPE_CHOICES, ShapeChoice, shapeChoice, shapePatch } from "./style";
+import { setSvg } from "./dom";
 
 type KeyField = `keyPrev` | `keyNext` | `keyParent` | `keyChild`;
 type IconField = `iconExternal` | `iconInternal` | `iconWeb`;
@@ -362,7 +363,7 @@ export class MmSettingTab extends PluginSettingTab {
         const b = gallery.createEl(`button`, { cls: `mmw-icon-choice` + (s[field] === def.id ? ` mmw-icon-on` : ``) });
         b.type = `button`;
         b.title = t(def.name);
-        b.innerHTML = iconSvg(kind, def.id, 18);
+        setSvg(b, iconSvg(kind, def.id, 18));
         if (s[colorField]) b.style.color = s[colorField];
         b.addEventListener(`click`, async () => {
           s[field] = def.id;

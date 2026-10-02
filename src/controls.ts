@@ -4,6 +4,7 @@
 import { MmSettings, makeTag, PanePosition, TagDef } from "./settings";
 import { t } from "./i18n";
 import { NodeStyle, ShapeChoice, shapeChoice, shapePatch, StylePatch } from "./style";
+import { setSvg } from "./dom";
 
 export interface ControlActions {
   zoomIn: () => void;
@@ -141,7 +142,7 @@ function tip(el: HTMLElement, text: string, desc?: string): void {
 function iconButton(icon: string, label: string, onClick: () => void, cls = `mmw-btn`, desc?: string): HTMLButtonElement {
   const b = h(`button`, cls);
   b.type = `button`;
-  b.innerHTML = icon;
+  setSvg(b, icon);
   tip(b, label, desc);
   b.addEventListener(`click`, onClick);
   return b;
@@ -215,7 +216,7 @@ export class MapControls {
       (this.compactSep = h(`span`, `mmw-sep`))
     );
     const compactIcon = (this.compactIcon = h(`span`, `mmw-compact-icon`));
-    compactIcon.innerHTML = ICONS.compact;
+    setSvg(compactIcon, ICONS.compact);
     tip(compactIcon, t(`Compacité de l'affichage`), t(`Resserre ou écarte les cases de la carte.`));
     zoom.append(compactIcon, this.slider);
 
@@ -447,7 +448,7 @@ export class MapControls {
     this.viewBtn.classList.toggle(`mmw-active`, this.open === `view`);
     // Le bouton montre la vue vers laquelle il bascule.
     const toList = this.getSettings().viewMode !== `list`;
-    this.modeBtn.innerHTML = toList ? ICONS.list : ICONS.network;
+    setSvg(this.modeBtn, toList ? ICONS.list : ICONS.network);
     tip(this.modeBtn, toList ? t(`Passer à la vue Liste`) : t(`Passer à la vue Mindmap`), t(`Bascule entre la carte mentale et la liste condensée.`));
     this.scopeEl = null;
     if (this.open === null) {
@@ -548,7 +549,7 @@ export class MapControls {
     const b = h(`button`, `mmw-menu-item`);
     b.type = `button`;
     const i = h(`span`, `mmw-menu-icon`);
-    i.innerHTML = icon;
+    setSvg(i, icon);
     b.append(i, h(`span`, `mmw-menu-label`, label));
     b.addEventListener(`click`, fn);
     return b;
@@ -558,7 +559,7 @@ export class MapControls {
     const b = h(`button`, `mmw-menu-item`);
     b.type = `button`;
     const box = h(`span`, `mmw-check` + (value ? ` mmw-checked` : ``));
-    box.innerHTML = value ? ICONS.check : ``;
+    setSvg(box, value ? ICONS.check : ``);
     b.append(box, h(`span`, `mmw-menu-label`, label));
     b.addEventListener(`click`, () => fn(!value));
     return b;
@@ -876,7 +877,7 @@ export class MapControls {
     for (const it of items) {
       const b = h(`button`, `mmw-option` + (it.value === current ? ` mmw-selected-option` : ``));
       b.type = `button`;
-      if (it.html) b.innerHTML = it.html;
+      if (it.html) setSvg(b, it.html);
       else b.textContent = it.text ?? ``;
       if (it.font) b.style.fontFamily = it.font;
       if (it.title) tip(b, it.title);
