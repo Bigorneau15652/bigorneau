@@ -27,7 +27,7 @@ export class HelpModal extends Modal {
       for (const entry of found) {
         const block = results.createDiv({ cls: `mmw-help-entry` });
         block.createEl(`h4`, { text: entry.title[lang] });
-        block.createEl(`p`, { text: entry.text[lang] });
+        for (const line of entry.text[lang].split(`\n`)) block.createEl(`p`, { text: line });
       }
     };
     input.addEventListener(`input`, draw);

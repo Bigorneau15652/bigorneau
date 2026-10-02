@@ -36,3 +36,17 @@ export function renderTex(tex: string, display: boolean): MathAsset | null {
     return null;
   }
 }
+
+// Dessin SVG complet d'une formule (celui de MathJax, avec ses glyphes), pour l'apercu de l'editeur de formules ; null si MathJax la
+// refuse. Le texte renvoye est l'element svg seul.
+export function renderTexSvg(tex: string, display: boolean): string | null {
+  try {
+    const out = getEngine().convert(tex, display);
+    if (/data-mml-node="merror"|<mjx-merror|data-mjx-error/.test(out)) return null;
+    const from = out.indexOf(`<svg`);
+    const to = out.lastIndexOf(`</svg>`);
+    return from < 0 || to < 0 ? null : out.slice(from, to + 6);
+  } catch {
+    return null;
+  }
+}

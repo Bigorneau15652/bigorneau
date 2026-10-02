@@ -90,3 +90,24 @@ test(`les modeles garnis d'emplacements vides restent dessinables`, () => {
   assert.notEqual(renderTex(text, true), null);
   assert.equal(renderTex(String.raw`\frac{`, false), null);
 });
+
+test(`chaque bouton de structure a son explication et un dessin d'exemple valide`, async () => {
+  const { sampleOf } = await import(`../src/formula-palette`);
+  const { renderTexSvg } = await import(`../src/export/mathjax`);
+  const structures = PALETTE.find((g) => g.id === `structures`);
+  assert.ok(structures);
+  for (const item of structures.items) {
+    assert.ok(item.how && item.how.fr.length > 10 && item.how.en.length > 10, `explication : ${item.tex}`);
+    assert.notEqual(renderTexSvg(sampleOf(item), false), null, `dessin : ${item.tex}`);
+  }
+});
+
+test(`le cours de l'editeur couvre chaque bouton de structure dans les deux langues`, async () => {
+  const { courseSections } = await import(`../src/formula-course`);
+  const sections = courseSections();
+  assert.deepEqual(sections.map((s) => s.id), [`start`, `modes`, `slots`, `preview`, `structures`, `symbols`, `tex`]);
+  for (const s of sections) for (const lang of [`fr`, `en`] as const) assert.ok(s.text[lang].length > 50 && s.title[lang].length > 5, `${s.id} ${lang}`);
+  const structures = PALETTE.find((g) => g.id === `structures`);
+  const fr = sections.find((s) => s.id === `structures`)?.text.fr ?? ``;
+  for (const item of structures?.items ?? []) assert.ok(fr.includes(item.tip.fr), item.tip.fr);
+});
