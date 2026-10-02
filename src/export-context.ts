@@ -9,8 +9,23 @@ import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
 import { t } from "./i18n";
 import type { MmSettings } from "./settings";
 
-export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportPageRefs` | `exportMedia`>): PageStyle {
-  return { ...DEFAULT_PAGE_STYLE, floats: settings.exportFloats, pageRefs: settings.exportPageRefs, media: settings.exportMedia };
+export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportPageRefs` | `exportMedia` | `exportHeader` | `exportFooter` | `exportFlushBottom` | `exportChapterBreak` | `exportFootnoteNumbering` | `exportProtrusion` | `exportToc` | `exportTocDepth` | `exportChapterToc` | `exportChapterTocDepth`>): PageStyle {
+  return {
+    ...DEFAULT_PAGE_STYLE,
+    header: settings.exportHeader,
+    footer: settings.exportFooter,
+    flushBottom: settings.exportFlushBottom,
+    chapterBreak: settings.exportChapterBreak,
+    footnoteNumbering: settings.exportFootnoteNumbering,
+    floats: settings.exportFloats,
+    pageRefs: settings.exportPageRefs,
+    media: settings.exportMedia,
+    protrusion: settings.exportProtrusion,
+    toc: settings.exportToc,
+    tocDepth: settings.exportTocDepth,
+    chapterToc: settings.exportChapterToc,
+    chapterTocDepth: settings.exportChapterTocDepth,
+  };
 }
 
 // Messages du compte rendu d'export, d'apres les signalements de la composition.

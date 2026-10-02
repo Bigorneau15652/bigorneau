@@ -190,9 +190,12 @@ test(`identifiants de bloc des paragraphes et citations`, () => {
 });
 
 test(`table des matieres demandee par les proprietes de la note`, () => {
-  assert.deepEqual(buildExportDoc(`---\ntoc: true\n---\n# A`, `N.md`).toc, { depth: 3 });
-  assert.deepEqual(buildExportDoc(`---\ntoc: oui\ntoc-depth: 2\n---\n# A`, `N.md`).toc, { depth: 2 });
-  assert.equal(buildExportDoc(`---\ntoc: false\n---\n# A`, `N.md`).toc, undefined);
+  assert.deepEqual(buildExportDoc(`---\ntoc: true\n---\n# A`, `N.md`).toc, { enabled: true });
+  assert.deepEqual(buildExportDoc(`---\ntoc: oui\ntoc-depth: 2\n---\n# A`, `N.md`).toc, { enabled: true, depth: 2 });
+  assert.deepEqual(buildExportDoc(`---\ntoc: false\n---\n# A`, `N.md`).toc, { enabled: false });
+  assert.deepEqual(buildExportDoc(`---\ntoc-depth: 2\n---\n# A`, `N.md`).toc, { depth: 2 });
+  assert.deepEqual(buildExportDoc(`---\nchapter-toc: true\nchapter-toc-depth: 3\n---\n# A`, `N.md`).chapterToc, { enabled: true, depth: 3 });
+  assert.equal(buildExportDoc(`---\nchapter-toc: true\n---\n# A`, `N.md`).toc, undefined);
   assert.equal(buildExportDoc(`# A`, `N.md`).toc, undefined);
 });
 

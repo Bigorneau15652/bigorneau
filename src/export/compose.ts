@@ -5,7 +5,7 @@ import { anchorPages, paginate, Page } from "./paginate";
 import { ImageAsset } from "./image";
 import { inlineMathOf, MathAsset } from "./math";
 import { buildPdf } from "./pdf";
-import { A4_SETUP, DEFAULT_PAGE_STYLE, PageSetup, PageStyle, typesetDoc, TypesetDoc } from "./typeset";
+import { A4_SETUP, DEFAULT_PAGE_STYLE, PageSetup, PageStyle, tocPlan, typesetDoc, TypesetDoc } from "./typeset";
 
 export interface Composed {
   typeset: TypesetDoc;
@@ -86,7 +86,8 @@ export function composeNote(text: string, fileName: string, setup: PageSetup = A
   const doc = buildExportDoc(text, fileName);
   // Table des matieres et renvois avec numero de page : la mise en page depend des numeros de page, qui dependent de la mise
   // en page. On recompose avec les numeros de la composition precedente jusqu'a ce qu'ils ne changent plus (quatre fois au plus).
-  const needsPages = doc.toc !== undefined || style.pageRefs;
+  const plan = tocPlan(doc, style);
+  const needsPages = plan.general > 0 || plan.chapter > 0 || style.pageRefs;
   let known: Map<string, number> | undefined;
   let typeset = typesetDoc(doc, setup, undefined, style, options);
   let pages = paginate(typeset, setup, style);

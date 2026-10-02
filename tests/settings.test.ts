@@ -51,4 +51,19 @@ test(`reglages : auteur du PDF vide par defaut, nettoye quand il est enregistre`
   assert.equal(migrateSettings({ exportFloats: `autre` }).exportFloats, `float`);
   assert.equal(migrateSettings({ exportPageRefs: true }).exportPageRefs, true);
   assert.equal(migrateSettings({ exportPageRefs: `oui` }).exportPageRefs, false);
+  // Mise en page de l'export, protrusion et tables des matieres.
+  assert.equal(DEFAULT_SETTINGS.exportHeader, `chapter`);
+  assert.equal(DEFAULT_SETTINGS.exportFooter, `number`);
+  assert.equal(DEFAULT_SETTINGS.exportFlushBottom, false);
+  assert.equal(DEFAULT_SETTINGS.exportChapterBreak, `none`);
+  assert.equal(DEFAULT_SETTINGS.exportFootnoteNumbering, `continuous`);
+  assert.equal(DEFAULT_SETTINGS.exportProtrusion, true);
+  assert.equal(DEFAULT_SETTINGS.exportToc, false);
+  assert.equal(DEFAULT_SETTINGS.exportTocDepth, 3);
+  assert.equal(DEFAULT_SETTINGS.exportChapterToc, false);
+  assert.equal(DEFAULT_SETTINGS.exportChapterTocDepth, 3);
+  const m = migrateSettings({ exportHeader: `title`, exportFooter: `none`, exportFlushBottom: true, exportChapterBreak: `level1`, exportFootnoteNumbering: `perChapter`, exportProtrusion: false, exportToc: true, exportTocDepth: 5, exportChapterToc: true, exportChapterTocDepth: 2 });
+  assert.deepEqual([m.exportHeader, m.exportFooter, m.exportFlushBottom, m.exportChapterBreak, m.exportFootnoteNumbering, m.exportProtrusion, m.exportToc, m.exportTocDepth, m.exportChapterToc, m.exportChapterTocDepth], [`title`, `none`, true, `level1`, `perChapter`, false, true, 5, true, 2]);
+  const bad = migrateSettings({ exportHeader: `x`, exportFooter: 1, exportFlushBottom: `oui`, exportChapterBreak: `x`, exportFootnoteNumbering: `x`, exportProtrusion: `non`, exportToc: `oui`, exportTocDepth: 9, exportChapterToc: 1, exportChapterTocDepth: 0 });
+  assert.deepEqual([bad.exportHeader, bad.exportFooter, bad.exportFlushBottom, bad.exportChapterBreak, bad.exportFootnoteNumbering, bad.exportProtrusion, bad.exportToc, bad.exportTocDepth, bad.exportChapterToc, bad.exportChapterTocDepth], [`chapter`, `number`, false, `none`, `continuous`, true, false, 3, false, 3]);
 });
