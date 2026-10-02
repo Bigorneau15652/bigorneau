@@ -37,6 +37,11 @@ export interface DocSection {
   sections: DocSection[];
 }
 
+export interface TocProps {
+  enabled?: boolean;
+  depth?: number;
+}
+
 export interface ExportDoc {
   // Nom de la note.
   title: string;
@@ -44,8 +49,11 @@ export interface ExportDoc {
   language?: string;
   // Auteur indique par la propriete author (ou auteur) en en-tete de la note.
   author?: string;
-  // Table des matieres demandee par la propriete toc: true (toc-depth: n limite les niveaux, 3 par defaut).
-  toc?: { depth: number };
+  // Table des matieres generale : proprietes toc (true ou false) et toc-depth (1 a 6) de la note. Une propriete absente laisse la
+  // main aux reglages du plugin ; une propriete presente l'emporte sur eux.
+  toc?: TocProps;
+  // Table des matieres de chaque chapitre : proprietes chapter-toc et chapter-toc-depth.
+  chapterToc?: TocProps;
   // Texte place avant le premier titre.
   blocks: DocBlock[];
   sections: DocSection[];
@@ -408,6 +416,17 @@ function visibleChildren(node: MmNode, opts: ExtractOptions): DocSection[] {
 }
 
 // Construit l'arbre du document a partir du texte de la note, dans l'ordre de ses titres.
+// Lit les proprietes `nom` (true, false, oui, non...) et `nom-depth` (1 a 6) de l'en-tete de la note.
+function tocProps(frontmatter: string, name: string): TocProps | undefined {
+  const flag = new RegExp(`^${name}[ \\t]*:[ \\t]*[\\x22\\x27]?(true|yes|oui|vrai|1|false|no|non|faux|0)[\\x22\\x27]?[ \\t]*$`, `im`).exec(frontmatter);
+  const depth = new RegExp(`^${name}-depth[ \\t]*:[ \\t]*[\\x22\\x27]?([1-6])[\\x22\\x27]?[ \\t]*$`, `im`).exec(frontmatter);
+  if (!flag && !depth) return undefined;
+  const out: TocProps = {};
+  if (flag) out.enabled = /^(true|yes|oui|vrai|1)$/i.test(flag[1]);
+  if (depth) out.depth = Number(depth[1]);
+  return out;
+}
+
 export function buildExportDoc(text: string, fileName: string, opts: ExtractOptions = {}): ExportDoc {
   const doc = parseNote(text, fileName);
   const sections = visibleChildren(doc.root, opts);
@@ -423,7 +442,7 @@ export function buildExportDoc(text: string, fileName: string, opts: ExtractOpti
   doc.floats.forEach(collect);
   const lang = /^(?:lang|langue|language)[ \t]*:[ \t]*[\x22\x27\x60]?([A-Za-z]{2}(?:-[A-Za-z]+)?)/m.exec(doc.frontmatter);
   const author = /^(?:author|auteur)[ \t]*:[ \t]*[\x22\x27\x60]?([^\x22\x27\x60\r\n]+?)[\x22\x27\x60]?[ \t]*$/m.exec(doc.frontmatter);
-  const toc = /^toc[ \t]*:[ \t]*[\x22\x27]?(true|yes|oui|vrai|1)[\x22\x27]?[ \t]*$/im.test(doc.frontmatter);
-  const depth = /^toc-depth[ \t]*:[ \t]*[\x22\x27]?([1-6])[\x22\x27]?[ \t]*$/im.exec(doc.frontmatter);
-  return { title: doc.root.title, ...(toc ? { toc: { depth: depth ? Number(depth[1]) : 3 } } : {}), ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
+  const toc = tocProps(doc.frontmatter, `toc`);
+  const chapterToc = tocProps(doc.frontmatter, `chapter-toc`);
+  return { title: doc.root.title, ...(toc ? { toc } : {}), ...(chapterToc ? { chapterToc } : {}), ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
 }

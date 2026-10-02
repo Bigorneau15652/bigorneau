@@ -51,7 +51,7 @@ export class MmSettingTab extends PluginSettingTab {
     this.chapter(`floats`, t(`Sujets flottants`), t(`Sujets de notes libres, hors de la carte : niveau, forme, couleurs`), (el) => this.buildFloats(el));
     this.chapter(`links`, t(`Liens et icônes`), t(`Icônes et couleurs des repères de liens`), (el) => this.buildLinks(el));
     this.chapter(`notes`, t(`Nouvelles notes`), t(`Dossier des notes créées depuis la carte`), (el) => this.buildNotes(el));
-    this.chapter(`export`, t(`Export PDF`), t(`Métadonnées du PDF produit par l'export de haute qualité`), (el) => this.buildExport(el));
+    this.chapter(`export`, t(`Export PDF`), t(`Mise en page, tables des matières, figures et médias de l'export PDF de haute qualité`), (el) => this.buildExport(el));
     this.chapter(`keys`, t(`Navigation au clavier`), t(`Raccourcis pour passer d'un chapitre à l'autre depuis la note`), (el) => this.buildKeys(el));
   }
 
@@ -430,8 +430,42 @@ export class MmSettingTab extends PluginSettingTab {
       });
   }
 
+  // Reglage de l'export a choix multiples (liste deroulante) ou a deux etats (interrupteur).
+  private exportChoice(el: HTMLElement, name: string, desc: string, options: [string, string][], value: string, set: (v: string) => void): void {
+    new Setting(el)
+      .setName(name)
+      .setDesc(desc)
+      .addDropdown((d) => {
+        for (const [v, label] of options) d.addOption(v, label);
+        d.setValue(value).onChange(async (v) => {
+          set(v);
+          await this.plugin.saveSettings(false);
+        });
+      });
+  }
+
+  private exportToggle(el: HTMLElement, name: string, desc: string, value: boolean, set: (v: boolean) => void): void {
+    new Setting(el)
+      .setName(name)
+      .setDesc(desc)
+      .addToggle((x) =>
+        x.setValue(value).onChange(async (v) => {
+          set(v);
+          await this.plugin.saveSettings(false);
+        })
+      );
+  }
+
+  // Niveaux de titres d'une table des matieres : de 1 (niveau 1 seulement) a 6.
+  private exportLevels(el: HTMLElement, name: string, desc: string, value: number, set: (v: number) => void): void {
+    const options: [string, string][] = [[`1`, t(`Niveau 1 seulement`)]];
+    for (let n = 2; n <= 6; n++) options.push([String(n), t(`Jusqu'au niveau {0}`, n)]);
+    this.exportChoice(el, name, desc, options, String(value), (v) => set(Number(v)));
+  }
+
   private buildExport(el: HTMLElement): void {
     const s = this.plugin.settings;
+    new Setting(el).setName(t(`Document`)).setHeading();
     new Setting(el)
       .setName(t(`Auteur du PDF`))
       .setDesc(t(`Nom écrit dans les propriétés du PDF quand la note n'a pas de propriété author ou auteur.`))
@@ -441,39 +475,86 @@ export class MmSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings(false);
         })
       );
-    new Setting(el)
-      .setName(t(`Figures et tableaux`))
-      .setDesc(t(`Flottants : placés en haut ou en bas de la page où ils tiennent, comme en LaTeX. Sinon, placés à l'endroit où ils sont écrits dans la note.`))
-      .addDropdown((d) => {
-        d.addOption(`float`, t(`Flottants (en haut ou en bas de page)`));
-        d.addOption(`inline`, t(`À l'endroit où ils sont écrits`));
-        d.setValue(s.exportFloats).onChange(async (v) => {
-          s.exportFloats = v === `inline` ? `inline` : `float`;
-          await this.plugin.saveSettings(false);
-        });
-      });
-    new Setting(el)
-      .setName(t(`Renvois vers un titre, une figure ou un tableau`))
-      .setDesc(t(`Les renvois [[#Titre]] et [[#^identifiant]] sont toujours cliquables dans le PDF. Cette option ajoute le numéro de page après le texte du renvoi.`))
-      .addDropdown((d) => {
-        d.addOption(`link`, t(`Cliquable seulement`));
-        d.addOption(`page`, t(`Cliquable avec le numéro de page`));
-        d.setValue(s.exportPageRefs ? `page` : `link`).onChange(async (v) => {
-          s.exportPageRefs = v === `page`;
-          await this.plugin.saveSettings(false);
-        });
-      });
-    new Setting(el)
-      .setName(t(`Vidéos, sons et contenus intégrés`))
-      .setDesc(t(`Un média ne se lit pas sur papier : il est remplacé par son titre et son adresse, cliquable dans le PDF.`))
-      .addDropdown((d) => {
-        d.addOption(`frame`, t(`Dans un cadre`));
-        d.addOption(`text`, t(`En simple texte`));
-        d.setValue(s.exportMedia).onChange(async (v) => {
-          s.exportMedia = v === `text` ? `text` : `frame`;
-          await this.plugin.saveSettings(false);
-        });
-      });
+
+    new Setting(el).setName(t(`Mise en page`)).setHeading();
+    this.exportChoice(
+      el,
+      t(`En-tête de page`),
+      t(`Texte placé en haut de chaque page, sauf sur la première.`),
+      [
+        [`chapter`, t(`Titre du chapitre en cours`)],
+        [`title`, t(`Titre de la note`)],
+        [`none`, t(`Aucun`)],
+      ],
+      s.exportHeader,
+      (v) => (s.exportHeader = v === `title` || v === `none` ? v : `chapter`)
+    );
+    this.exportChoice(
+      el,
+      t(`Pied de page`),
+      t(`Numéro de page centré en bas de chaque page.`),
+      [
+        [`number`, t(`Numéro de page`)],
+        [`none`, t(`Aucun`)],
+      ],
+      s.exportFooter,
+      (v) => (s.exportFooter = v === `none` ? `none` : `number`)
+    );
+    this.exportToggle(el, t(`Pages alignées en bas`), t(`Les espaces entre les blocs s'étirent pour que toutes les pages finissent à la même hauteur. Sinon, les pages peuvent finir à des hauteurs différentes.`), s.exportFlushBottom, (v) => (s.exportFlushBottom = v));
+    this.exportToggle(el, t(`Saut de page avant chaque chapitre`), t(`Chaque titre du plus haut niveau de la note commence sur une nouvelle page.`), s.exportChapterBreak === `level1`, (v) => (s.exportChapterBreak = v ? `level1` : `none`));
+    this.exportChoice(
+      el,
+      t(`Numérotation des notes de bas de page`),
+      t(`Les notes sont numérotées sur tout le document, ou à partir de 1 dans chaque chapitre.`),
+      [
+        [`continuous`, t(`Continue sur tout le document`)],
+        [`perChapter`, t(`Recommence à 1 à chaque chapitre`)],
+      ],
+      s.exportFootnoteNumbering,
+      (v) => (s.exportFootnoteNumbering = v === `perChapter` ? `perChapter` : `continuous`)
+    );
+    this.exportToggle(el, t(`Protrusion`), t(`La ponctuation et les tirets en bout de ligne dépassent légèrement dans la marge, ce qui rend le bord du texte plus net à l'œil.`), s.exportProtrusion, (v) => (s.exportProtrusion = v));
+
+    new Setting(el).setName(t(`Table des matières`)).setHeading();
+    this.exportToggle(el, t(`Table des matières générale`), t(`Placée sous le titre de la note. La propriété toc: true ou toc: false de la note l'emporte sur ce réglage.`), s.exportToc, (v) => (s.exportToc = v));
+    this.exportLevels(el, t(`Niveaux de la table générale`), t(`Niveaux de titres listés. La propriété toc-depth de la note l'emporte sur ce réglage.`), s.exportTocDepth, (v) => (s.exportTocDepth = v));
+    this.exportToggle(el, t(`Table des matières de chaque chapitre`), t(`Placée sous le titre de chaque chapitre de plus haut niveau, elle ne liste que les sous-titres de ce chapitre. La propriété chapter-toc de la note l'emporte sur ce réglage.`), s.exportChapterToc, (v) => (s.exportChapterToc = v));
+    this.exportLevels(el, t(`Niveaux de la table d'un chapitre`), t(`Niveaux de titres listés, titre du chapitre compris. La propriété chapter-toc-depth de la note l'emporte sur ce réglage.`), s.exportChapterTocDepth, (v) => (s.exportChapterTocDepth = v));
+
+    new Setting(el).setName(t(`Figures, renvois et médias`)).setHeading();
+    this.exportChoice(
+      el,
+      t(`Figures et tableaux`),
+      t(`Flottants : placés en haut ou en bas de la page où ils tiennent, comme en LaTeX. Sinon, placés à l'endroit où ils sont écrits dans la note.`),
+      [
+        [`float`, t(`Flottants (en haut ou en bas de page)`)],
+        [`inline`, t(`À l'endroit où ils sont écrits`)],
+      ],
+      s.exportFloats,
+      (v) => (s.exportFloats = v === `inline` ? `inline` : `float`)
+    );
+    this.exportChoice(
+      el,
+      t(`Renvois vers un titre, une figure ou un tableau`),
+      t(`Les renvois [[#Titre]] et [[#^identifiant]] sont toujours cliquables dans le PDF. Cette option ajoute le numéro de page après le texte du renvoi.`),
+      [
+        [`link`, t(`Cliquable seulement`)],
+        [`page`, t(`Cliquable avec le numéro de page`)],
+      ],
+      s.exportPageRefs ? `page` : `link`,
+      (v) => (s.exportPageRefs = v === `page`)
+    );
+    this.exportChoice(
+      el,
+      t(`Vidéos, sons et contenus intégrés`),
+      t(`Un média ne se lit pas sur papier : il est remplacé par son titre et son adresse, cliquable dans le PDF.`),
+      [
+        [`frame`, t(`Dans un cadre`)],
+        [`text`, t(`En simple texte`)],
+      ],
+      s.exportMedia,
+      (v) => (s.exportMedia = v === `text` ? `text` : `frame`)
+    );
   }
 
   private buildKeys(el: HTMLElement): void {

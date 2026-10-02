@@ -8,6 +8,7 @@ import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LIN
 import type { MathAsset } from "./math";
 import { breakParagraph, Item } from "./line-break";
 import { DEFAULT_TEX_PARAMS, DECENT, Fitness, INF_PENALTY, TexParams } from "./tex-params";
+import { leftProtrusion, rightProtrusion } from "./protrusion";
 import { frenchSpacing } from "./typography";
 
 export interface ParagraphOptions {
@@ -25,6 +26,8 @@ export interface ParagraphOptions {
   hyphenateLastWord?: boolean;
   // Les mots qui commencent par une majuscule (noms propres) peuvent etre coupes ; faux pour l'interdire.
   hyphenateCapitalized?: boolean;
+  // Protrusion : en composition justifiee, la ponctuation en bout de ligne depasse dans la marge (voir protrusion.ts).
+  protrusion?: boolean;
   // Police de base du paragraphe (gras pour les titres) ; le gras et l'italique du texte s'y ajoutent.
   style?: FontStyle;
   params?: TexParams;
@@ -49,7 +52,7 @@ export interface TypesetLine {
   text: string;
   // Le meme texte, decoupe par police.
   runs: LineRun[];
-  // Retrait de la ligne, en points (alinea sur la premiere ligne).
+  // Retrait de la ligne, en points (alinea sur la premiere ligne) ; negatif quand un signe depasse dans la marge gauche.
   offset: number;
   // Largeur supplementaire a donner a chaque espace pour justifier la ligne, en points (negative si l'on comprime).
   wordSpacing: number;
@@ -357,12 +360,29 @@ function finishLine(
     width += r.math ? (r.math.width * o.fontSize) / 1000 : measureText(r.text, o.fontSize * (r.sup ? SUP_SCALE : 1), r.style).width;
     if (!r.sup) for (const ch of r.text) if (ch === ` ` || ch === NO_BREAK_SPACE) spaces++;
   }
-  const offset = bl.from === 0 && o.indent > 0 && firstItem.type === `box` && firstItem.text === `` ? o.indent : 0;
+  let offset = bl.from === 0 && o.indent > 0 && firstItem.type === `box` && firstItem.text === `` ? o.indent : 0;
+  // Protrusion : le premier signe d'une ligne qui n'a pas d'alinea depasse a gauche, le dernier signe d'une ligne justifiee
+  // depasse a droite ; la ligne est justifiee sur la largeur de la colonne elargie de ces deux parts.
+  let pl = 0;
+  let pr = 0;
+  if (o.protrusion && justify) {
+    const first = runs[0];
+    const end = runs[runs.length - 1];
+    if (first && offset === 0 && !first.sup && !first.math) {
+      const ch = Array.from(first.text)[0] ?? ``;
+      pl = leftProtrusion(ch) * measureText(ch, o.fontSize, first.style).width;
+    }
+    if (end && !last && !end.sup && !end.math) {
+      const ch = Array.from(end.text).pop() ?? ``;
+      pr = rightProtrusion(ch) * measureText(ch, o.fontSize, end.style).width;
+    }
+  }
   let wordSpacing = 0;
   if (justify && !last && spaces > 0) {
     // Les espaces absorbent tout l'ecart, sans compression au-dela de la limite des espaces.
-    wordSpacing = Math.max(-shrinkOne, (o.lineWidth - offset - width) / spaces);
+    wordSpacing = Math.max(-shrinkOne, (o.lineWidth - offset - width + pl + pr) / spaces);
   }
+  offset -= pl;
   return { text, runs, offset, wordSpacing, width, ratio: bl.ratio, badness: bl.badness, fitness: bl.fitness, hyphenated: bl.hyphenated, overfull: bl.overfull, last, notes, sups };
 }
 

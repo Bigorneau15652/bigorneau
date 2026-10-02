@@ -163,6 +163,20 @@ export interface MmSettings {
   exportPageRefs: boolean;
   // Medias (video, son, contenu integre) : un cadre avec le titre et l'adresse, ou une simple ligne de texte.
   exportMedia: `frame` | `text`;
+  // Mise en page de l'export : en-tete courant, pied de page, pages alignees en bas, saut de page avant chaque chapitre,
+  // numerotation des notes de bas de page et protrusion.
+  exportHeader: `chapter` | `title` | `none`;
+  exportFooter: `number` | `none`;
+  exportFlushBottom: boolean;
+  exportChapterBreak: `none` | `level1`;
+  exportFootnoteNumbering: `continuous` | `perChapter`;
+  exportProtrusion: boolean;
+  // Tables des matieres : generale au debut du document, et de chaque chapitre ; niveaux de titres listes (1 a 6). Les proprietes
+  // toc, toc-depth, chapter-toc et chapter-toc-depth d'une note l'emportent sur ces reglages.
+  exportToc: boolean;
+  exportTocDepth: number;
+  exportChapterToc: boolean;
+  exportChapterTocDepth: number;
   // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
   iconExternal: string;
   iconInternal: string;
@@ -234,6 +248,16 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportFloats: `float`,
   exportPageRefs: false,
   exportMedia: `frame`,
+  exportHeader: `chapter`,
+  exportFooter: `number`,
+  exportFlushBottom: false,
+  exportChapterBreak: `none`,
+  exportFootnoteNumbering: `continuous`,
+  exportProtrusion: true,
+  exportToc: false,
+  exportTocDepth: 3,
+  exportChapterToc: false,
+  exportChapterTocDepth: 3,
   iconExternal: `chain`,
   iconInternal: `return`,
   iconWeb: `globe`,
@@ -312,6 +336,17 @@ export function migrateSettings(stored: unknown): MmSettings {
   if (merged.exportFloats !== `float` && merged.exportFloats !== `inline`) merged.exportFloats = `float`;
   merged.exportPageRefs = merged.exportPageRefs === true;
   if (merged.exportMedia !== `frame` && merged.exportMedia !== `text`) merged.exportMedia = `frame`;
+  if (![`chapter`, `title`, `none`].includes(merged.exportHeader)) merged.exportHeader = `chapter`;
+  if (![`number`, `none`].includes(merged.exportFooter)) merged.exportFooter = `number`;
+  merged.exportFlushBottom = merged.exportFlushBottom === true;
+  if (![`none`, `level1`].includes(merged.exportChapterBreak)) merged.exportChapterBreak = `none`;
+  if (![`continuous`, `perChapter`].includes(merged.exportFootnoteNumbering)) merged.exportFootnoteNumbering = `continuous`;
+  merged.exportProtrusion = merged.exportProtrusion !== false;
+  merged.exportToc = merged.exportToc === true;
+  merged.exportChapterToc = merged.exportChapterToc === true;
+  for (const k of [`exportTocDepth`, `exportChapterTocDepth`] as const) {
+    if (!Number.isInteger(merged[k]) || merged[k] < 1 || merged[k] > 6) merged[k] = 3;
+  }
   merged.settingsVersion = SETTINGS_VERSION;
   return merged;
 }

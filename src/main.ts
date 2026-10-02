@@ -5,6 +5,7 @@ import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
+import { InsertResult, insertBlockMath, insertFootnote, insertInlineMath, insertTableCaption, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
@@ -210,6 +211,42 @@ export default class MindmapWritingPlugin extends Plugin {
         if (!checking) void this.exportPdf();
         return true;
       },
+    });
+
+    // Commandes qui ecrivent dans la note (editeur actif) : elles preparent les elements que l'export met en forme. Aucun raccourci
+    // n'est impose : chacun s'attribue dans les reglages d'Obsidian (Raccourcis clavier).
+    this.addCommand({
+      id: `insert-footnote`,
+      name: t(`Insérer une note de bas de page`),
+      editorCallback: (editor) => this.applyInsert(editor, (text, from, to) => insertFootnote(text, from, to)),
+    });
+    this.addCommand({
+      id: `toggle-toc`,
+      name: t(`Activer ou désactiver la table des matières de la note`),
+      editorCallback: (editor) => {
+        let enabled = false;
+        this.applyInsert(editor, (text) => {
+          const r = toggleToc(text);
+          enabled = r.enabled;
+          return r;
+        });
+        new Notice(enabled ? t(`La table des matières est activée pour cette note.`) : t(`La table des matières est désactivée pour cette note.`));
+      },
+    });
+    this.addCommand({
+      id: `insert-table-caption`,
+      name: t(`Insérer une légende de tableau`),
+      editorCallback: (editor) => this.applyInsert(editor, (text, from) => insertTableCaption(text, from)),
+    });
+    this.addCommand({
+      id: `insert-inline-math`,
+      name: t(`Insérer une formule en ligne`),
+      editorCallback: (editor) => this.applyInsert(editor, (text, from, to) => insertInlineMath(text, from, to)),
+    });
+    this.addCommand({
+      id: `insert-block-math`,
+      name: t(`Insérer une formule en bloc`),
+      editorCallback: (editor) => this.applyInsert(editor, (text, from, to) => insertBlockMath(text, from, to)),
     });
 
     this.addCommand({
@@ -418,6 +455,17 @@ export default class MindmapWritingPlugin extends Plugin {
       return true;
     }
     return false;
+  }
+
+  // Applique dans l'editeur les modifications calculees par src/export/insert.ts, de la derniere a la premiere pour que les
+  // positions restent justes, puis place le curseur. L'historique d'annulation d'Obsidian garde chaque modification.
+  private applyInsert(editor: Editor, make: (text: string, from: number, to: number) => InsertResult): void {
+    const text = editor.getValue();
+    const from = editor.posToOffset(editor.getCursor(`from`));
+    const to = editor.posToOffset(editor.getCursor(`to`));
+    const r = make(text, from, to);
+    for (const e of [...r.edits].sort((a, b) => b.from - a.from)) editor.replaceRange(e.insert, editor.offsetToPos(e.from), editor.offsetToPos(e.to));
+    if (r.cursor !== undefined) editor.setCursor(editor.offsetToPos(r.cursor));
   }
 
   private forEachView(fn: (view: MindmapView) => void) {

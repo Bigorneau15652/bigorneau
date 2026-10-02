@@ -141,8 +141,14 @@ export class ExportPreviewView extends ItemView {
     if (row.kind === `space` || row.kind === `float`) return;
     el.style.fontSize = `${row.fontSize}pt`;
     el.style.lineHeight = `${row.height}pt`;
-    el.style.paddingLeft = `${row.x}pt`;
-    el.style.width = `${row.width + row.x}pt`;
+    if (row.x >= 0) {
+      el.style.paddingLeft = `${row.x}pt`;
+      el.style.width = `${row.width + row.x}pt`;
+    } else {
+      // Signe qui depasse dans la marge gauche (protrusion) : la ligne commence avant le bord de la colonne.
+      el.style.marginLeft = `${row.x}pt`;
+      el.style.width = `${row.width}pt`;
+    }
     if (row.align === `center`) el.style.textAlign = `center`;
     if (row.wordSpacing !== 0) el.style.wordSpacing = `${row.wordSpacing}pt`;
     if (row.math) {

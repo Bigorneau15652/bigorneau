@@ -138,6 +138,10 @@ L'article de Donald Knuth et Michael Plass, « Breaking Paragraphs into Lines »
 
 ## 7. Demandes de l'utilisateur à traiter dans les phases suivantes
 
-Table des matières : choix du nombre de niveaux (1, 2, 3 ou plus) et de l'emplacement. Pour les gros documents, l'utilisateur souhaite une table des matières générale de niveau 1 au début du document et, dans chaque chapitre de niveau 1, une table des matières complémentaire limitée à ce chapitre. Ces options sont à prévoir dans le panneau de réglages de la phase 7.
+Phase 7, première partie (version 0.1.7, faite) : panneau de réglages de l'export dans le chapitre Export PDF, protrusion activée par défaut, niveaux de la table des matières générale et table des matières de chaque chapitre de plus haut niveau, avec les propriétés de la note (toc, toc-depth, chapter-toc, chapter-toc-depth) qui l'emportent sur les réglages, commandes de la palette qui écrivent dans la note (note de bas de page, table des matières, légende de tableau, formules) et auxquelles l'utilisateur attribue un raccourci dans Obsidian.
 
-Options et raccourcis : à définir pour la table des matières, les notes de bas de page et les autres éléments de l'export, dans le panneau de réglages de la phase 7.
+Phase 7, deuxième partie (à faire) : gabarits de documents (rapport, mémoire, ouvrage) et formats de page.
+
+Phase à créer après la phase 7 : une panoplie de boutons pour toutes les fonctions qui écrivent dans la note ou règlent l'export (note de bas de page, table des matières, légendes, renvois, formules, médias, etc.). L'utilisateur détaillera ce qu'il attend avant que cette phase commence.
+
+Formules : une numérotation des formules en bloc sera développée plus tard avec un script spécifique, à la demande de l'utilisateur. Bibliographie : repoussée.

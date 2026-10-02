@@ -63,6 +63,16 @@ export interface PageStyle {
   pageRefs: boolean;
   // Medias (video, son, contenu integre) : un cadre avec le titre et l'adresse, ou une simple ligne de texte.
   media: `frame` | `text`;
+  // Protrusion (microtypographie) : la ponctuation et les tirets en bout de ligne justifiee depassent un peu dans la marge.
+  protrusion: boolean;
+  // Table des matieres generale au debut du document, et niveaux de titres qu'elle liste (1 a 6). Une propriete de la note
+  // (toc, toc-depth) l'emporte sur ces choix.
+  toc: boolean;
+  tocDepth: number;
+  // Table des matieres de chaque chapitre (titre de plus haut niveau), placee sous le titre du chapitre : sous-titres du chapitre
+  // jusqu'au niveau indique. Propriete de la note : chapter-toc, chapter-toc-depth.
+  chapterToc: boolean;
+  chapterTocDepth: number;
 }
 
 export const DEFAULT_PAGE_STYLE: PageStyle = {
@@ -74,7 +84,20 @@ export const DEFAULT_PAGE_STYLE: PageStyle = {
   floats: `float`,
   pageRefs: false,
   media: `frame`,
+  protrusion: true,
+  toc: false,
+  tocDepth: 3,
+  chapterToc: false,
+  chapterTocDepth: 3,
 };
+
+// Tables des matieres a produire : niveaux de la table generale et de celle de chaque chapitre (0 : aucune). Les proprietes de la
+// note l'emportent, champ par champ, sur les choix de la feuille de style.
+export function tocPlan(doc: Pick<ExportDoc, `toc` | `chapterToc`>, style: PageStyle): { general: number; chapter: number } {
+  const general = doc.toc?.enabled ?? style.toc;
+  const chapter = doc.chapterToc?.enabled ?? style.chapterToc;
+  return { general: general ? (doc.toc?.depth ?? style.tocDepth) : 0, chapter: chapter ? (doc.chapterToc?.depth ?? style.chapterTocDepth) : 0 };
+}
 
 export type RowKind = `title` | `heading` | `text` | `list` | `quote` | `code` | `figure` | `math` | `media` | `caption` | `table` | `toc` | `float` | `space` | `footnote`;
 
@@ -289,6 +312,12 @@ class Typesetter {
     this.chapterLevel = level;
   }
 
+  private chapterTocDepth = 0;
+
+  setChapterTocDepth(depth: number): void {
+    this.chapterTocDepth = depth;
+  }
+
   private push(row: Omit<Row, `breakAfter` | `chapter`> & { breakAfter?: number }): Row {
     const full: Row = { breakAfter: 0, ...(this.chapter !== undefined ? { chapter: this.chapter } : {}), ...row };
     this.sink.push(full);
@@ -382,14 +411,15 @@ class Typesetter {
       indent: 0,
       align: `justify`,
       hyphenate: true,
+      protrusion: this.style.protrusion,
       params: this.params,
     });
     this.missing.push(...r.missing);
     const rows: Row[] = r.lines.map((l, i) => ({
       kind: `footnote` as const,
       text: l.text,
-      x: NOTE_INDENT,
-      width: this.textWidth - NOTE_INDENT,
+      x: NOTE_INDENT + l.offset,
+      width: this.textWidth - NOTE_INDENT - l.offset,
       fontSize: s.noteFontSize,
       height: s.noteLeading,
       wordSpacing: l.wordSpacing,
@@ -414,6 +444,7 @@ class Typesetter {
       indent: opts.indent,
       align: opts.justify ? `justify` : `left`,
       hyphenate: opts.hyphenate,
+      protrusion: this.style.protrusion,
       style: opts.style ?? `regular`,
       params: this.params,
     });
@@ -454,6 +485,7 @@ class Typesetter {
     }
     this.space(lead * 0.5);
     this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+    if (isChapter && this.chapterTocDepth > 0) this.chapterToc(section, this.chapterTocDepth);
   }
 
   // Repere de renvoi pose sur la premiere ligne ajoutee depuis `from`.
@@ -712,34 +744,46 @@ class Typesetter {
 
   // Table des matieres : un titre par ligne (ou plusieurs), le numero de page a droite, relies par des points de conduite.
   tableOfContents(doc: ExportDoc, depth: number): void {
+    this.tocRows(doc.sections, depth, this.language === `en` ? `Contents` : `Table des matières`);
+  }
+
+  // Table des matieres d'un chapitre : ses sous-titres, sous son titre, sans titre propre.
+  chapterToc(section: DocSection, depth: number): void {
+    this.tocRows(section.sections, depth, undefined);
+  }
+
+  // Lignes d'une table des matieres : un titre par ligne (ou plusieurs), le numero de page a droite, relies par des points de
+  // conduite. `heading` : titre de la table (absent pour la table d'un chapitre, plus compacte).
+  private tocRows(sections: DocSection[], depth: number, heading: string | undefined): void {
     const entries: { level: number; title: string; anchor: string }[] = [];
     const walk = (s: DocSection): void => {
       const anchor = this.anchors.sections.get(s);
       if (anchor && s.level <= depth) entries.push({ level: s.level, title: s.title || `(sans titre)`, anchor });
       s.sections.forEach(walk);
     };
-    doc.sections.forEach(walk);
+    sections.forEach(walk);
     if (entries.length === 0) return;
     const lead = this.setup.leading;
-    const size = this.setup.fontSize;
+    const size = heading === undefined ? this.setup.fontSize - 1 : this.setup.fontSize;
     const top = Math.min(...entries.map((e) => e.level));
-    const heading = this.language === `en` ? `Contents` : `Table des matières`;
-    this.space(lead * 0.8);
-    this.paragraph(heading, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[1], keep: true, notes: false, style: `bold` });
-    this.space(lead * 0.5);
-    this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+    if (heading !== undefined) {
+      this.space(lead * 0.8);
+      this.paragraph(heading, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[1], keep: true, notes: false, style: `bold` });
+      this.space(lead * 0.5);
+      this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+    }
     const numberWidth = 26;
     for (const e of entries) {
       const x = (e.level - top) * 16;
       const first = this.sink.length;
-      this.paragraph(e.title, `toc`, x, this.textWidth - x - numberWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false, style: e.level === top ? `bold` : `regular` });
+      this.paragraph(e.title, `toc`, x, this.textWidth - x - numberWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false, style: e.level === top && heading !== undefined ? `bold` : `regular` });
       const last = this.sink[this.sink.length - 1];
       for (let k = first; k < this.sink.length - 1; k++) this.sink[k].breakAfter = INF_PENALTY;
       // Le titre peut etre sur plusieurs lignes : la zone cliquable et le numero sont sur la derniere.
       for (let k = first; k < this.sink.length; k++) this.sink[k].toc = { anchor: e.anchor, page: k === this.sink.length - 1 ? (this.opts.pageOf?.(e.anchor) ?? 0) : -1 };
       last.width = this.textWidth - x;
     }
-    this.space(lead);
+    this.space(heading === undefined ? lead * 0.6 : lead);
   }
 
   section(s: DocSection): void {
@@ -781,7 +825,9 @@ export function typesetDoc(doc: ExportDoc, setup: PageSetup = A4_SETUP, params: 
   const t = new Typesetter(setup, params, style, language, doc.footnotes, collectAnchors(doc, language), opts, doc.title);
   t.setChapterLevel(topLevel(doc.sections));
   t.title(doc.title);
-  if (doc.toc) t.tableOfContents(doc, doc.toc.depth);
+  const plan = tocPlan(doc, style);
+  t.setChapterTocDepth(plan.chapter);
+  if (plan.general > 0) t.tableOfContents(doc, plan.general);
   for (const b of doc.blocks) t.block(b);
   for (const s of doc.sections) t.section(s);
   t.stats.wordCount = countWords(doc.blocks) + doc.sections.reduce((a, s) => a + sectionWords(s), 0);
