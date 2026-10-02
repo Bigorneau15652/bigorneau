@@ -140,8 +140,6 @@ L'article de Donald Knuth et Michael Plass, « Breaking Paragraphs into Lines »
 
 Phase 7, première partie (version 0.1.7, faite) : panneau de réglages de l'export dans le chapitre Export PDF, protrusion activée par défaut, niveaux de la table des matières générale et table des matières de chaque chapitre de plus haut niveau, avec les propriétés de la note (toc, toc-depth, chapter-toc, chapter-toc-depth) qui l'emportent sur les réglages, commandes de la palette qui écrivent dans la note (note de bas de page, table des matières, légende de tableau, formules) et auxquelles l'utilisateur attribue un raccourci dans Obsidian.
 
-Phase 7, deuxième partie (à faire) : gabarits de documents (rapport, mémoire, ouvrage) et formats de page.
-
-Phase à créer après la phase 7 : une panoplie de boutons pour toutes les fonctions qui écrivent dans la note ou règlent l'export (note de bas de page, table des matières, légendes, renvois, formules, médias, etc.). L'utilisateur détaillera ce qu'il attend avant que cette phase commence.
+Suite de la phase 7 : les gabarits de documents (rapport, mémoire, ouvrage) et leurs formats de page deviennent des scripts de styles, et la panoplie de boutons devient le panneau de boutons décrit dans docs/POLITIQUE-SCRIPTS.md, avec le mécanisme de scripts et la préparation de la publication du plugin.
 
 Formules : une numérotation des formules en bloc sera développée plus tard avec un script spécifique, à la demande de l'utilisateur. Bibliographie : repoussée.
