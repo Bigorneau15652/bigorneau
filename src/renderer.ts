@@ -105,7 +105,7 @@ const SVG_NS = `http://www.w3.org/2000/svg`;
 // maximale d'une ligne (un titre plus long est coupe par des points de suspension), et place reservee a la glissiere.
 const LIST_PAD_X = 8;
 const LIST_MIN_WIDTH = 260;
-const LIST_MAX_WIDTH = 640;
+const LIST_MAX_WIDTH = 480;
 const LIST_GUTTER = 16;
 // Nombre de lignes vides gardees sous le dernier sujet flottant de la liste.
 const LIST_FLOAT_ROWS = 3;
@@ -500,7 +500,7 @@ export class MapRenderer {
       const levelX = (n: LNode): number => (isFloatKey(n.key) ? n.depth - 1 : n.depth) * indent;
       let wanted = LIST_MIN_WIDTH;
       for (const n of this.list) wanted = Math.max(wanted, levelX(n) + this.els.get(n.key)!.offsetWidth);
-      const pane = this.mapEl.clientWidth - 32 - 2 * LIST_PAD_X - LIST_GUTTER;
+      const pane = this.mapEl.clientWidth - 16 - 2 * LIST_PAD_X - LIST_GUTTER;
       this.listWidth = Math.max(LIST_MIN_WIDTH, Math.min(wanted, LIST_MAX_WIDTH, pane));
       for (const n of this.list) this.els.get(n.key)!.style.width = `${Math.max(40, this.listWidth - levelX(n))}px`;
     } else {
@@ -1340,6 +1340,8 @@ export class MapRenderer {
     const list = this.isList();
     const offset = list ? `0 ${this.frameEl.scrollTop}px` : ``;
     this.els.get(`r`)?.style.setProperty(`translate`, offset);
+    // Un filet sous le titre n'apparait que lorsque des lignes passent derriere lui.
+    this.els.get(`r`)?.classList.toggle(`mmw-stuck`, list && this.frameEl.scrollTop > 0);
     this.eyes.get(`r`)?.style.setProperty(`translate`, offset);
   }
 
