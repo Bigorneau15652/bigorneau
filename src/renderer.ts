@@ -101,6 +101,17 @@ const FOLD_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" s
 
 
 const SVG_NS = `http://www.w3.org/2000/svg`;
+// Vue Liste : marge interieure du cadre a gauche (le cadre n'a pas de marge en haut : le titre y reste colle), largeurs minimale et
+// maximale d'une ligne (un titre plus long est coupe par des points de suspension), et place reservee a la glissiere.
+const LIST_PAD_X = 8;
+const LIST_MIN_WIDTH = 260;
+const LIST_MAX_WIDTH = 640;
+const LIST_GUTTER = 16;
+// Nombre de lignes vides gardees sous le dernier sujet flottant de la liste.
+const LIST_FLOAT_ROWS = 3;
+// Ecart entre deux lignes de la liste.
+const LIST_ROW_GAP = 1;
+
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 3;
 
@@ -133,6 +144,8 @@ function strokeCss(st: NodeStyle, widthFactor = 1): string {
 export class MapRenderer {
   private mapEl: HTMLElement;
   private worldEl: HTMLElement;
+  // Cadre qui contient le monde : transparent et de la taille de la carte en vue Carte ; en vue Liste, cadre defilant qui epouse la liste.
+  private frameEl: HTMLElement;
   private svgEl: SVGSVGElement;
   private messageEl: HTMLElement;
   private statusEl: HTMLElement;
@@ -219,8 +232,11 @@ export class MapRenderer {
     this.mapEl.classList.add(`mmw-map`);
     this.mapEl.tabIndex = 0;
 
+    this.frameEl = document.createElement(`div`);
+    this.frameEl.className = `mmw-frame`;
     this.worldEl = document.createElement(`div`);
     this.worldEl.className = `mmw-world`;
+    this.frameEl.appendChild(this.worldEl);
     this.svgEl = document.createElementNS(SVG_NS, `svg`);
     this.svgEl.setAttribute(`class`, `mmw-svg`);
     this.messageEl = document.createElement(`div`);
@@ -228,7 +244,7 @@ export class MapRenderer {
     this.marqueeEl = document.createElement(`div`);
     this.marqueeEl.className = `mmw-marquee`;
     this.marqueeEl.style.display = `none`;
-    this.mapEl.append(this.worldEl, this.messageEl, this.marqueeEl);
+    this.mapEl.append(this.frameEl, this.messageEl, this.marqueeEl);
 
     this.controls = new MapControls(this.mapEl, this.getSettings, {
       zoomIn: () => this.zoomBy(1.2),
@@ -257,6 +273,7 @@ export class MapRenderer {
     this.statusEl.className = `mmw-status`;
     this.mapEl.appendChild(this.statusEl);
 
+    this.on(this.frameEl, `scroll`, () => this.onListScroll());
     this.on(this.mapEl, `pointerdown`, (e) => this.onPointerDown(e as PointerEvent));
     this.on(this.mapEl, `pointermove`, (e) => this.onPointerMove(e as PointerEvent));
     this.on(this.mapEl, `pointerup`, (e) => this.onPointerUp(e as PointerEvent));
@@ -469,18 +486,26 @@ export class MapRenderer {
     this.els.clear();
     this.eyes.clear();
     this.dropLineEl = null;
-    // Vue Liste : les lignes occupent toute la largeur disponible ; chaque niveau est decale de `indent`.
+    // Vue Liste : chaque niveau est decale de `indent` ; le cadre epouse le titre le plus long, sans depasser une largeur maximale
+    // ni celle de la fenetre (un titre plus long est coupe par des points de suspension, le titre complet s'affiche au survol).
     const indent = listIndent(1);
-    this.listWidth = Math.max(260, (this.mapEl.clientWidth - 32) / this.scale);
+    if (list) this.scale = 1;
     this.list.forEach((n, i) => {
       const el = this.createNodeEl(n, s);
-      if (list) {
-        el.style.width = `${Math.max(40, this.listWidth - (isFloatKey(n.key) ? n.depth - 1 : n.depth) * indent)}px`;
-        if (i % 2 === 1) el.classList.add(`mmw-odd`);
-      }
+      if (list && i % 2 === 1) el.classList.add(`mmw-odd`);
       this.worldEl.appendChild(el);
       this.els.set(n.key, el);
     });
+    if (list) {
+      const levelX = (n: LNode): number => (isFloatKey(n.key) ? n.depth - 1 : n.depth) * indent;
+      let wanted = LIST_MIN_WIDTH;
+      for (const n of this.list) wanted = Math.max(wanted, levelX(n) + this.els.get(n.key)!.offsetWidth);
+      const pane = this.mapEl.clientWidth - 32 - 2 * LIST_PAD_X - LIST_GUTTER;
+      this.listWidth = Math.max(LIST_MIN_WIDTH, Math.min(wanted, LIST_MAX_WIDTH, pane));
+      for (const n of this.list) this.els.get(n.key)!.style.width = `${Math.max(40, this.listWidth - levelX(n))}px`;
+    } else {
+      this.listWidth = 0;
+    }
     for (const n of this.list) {
       const el = this.els.get(n.key)!;
       n.w = el.offsetWidth;
@@ -491,9 +516,17 @@ export class MapRenderer {
         if (st.showFrames) this.inflate(el, n, st);
       }
     }
-    this.bounds = list ? computeListLayout(this.root, indent, this.listWidth) : computeLayout(this.root, s.compactness);
+    this.bounds = list ? computeListLayout(this.root, indent, this.listWidth, LIST_ROW_GAP) : computeLayout(this.root, s.compactness);
     this.mainBounds = { ...this.bounds };
     this.layoutFloats(s, list, indent);
+    if (list) {
+      // Le monde a la taille de la liste : le cadre l'epouse, et defile quand il y a plus de lignes que de place.
+      this.worldEl.style.width = `${this.listWidth}px`;
+      this.worldEl.style.height = `${this.bounds.maxY + 6}px`;
+    } else {
+      this.worldEl.style.width = ``;
+      this.worldEl.style.height = ``;
+    }
     if (list) {
       // Trait qui ouvre la zone des sujets flottants.
       const sep = document.createElement(`div`);
@@ -516,6 +549,7 @@ export class MapRenderer {
     }
     if (this.eyeHover) this.eyes.get(this.eyeHover)?.classList.add(`mmw-eye-show`);
     this.layoutExternals();
+    this.stickRoot();
     this.draw(s);
     if (typing) {
       if (this.els.has(typing.key)) {
@@ -578,15 +612,20 @@ export class MapRenderer {
       const top = b.maxY + 16;
       this.floatZoneY = top;
       let y = top + 12;
+      let row = 0;
       for (const fr of this.floatRoots) {
         for (const n of flatten(fr)) {
           n.x = (n.depth - 1) * indent;
           n.y = y;
           n.w = Math.max(40, this.listWidth - n.x);
-          y += n.h + 2;
+          y += n.h + LIST_ROW_GAP;
+          row = n.h + LIST_ROW_GAP;
         }
       }
-      b.maxY = Math.max(y, top + 40);
+      // Sous le dernier sujet flottant (ou sous le trait, quand il n'y en a pas), environ trois lignes vides restent disponibles pour y
+      // deposer un titre.
+      if (row === 0) row = (this.list[0]?.h ?? 24) + LIST_ROW_GAP;
+      b.maxY = y + LIST_FLOAT_ROWS * row;
       return;
     }
     let autoY = b.minY;
@@ -1087,7 +1126,7 @@ export class MapRenderer {
     if (!L || L.from === null || !e) return;
     const a = this.list.find((n) => n.key === L.from);
     if (!a) return;
-    const box = this.mapEl.getBoundingClientRect();
+    const box = this.coordRect();
     const x = (e.clientX - box.left - this.tx) / this.scale;
     const y = (e.clientY - box.top - this.ty) / this.scale;
     const path = document.createElementNS(SVG_NS, `path`);
@@ -1248,6 +1287,14 @@ export class MapRenderer {
   }
 
   private ensureVisible(n: LNode): void {
+    if (this.isList()) {
+      // Vue Liste : le cadre defile pour montrer la ligne, sous le titre de la note qui reste en haut.
+      const f = this.frameEl;
+      const rootH = n.depth === 0 ? 0 : (this.els.get(`r`)?.offsetHeight ?? 0);
+      if (n.y < f.scrollTop + rootH) f.scrollTop = Math.max(0, n.y - rootH);
+      else if (n.y + n.h > f.scrollTop + f.clientHeight) f.scrollTop = n.y + n.h - f.clientHeight + 4;
+      return;
+    }
     const margin = 30;
     const vw = this.mapEl.clientWidth;
     const vh = this.mapEl.clientHeight - 60;
@@ -1264,19 +1311,44 @@ export class MapRenderer {
 
   // ---------------------------------------------------------------- zoom et deplacement
 
+  // Rectangle dont l'origine sert aux coordonnees du monde : le cadre (qui, en vue Carte, a la taille de la carte).
+  private coordRect(): DOMRect {
+    return this.frameEl.getBoundingClientRect();
+  }
+
   private applyTransform(): void {
-    this.worldEl.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
+    if (this.isList()) {
+      // Vue Liste : le monde ne bouge pas, c'est le cadre qui defile.
+      this.scale = 1;
+      this.tx = LIST_PAD_X;
+      this.ty = -this.frameEl.scrollTop;
+      this.worldEl.style.transform = ``;
+    } else {
+      this.worldEl.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
+    }
     this.controls.setZoom(this.scale);
+  }
+
+  // Le cadre de la liste defile : le titre de la note reste en haut, et les coordonnees suivent le defilement.
+  private onListScroll(): void {
+    if (!this.isList()) return;
+    this.ty = -this.frameEl.scrollTop;
+    this.stickRoot();
+  }
+
+  private stickRoot(): void {
+    const list = this.isList();
+    const offset = list ? `0 ${this.frameEl.scrollTop}px` : ``;
+    this.els.get(`r`)?.style.setProperty(`translate`, offset);
+    this.eyes.get(`r`)?.style.setProperty(`translate`, offset);
   }
 
   fit(): void {
     if (!this.bounds || this.mapEl.clientWidth === 0) return;
     const b = this.bounds;
     if (this.isList()) {
-      // Vue Liste : taille normale, en haut a gauche ; la liste se parcourt en la faisant defiler.
-      this.scale = 1;
-      this.tx = 16;
-      this.ty = 16;
+      // Vue Liste : taille normale, en haut ; la liste se parcourt en la faisant defiler.
+      this.frameEl.scrollTop = 0;
       this.fitPending = false;
       this.applyTransform();
       return;
@@ -1296,6 +1368,8 @@ export class MapRenderer {
   }
 
   zoomBy(factor: number, cx?: number, cy?: number): void {
+    // La vue Liste est fixe : ni zoom ni deplacement, seulement le defilement du cadre.
+    if (this.isList()) return;
     const rect = this.mapEl.getBoundingClientRect();
     const px = (cx ?? rect.left + rect.width / 2) - rect.left;
     const py = (cy ?? rect.top + (rect.height - 60) / 2) - rect.top;
@@ -1306,12 +1380,15 @@ export class MapRenderer {
     this.scale = next;
     this.fitPending = false;
     this.applyTransform();
-    // Vue Liste : les lignes gardent la largeur de la fenetre, quel que soit le zoom.
-    if (this.isList()) this.rebuild();
   }
 
   private onWheel(e: WheelEvent): void {
     if (this.controls.contains(e.target)) return;
+    // Vue Liste : la molette fait defiler le cadre (comportement du navigateur) ; le zoom du navigateur est refuse.
+    if (this.isList()) {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+      return;
+    }
     // Le defilement du commentaire ou de la liste des etiquettes ne deplace pas la carte.
     if ((e.target as HTMLElement).closest(`.mmw-dialog`)) return;
     e.preventDefault();
@@ -1485,6 +1562,7 @@ export class MapRenderer {
     const dx = e.clientX - this.drag.sx;
     const dy = e.clientY - this.drag.sy;
     if (Math.abs(dx) + Math.abs(dy) > 4) this.drag.moved = true;
+    if (this.isList()) return;
     this.tx = this.drag.tx0 + dx;
     this.ty = this.drag.ty0 + dy;
     this.fitPending = false;
@@ -1525,7 +1603,7 @@ export class MapRenderer {
       const last = this.lastBg;
       if (last && now - last.time < 450 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 8) {
         this.lastBg = null;
-        const rect = this.mapEl.getBoundingClientRect();
+        const rect = this.coordRect();
         const wx = (e.clientX - rect.left - this.tx) / this.scale;
         const wy = (e.clientY - rect.top - this.ty) / this.scale;
         this.callbacks.onEdit?.({ kind: `createFloat`, key: `r`, keys: [], ...(this.isList() ? {} : { x: wx, y: wy }) });
@@ -1555,9 +1633,12 @@ export class MapRenderer {
     st.top = `${y1}px`;
     st.width = `${x2 - x1}px`;
     st.height = `${y2 - y1}px`;
+    const origin = this.coordRect();
+    const ox = origin.left - rect.left;
+    const oy = origin.top - rect.top;
     const hit = this.list.filter((n) => {
-      const nx1 = n.x * this.scale + this.tx;
-      const ny1 = n.y * this.scale + this.ty;
+      const nx1 = n.x * this.scale + this.tx + ox;
+      const ny1 = n.y * this.scale + this.ty + oy;
       return nx1 < x2 && nx1 + n.w * this.scale > x1 && ny1 < y2 && ny1 + n.h * this.scale > y1;
     });
     this.selectedKeys = new Set(hit.map((n) => n.key));
@@ -1753,11 +1834,13 @@ export class MapRenderer {
       this.startNodeDrag();
       if (!d.started) return;
     }
-    const rect = this.mapEl.getBoundingClientRect();
+    // Le fantome est pose dans la carte ; les coordonnees du monde partent du cadre.
+    const host = this.mapEl.getBoundingClientRect();
+    const rect = this.coordRect();
     const left = e.clientX - d.grabX;
     if (d.ghost) {
-      d.ghost.style.left = `${left - rect.left}px`;
-      d.ghost.style.top = `${e.clientY - d.grabY - rect.top}px`;
+      d.ghost.style.left = `${left - host.left}px`;
+      d.ghost.style.top = `${e.clientY - d.grabY - host.top}px`;
     }
     // Hors de la structure : depot libre. Pres d'elle : la case s'y integre a l'endroit montre.
     const wx = (e.clientX - rect.left - this.tx) / this.scale;

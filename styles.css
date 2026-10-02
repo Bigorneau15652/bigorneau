@@ -30,6 +30,43 @@
   left: 0;
   top: 0;
   transform-origin: 0 0;
+  pointer-events: auto;
+}
+
+/* Cadre du monde : transparent et de la taille de la carte (les clics le traversent jusqu'au fond de la carte). */
+.mmw-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Vue Liste : un cadre qui epouse la liste, defile quand il y a trop de lignes, et ne se deplace pas. */
+.mmw-map.mmw-list {
+  cursor: default;
+}
+
+.mmw-map.mmw-list .mmw-frame {
+  inset: auto;
+  left: 16px;
+  top: 16px;
+  box-sizing: content-box;
+  width: fit-content;
+  max-width: calc(100% - 32px - 16px);
+  max-height: calc(100% - 132px);
+  padding: 0 8px 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  border-radius: 8px;
+  outline: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  pointer-events: auto;
+}
+
+.mmw-map.mmw-list .mmw-world {
+  position: relative;
+  left: auto;
+  top: auto;
 }
 
 .mmw-svg {
@@ -1112,21 +1149,27 @@
 /* Vue Liste : un titre par ligne, decale selon son niveau, sans trait ni cadre. */
 .mmw-map.mmw-list .mmw-node {
   max-width: none;
-  padding: calc(5px * var(--mmw-pad, 1)) 12px calc(5px * var(--mmw-pad, 1)) 30px;
+  padding: calc(3px * var(--mmw-pad, 1)) 12px calc(3px * var(--mmw-pad, 1)) 30px;
   border-radius: 6px;
+  font-size: calc(var(--mmw-node-size, 1em) * 0.9);
   font-weight: 500;
+  line-height: 1.3;
   text-align: left;
 }
 
+/* Le titre de la note reste en haut quand la liste defile : il a un fond plein et passe devant les lignes. */
 .mmw-map.mmw-list .mmw-node.mmw-depth-0 {
+  z-index: 3;
   padding-left: 12px;
+  background: var(--background-primary);
+  box-shadow: 0 1px 0 var(--background-modifier-border);
   font-weight: 700;
 }
 
 .mmw-map.mmw-list .mmw-node.mmw-depth-1,
 .mmw-map.mmw-list .mmw-node.mmw-depth-2,
 .mmw-map.mmw-list .mmw-node.mmw-depth-3 {
-  padding: calc(5px * var(--mmw-pad, 1)) 12px calc(5px * var(--mmw-pad, 1)) 30px;
+  padding: calc(3px * var(--mmw-pad, 1)) 12px calc(3px * var(--mmw-pad, 1)) 30px;
   font-weight: 500;
 }
 
