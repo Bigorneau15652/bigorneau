@@ -19,6 +19,7 @@ import {
 } from "./settings";
 import { SHAPE_CHOICES, ShapeChoice, shapeChoice, shapePatch } from "./style";
 import { setSvg } from "./dom";
+import { moveId, panelOrder, setHidden } from "./functions";
 
 type KeyField = `keyPrev` | `keyNext` | `keyParent` | `keyChild`;
 type IconField = `iconExternal` | `iconInternal` | `iconWeb`;
@@ -53,6 +54,7 @@ export class MmSettingTab extends PluginSettingTab {
     this.chapter(`links`, t(`Liens et icônes`), t(`Icônes et couleurs des repères de liens`), (el) => this.buildLinks(el));
     this.chapter(`notes`, t(`Nouvelles notes`), t(`Dossier des notes créées depuis la carte`), (el) => this.buildNotes(el));
     this.chapter(`export`, t(`Export PDF`), t(`Mise en page, tables des matières, figures et médias de l'export PDF de haute qualité`), (el) => this.buildExport(el));
+    this.chapter(`panel`, t(`Panneau de boutons`), t(`Boutons des fonctions, à droite de la zone de rédaction`), (el) => this.buildPanel(el));
     this.chapter(`keys`, t(`Navigation au clavier`), t(`Raccourcis pour passer d'un chapitre à l'autre depuis la note`), (el) => this.buildKeys(el));
   }
 
@@ -555,6 +557,51 @@ export class MmSettingTab extends PluginSettingTab {
       s.exportMedia,
       (v) => (s.exportMedia = v === `text` ? `text` : `frame`)
     );
+  }
+
+  private buildPanel(el: HTMLElement): void {
+    const s = this.plugin.settings;
+    this.exportToggle(el, t(`Afficher le panneau de boutons`), t(`Les boutons des fonctions apparaissent à droite de la zone de rédaction, au milieu de la hauteur. Un clic long sur un bouton, puis un glissement, le déplace.`), s.panelVisible, (v) => (s.panelVisible = v));
+    this.exportToggle(el, t(`Afficher le panneau sur tablette et téléphone`), t(`Par défaut, le panneau est masqué sur ces appareils, faute de place.`), s.panelOnMobile, (v) => (s.panelOnMobile = v));
+    new Setting(el).setName(t(`Boutons`)).setHeading();
+    const list = el.createDiv({ cls: `mmw-panel-settings` });
+    const draw = (): void => {
+      list.empty();
+      const all = this.plugin.functions.all().filter((f) => !f.available || f.available());
+      const order = panelOrder(all.map((f) => f.id), s.panelOrder);
+      order.forEach((id, index) => {
+        const fn = all.find((f) => f.id === id);
+        if (!fn) return;
+        const row = new Setting(list).setName(fn.name());
+        row.addExtraButton((b) =>
+          b
+            .setIcon(`arrow-up`)
+            .setTooltip(t(`Monter`))
+            .setDisabled(index === 0)
+            .onClick(async () => {
+              await this.plugin.saveOrder(moveId(order, id, index - 1));
+              draw();
+            })
+        );
+        row.addExtraButton((b) =>
+          b
+            .setIcon(`arrow-down`)
+            .setTooltip(t(`Descendre`))
+            .setDisabled(index === order.length - 1)
+            .onClick(async () => {
+              await this.plugin.saveOrder(moveId(order, id, index + 1));
+              draw();
+            })
+        );
+        row.addToggle((x) =>
+          x.setValue(!s.panelHidden.includes(id)).onChange(async (shown) => {
+            s.panelHidden = setHidden(s.panelHidden, id, !shown);
+            await this.plugin.saveSettings(false);
+          })
+        );
+      });
+    };
+    draw();
   }
 
   private buildKeys(el: HTMLElement): void {

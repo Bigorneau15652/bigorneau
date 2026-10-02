@@ -1,6 +1,6 @@
 # Bigorneau
 
-Bigorneau est un plugin Obsidian pour écrire des notes sous forme de cartes mentales. Chaque titre d'une note devient un nœud de la carte, et chaque nœud porte un véritable paragraphe : la carte sert donc à écrire et à réorganiser un long texte, pas seulement à le dessiner. Le même plugin contient un compositeur de documents longs, qui transforme une note en PDF composé comme un livre, avec la coupure de lignes de TeX, la césure française et anglaise britannique, les notes de bas de page, les tableaux, les figures, une table des matières, des renvois et des formules.
+Bigorneau transforme une note Obsidian en document long. Chaque titre est un nœud d'une carte mentale qui porte un véritable paragraphe : on planifie, on déplace et on réorganise les chapitres visuellement, puis on les rédige sur place. Quand la structure est la bonne, une seule commande exporte un PDF composé. Le moteur de mise en page suit les algorithmes de TeX : coupure de lignes optimale, césure automatique, règles de la typographie française, notes de bas de page, tableaux et figures légendés, table des matières, renvois et formules. Aucune installation de LaTeX n'est nécessaire. Il est fait pour les rapports universitaires et tout long texte comportant de nombreuses sections.
 
 Une version anglaise de ce fichier est disponible dans [README.md](README.md).
 
@@ -54,6 +54,10 @@ Les formules s'écrivent `$formule$` dans le texte et `$$formule$$` sur leurs pr
 Une vidéo, un son, un PDF intégré ou un contenu web intégré ne se lit pas sur papier. Chacun est remplacé par un cadre qui donne sa sorte, son titre et son adresse, cliquable dans le PDF quand c'est une adresse web. Un réglage remplace le cadre par une simple ligne de texte.
 
 Les réglages du chapitre « Export PDF » couvrent l'auteur du PDF, l'en-tête, le pied de page, l'alignement des pages en bas, le saut de page avant chaque chapitre, la numérotation des notes de bas de page, la protrusion, les tables des matières, la place des figures et des tableaux, les renvois et les médias. Cinq commandes de la palette écrivent dans la note, et chacune peut recevoir un raccourci clavier dans les réglages d'Obsidian : insérer une note de bas de page, activer ou désactiver la table des matières de la note, insérer une légende de tableau, insérer une formule en ligne et insérer une formule en bloc.
+
+## Panneau de boutons et aide
+
+Un panneau de petits boutons se trouve à droite de la zone de rédaction, au milieu de la hauteur, dans tous les éditeurs de notes. Le premier bouton ouvre la fenêtre d'aide, qui offre une zone de recherche et fonctionne hors connexion, en français ou en anglais selon la langue du plugin. Les autres boutons sont les fonctions du plugin : les cinq commandes qui écrivent dans la note, puis l'aperçu et l'export. Chaque fonction est aussi une commande de la palette de commandes, où l'on peut lui attribuer un raccourci clavier dans les réglages d'Obsidian. Un clic long sur un bouton, puis un glissement, le déplace, et l'ordre est conservé. Le chapitre « Panneau de boutons » des réglages affiche ou masque le panneau, masque un bouton, et monte ou descend les boutons sans glisser. La commande « Afficher ou masquer le panneau de boutons » bascule le panneau. Sur tablette et téléphone, le panneau est masqué par défaut, et un réglage l'affiche. Les fonctions qui écrivent dans la note ne marchent qu'en mode édition.
 
 ## Confidentialité et divulgations
 

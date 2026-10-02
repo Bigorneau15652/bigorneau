@@ -1,6 +1,6 @@
 # Bigorneau
 
-Bigorneau is an Obsidian plugin for writing notes as mind maps. Every heading of a note becomes a node of the map, and every node holds a real paragraph, so the map is a way to write and reorganise a long text and not just a diagram. The same plugin includes a long document composer: it turns a note into a typeset PDF, with the line breaking of TeX, French and British English hyphenation, footnotes, tables, figures, a table of contents, cross-references and formulas.
+Bigorneau turns an Obsidian note into a long document. Every heading is a node of a mind map that holds a real paragraph, so you can plan, drag and reorganise chapters visually, then write them in place. When the structure is right, one command exports a typeset PDF. The layout engine follows the algorithms of TeX: optimal line breaking, automatic hyphenation, French typography rules, footnotes, captioned tables and figures, a table of contents, cross-references and formulas. No LaTeX installation is needed. It is made for academic reports and any long text with many sections.
 
 A French version of this file is available in [README.fr.md](README.fr.md).
 
@@ -54,6 +54,10 @@ Formulas are written `$formula$` inside the text and `$$formula$$` on their own 
 A video, a sound, an embedded PDF or an embedded web content cannot be played on paper. Each one is replaced by a frame with its kind, its title and its address, which is clickable in the PDF when it is a web address. A setting replaces the frame by a plain line of text.
 
 The settings of the chapter "PDF export" cover the author of the PDF, the page header, the page footer, pages aligned at the bottom, a page break before each chapter, footnote numbering, protrusion, the tables of contents, the placement of figures and tables, the references and the media. Five commands of the command palette write into the note, and you can give them a keyboard shortcut in the Obsidian settings: insert a footnote, turn the table of contents of the note on or off, insert a table caption, insert an inline formula and insert a block formula.
+
+## Button panel and help
+
+A panel of small buttons sits on the right of the writing area, halfway up, in every note editor. The first button opens the help window, which has a search box and works offline, in French or in English depending on the plugin language. The other buttons are the functions of the plugin: the five commands that write into the note, then the preview and the export. Each function is also a command of the command palette, where you can give it a keyboard shortcut in the Obsidian settings. A long press on a button, then a drag, moves it, and the order is kept. The chapter "Button panel" of the settings shows or hides the panel, hides a button, and moves buttons up or down without dragging. The command "Show or hide the button panel" toggles the panel. On tablets and phones the panel is hidden by default, and a setting shows it. Functions that write into the note work in editing mode only.
 
 ## Privacy and disclosures
 

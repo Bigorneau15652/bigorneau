@@ -177,6 +177,12 @@ export interface MmSettings {
   exportTocDepth: number;
   exportChapterToc: boolean;
   exportChapterTocDepth: number;
+  // Panneau de boutons a droite de la zone de redaction : affichage, affichage sur tablette et telephone, ordre des boutons
+  // (identifiants de fonctions) et boutons masques.
+  panelVisible: boolean;
+  panelOnMobile: boolean;
+  panelOrder: string[];
+  panelHidden: string[];
   // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
   iconExternal: string;
   iconInternal: string;
@@ -258,6 +264,10 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportTocDepth: 3,
   exportChapterToc: false,
   exportChapterTocDepth: 3,
+  panelVisible: true,
+  panelOnMobile: false,
+  panelOrder: [],
+  panelHidden: [],
   iconExternal: `chain`,
   iconInternal: `return`,
   iconWeb: `globe`,
@@ -344,6 +354,11 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.exportProtrusion = merged.exportProtrusion !== false;
   merged.exportToc = merged.exportToc === true;
   merged.exportChapterToc = merged.exportChapterToc === true;
+  merged.panelVisible = merged.panelVisible !== false;
+  merged.panelOnMobile = merged.panelOnMobile === true;
+  for (const k of [`panelOrder`, `panelHidden`] as const) {
+    merged[k] = Array.isArray(data[k]) ? (data[k] as unknown[]).filter((x): x is string => typeof x === `string`) : [];
+  }
   for (const k of [`exportTocDepth`, `exportChapterTocDepth`] as const) {
     if (!Number.isInteger(merged[k]) || merged[k] < 1 || merged[k] > 6) merged[k] = 3;
   }

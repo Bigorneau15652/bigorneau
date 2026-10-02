@@ -1,9 +1,9 @@
 {
   "id": "bigorneau",
   "name": "Bigorneau",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "minAppVersion": "1.5.0",
-  "description": "Write notes as mind maps, one real paragraph per node. Includes a long document composer with typeset PDF export.",
+  "description": "Write long documents as a mind map: organise headings visually, then export a typeset PDF with the line breaking of TeX, footnotes, tables, figures and formulas. Suited to academic reports.",
   "author": "Olivier Holweck",
   "isDesktopOnly": false
 }

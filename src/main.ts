@@ -7,6 +7,11 @@ import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { InsertResult, insertBlockMath, insertFootnote, insertInlineMath, insertTableCaption, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
+import { FunctionRegistry, PanelFunction } from "./functions";
+import { HelpRegistry } from "./help";
+import { PLUGIN_HELP } from "./help-data";
+import { HelpModal } from "./help-modal";
+import { ButtonPanel, FunctionContext } from "./panel";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
@@ -17,6 +22,10 @@ export default class MindmapWritingPlugin extends Plugin {
   settings: MmSettings = { ...DEFAULT_SETTINGS };
   // Editeurs de note ouverts (tous les editeurs Markdown), pour retrouver celui qui est relie a la carte.
   editorViews = new Set<EditorView>();
+  // Fonctions du plugin (commandes de la palette et boutons du panneau) et textes d'aide.
+  functions = new FunctionRegistry<FunctionContext>();
+  helpEntries = new HelpRegistry();
+  panel = new ButtonPanel(this);
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
 
@@ -129,6 +138,13 @@ export default class MindmapWritingPlugin extends Plugin {
       })
     );
 
+    // Panneau de boutons : pose dans chaque editeur Markdown, mis a jour quand les volets changent.
+    this.helpEntries.add(PLUGIN_HELP);
+    this.registerEvent(this.app.workspace.on(`layout-change`, () => this.panel.sync()));
+    this.registerEvent(this.app.workspace.on(`active-leaf-change`, () => this.panel.sync()));
+    this.app.workspace.onLayoutReady(() => this.panel.sync());
+    this.register(() => this.panel.detachAll());
+
     this.addRibbonIcon(`network`, t(`Ouvrir Bigorneau`), () => {
       void this.activateView();
     });
@@ -198,41 +214,24 @@ export default class MindmapWritingPlugin extends Plugin {
       callback: () => this.forEachView((v) => v.focusMap()),
     });
 
-    // L'export de haute qualite est reserve a l'ordinateur : sur tablette et telephone, la commande n'est pas proposee.
-    this.addCommand({
-      id: `export-preview`,
-      name: t(`Aperçu de l'export de la note`),
-      checkCallback: (checking) => {
-        if (!Platform.isDesktop) return false;
-        if (!checking) void this.openExportPreview();
-        return true;
-      },
-    });
-
-    this.addCommand({
-      id: `export-pdf`,
-      name: t(`Exporter la note en PDF`),
-      checkCallback: (checking) => {
-        if (!Platform.isDesktop) return false;
-        if (!this.app.workspace.getActiveFile() && !this.lastFile) return false;
-        if (!checking) void this.exportPdf();
-        return true;
-      },
-    });
-
-    // Commandes qui ecrivent dans la note (editeur actif) : elles preparent les elements que l'export met en forme. Aucun raccourci
-    // n'est impose : chacun s'attribue dans les reglages d'Obsidian (Raccourcis clavier).
-    this.addCommand({
+    // Fonctions du plugin : chacune est une commande de la palette (sans raccourci impose : chacun s'attribue dans les reglages
+    // d'Obsidian, Raccourcis clavier) et un bouton du panneau, dans l'ordre d'ajout. Les cinq premieres ecrivent dans la note
+    // (editeur actif) pour preparer les elements que l'export met en forme.
+    this.addFunction({
       id: `insert-footnote`,
-      name: t(`Insérer une note de bas de page`),
-      editorCallback: (editor) => this.applyInsert(editor, (text, from, to) => insertFootnote(text, from, to)),
+      name: () => t(`Insérer une note de bas de page`),
+      icons: [`superscript`, `asterisk`],
+      needsEditor: true,
+      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from, to) => insertFootnote(text, from, to)),
     });
-    this.addCommand({
+    this.addFunction({
       id: `toggle-toc`,
-      name: t(`Activer ou désactiver la table des matières de la note`),
-      editorCallback: (editor) => {
+      name: () => t(`Activer ou désactiver la table des matières de la note`),
+      icons: [`list-ordered`, `list`],
+      needsEditor: true,
+      run: ({ editor }) => {
         let enabled = false;
-        this.applyInsert(editor, (text) => {
+        this.applyInsert(editor as Editor, (text) => {
           const r = toggleToc(text);
           enabled = r.enabled;
           return r;
@@ -240,20 +239,62 @@ export default class MindmapWritingPlugin extends Plugin {
         new Notice(enabled ? t(`La table des matières est activée pour cette note.`) : t(`La table des matières est désactivée pour cette note.`));
       },
     });
-    this.addCommand({
+    this.addFunction({
       id: `insert-table-caption`,
-      name: t(`Insérer une légende de tableau`),
-      editorCallback: (editor) => this.applyInsert(editor, (text, from) => insertTableCaption(text, from)),
+      name: () => t(`Insérer une légende de tableau`),
+      icons: [`table`, `table-2`],
+      needsEditor: true,
+      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from) => insertTableCaption(text, from)),
     });
-    this.addCommand({
+    this.addFunction({
       id: `insert-inline-math`,
-      name: t(`Insérer une formule en ligne`),
-      editorCallback: (editor) => this.applyInsert(editor, (text, from, to) => insertInlineMath(text, from, to)),
+      name: () => t(`Insérer une formule en ligne`),
+      icons: [`sigma`, `pi`],
+      needsEditor: true,
+      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from, to) => insertInlineMath(text, from, to)),
+    });
+    this.addFunction({
+      id: `insert-block-math`,
+      name: () => t(`Insérer une formule en bloc`),
+      icons: [`square-function`, `function-square`, `pi`, `sigma`],
+      needsEditor: true,
+      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from, to) => insertBlockMath(text, from, to)),
+    });
+    // L'export de haute qualite est reserve a l'ordinateur : sur tablette et telephone, ces fonctions ne sont pas proposees.
+    this.addFunction({
+      id: `export-preview`,
+      name: () => t(`Aperçu de l'export de la note`),
+      icons: [`file-search`, `eye`, `file-text`],
+      needsEditor: false,
+      available: () => Platform.isDesktop,
+      run: () => void this.openExportPreview(),
+    });
+    this.addFunction({
+      id: `export-pdf`,
+      name: () => t(`Exporter la note en PDF`),
+      icons: [`file-output`, `file-down`, `download`],
+      needsEditor: false,
+      available: () => Platform.isDesktop,
+      run: () => {
+        if (!this.app.workspace.getActiveFile() && !this.lastFile) {
+          new Notice(t(`Ouvrez d'abord une note.`));
+          return;
+        }
+        void this.exportPdf();
+      },
     });
     this.addCommand({
-      id: `insert-block-math`,
-      name: t(`Insérer une formule en bloc`),
-      editorCallback: (editor) => this.applyInsert(editor, (text, from, to) => insertBlockMath(text, from, to)),
+      id: `toggle-panel`,
+      name: t(`Afficher ou masquer le panneau de boutons`),
+      callback: () => {
+        this.settings.panelVisible = !this.settings.panelVisible;
+        void this.saveSettings(false);
+      },
+    });
+    this.addCommand({
+      id: `open-help`,
+      name: t(`Ouvrir l'aide de Bigorneau`),
+      callback: () => this.openHelp(),
     });
 
     this.addCommand({
@@ -431,6 +472,38 @@ export default class MindmapWritingPlugin extends Plugin {
   }
 
   // Ecriture differee : evite d'enregistrer a chaque cran d'une reglette.
+  // Enregistre une fonction : elle devient une commande de la palette, et le panneau de boutons lui donne un bouton.
+  private addFunction(fn: PanelFunction<FunctionContext>): void {
+    this.functions.register(fn);
+    if (fn.needsEditor) {
+      this.addCommand({
+        id: fn.id,
+        name: fn.name(),
+        editorCallback: (editor, view) => void fn.run({ app: this.app, editor, ...(view instanceof MarkdownView ? { view } : {}) }),
+      });
+    } else {
+      this.addCommand({
+        id: fn.id,
+        name: fn.name(),
+        checkCallback: (checking) => {
+          if (fn.available && !fn.available()) return false;
+          if (!checking) void fn.run({ app: this.app });
+          return true;
+        },
+      });
+    }
+  }
+
+  openHelp(): void {
+    new HelpModal(this.app, () => this.helpEntries.all()).open();
+  }
+
+  // Nouvel ordre des boutons du panneau, apres un deplacement.
+  async saveOrder(order: string[]): Promise<void> {
+    this.settings.panelOrder = order;
+    await this.saveSettings(false);
+  }
+
   // Reglages enregistres par l'ancien plugin (identifiant mindmap-writing), s'il est encore present dans ce coffre. Les fichiers
   // de configuration ne sont pas dans l'index du coffre : seul l'adaptateur peut les lire. A retirer dans une version ulterieure.
   private async legacyData(): Promise<unknown> {
@@ -449,6 +522,7 @@ export default class MindmapWritingPlugin extends Plugin {
   async saveSettings(redraw = true) {
     this.applyBodySettings();
     this.persistLater();
+    this.panel.sync();
     if (!redraw) return;
     this.forEachView((v) => v.redraw());
     this.refreshFixed();
