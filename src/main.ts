@@ -23,6 +23,9 @@ import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
 
+// Part de la largeur, en pourcentage, donnee au volet de la vue Liste a son ouverture.
+const LIST_PANE_PERCENT = 28;
+
 export default class MindmapWritingPlugin extends Plugin {
   // Derniere note Markdown consultee : la vue Carte s'y rattache.
   lastFile: TFile | null = null;
@@ -686,22 +689,48 @@ export default class MindmapWritingPlugin extends Plugin {
 
   // Ouvre la carte de la note active. La note active devient le volet de rédaction, a la place reglee
   // (a gauche par defaut) : elle ne reste pas cachee derriere la carte.
+  // Donne au volet de la liste une part etroite de la largeur (le reste va a la note) ; on l'ajuste ensuite a la souris. Obsidian
+  // ne propose pas d'API pour cela : la part de chaque volet est lue dans ses reglages internes, et un echec est sans consequence.
+  private narrowPane(list: WorkspaceLeaf, note: WorkspaceLeaf): void {
+    type Item = { setDimension?: (percent: number) => void; containerEl?: HTMLElement };
+    try {
+      const shares: [Item | undefined, number][] = [
+        [(list as unknown as { parent?: Item }).parent, LIST_PANE_PERCENT],
+        [(note as unknown as { parent?: Item }).parent, 100 - LIST_PANE_PERCENT],
+      ];
+      for (const [item, percent] of shares) {
+        if (!item) continue;
+        if (typeof item.setDimension === `function`) item.setDimension(percent);
+        else item.containerEl?.style.setProperty(`flex-grow`, String(percent));
+      }
+      this.app.workspace.requestSaveLayout();
+    } catch {
+      // La taille reste celle qu'Obsidian a choisie.
+    }
+  }
+
   async activateView() {
     const { workspace } = this.app;
     const active = workspace.getActiveViewOfType(MarkdownView);
     this.rememberFile(workspace.getActiveFile());
     let leaf: WorkspaceLeaf | null = workspace.getLeavesOfType(VIEW_TYPE_MINDMAP)[0] ?? null;
     let adopted: WorkspaceLeaf | null = null;
+    let narrow = false;
     if (!leaf) {
       if (active && active.file) {
-        const pos = this.settings.panePosition;
+        // La vue Liste s'ouvre dans un volet etroit a gauche de la note (la note est donc a droite) ; la carte, a la place choisie
+        // dans les reglages (position de la note par rapport a la carte).
+        const listMode = this.settings.viewMode === `list`;
+        const pos = listMode ? `right` : this.settings.panePosition;
         const direction = pos === `right` || pos === `left` ? `vertical` : `horizontal`;
         leaf = workspace.createLeafBySplit(active.leaf, direction, pos === `right` || pos === `bottom`);
         adopted = active.leaf;
+        if (listMode) narrow = true;
       } else {
         leaf = workspace.getLeaf(`tab`);
       }
       await leaf.setViewState({ type: VIEW_TYPE_MINDMAP, active: true });
+      if (narrow && adopted) this.narrowPane(leaf, adopted);
     }
     workspace.revealLeaf(leaf);
     const view = leaf.view;

@@ -94,6 +94,8 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
     // Elements dessines de chaque partie (unite ou emplacement) du dessin affiche, calcules a la demande.
     private sets = new Map<string, number[]>();
     private caretEl: HTMLElement | null = null;
+    // Numero du dernier clic dans l'apercu : un calcul plus ancien est abandonne.
+    private clickSeq = 0;
     // Dernier choix fait par un clic dans l'apercu : il permet le clic suivant a agrandir le choix et la touche Suppr a effacer l'unite.
     private last: { tex: string; leaf: number; unit: TexUnit } | null = null;
 
@@ -476,11 +478,13 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
     private async onPreviewClick(e: MouseEvent): Promise<void> {
       const shown = this.shown;
       if (!shown) return;
+      // Un double clic envoie deux clics : le calcul du premier, plus long, ne doit pas ecraser le choix du second.
+      const mine = ++this.clickSeq;
       this.previewBox.focus();
       const leaves = leafElements(shown.svg);
       if (e.detail >= 2) {
         const leaf = hitLeaf(leaves, e.clientX, e.clientY);
-        if (leaf >= 0) await this.chooseAt(shown, leaves, leaf);
+        if (leaf >= 0) await this.chooseAt(shown, leaves, leaf, mine);
         return;
       }
       // Un clic sur le carre d'un emplacement vide place le curseur dedans (c'est ainsi que l'on ecrit sous une barre de fraction).
@@ -488,7 +492,7 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
       if (near >= 0) {
         for (const slot of shown.model.slots) {
           if ((await this.setOf({ slot })).includes(near)) {
-            this.place(slot);
+            if (mine === this.clickSeq) this.place(slot);
             return;
           }
         }
@@ -503,15 +507,15 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
         const d = Math.hypot(spot.x - x, (spot.y - y) * 1.5);
         if (!best || d < best.d) best = { offset: spot.offset, d };
       }
-      if (this.shown !== shown) return;
+      if (this.shown !== shown || mine !== this.clickSeq) return;
       if (best) this.place(best.offset);
     }
 
     // Choisit l'element dessine d'indice `leaf` : la plus petite partie du TeX qui le contient, puis des parties de plus en plus grandes.
-    private async chooseAt(shown: NonNullable<FormulaModal[`shown`]>, leaves: Element[], leaf: number): Promise<void> {
+    private async chooseAt(shown: NonNullable<FormulaModal[`shown`]>, leaves: Element[], leaf: number, mine: number): Promise<void> {
       const sets: number[][] = [];
       for (const unit of shown.model.units) sets.push(await this.setOf({ unit }));
-      if (this.shown !== shown) return;
+      if (this.shown !== shown || mine !== this.clickSeq) return;
       const candidates = unitsAt(shown.model.units, sets, leaf);
       if (candidates.length === 0) return;
       let pick = candidates[0];

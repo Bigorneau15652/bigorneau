@@ -47,18 +47,16 @@
 
 .mmw-map.mmw-list .mmw-frame {
   inset: auto;
-  left: 16px;
-  top: 16px;
+  left: 8px;
+  top: 28px;
   box-sizing: content-box;
   width: fit-content;
-  max-width: calc(100% - 32px - 16px);
-  max-height: calc(100% - 132px);
+  max-width: calc(100% - 16px);
+  max-height: calc(100% - 144px);
   padding: 0 8px 8px;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  border-radius: 8px;
-  outline: 1px solid var(--background-modifier-border);
   background: var(--background-primary);
   pointer-events: auto;
 }
@@ -1162,8 +1160,11 @@
   z-index: 3;
   padding-left: 12px;
   background: var(--background-primary);
-  box-shadow: 0 1px 0 var(--background-modifier-border);
   font-weight: 700;
+}
+
+.mmw-map.mmw-list .mmw-node.mmw-depth-0.mmw-stuck {
+  box-shadow: 0 1px 0 var(--background-modifier-border);
 }
 
 .mmw-map.mmw-list .mmw-node.mmw-depth-1,
