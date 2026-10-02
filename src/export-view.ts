@@ -8,7 +8,7 @@ import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, Row } from "./export/typeset";
 import { loadAssets, pageStyleOf, warningLines } from "./export-context";
-import { EXPORT_FONT_FAMILY, EXPORT_MONO_FAMILY, loadExportFont } from "./export-font";
+import { loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
 
@@ -94,9 +94,9 @@ export class ExportPreviewView extends ItemView {
       }
       const span = el.createSpan({ text: run.text });
       if (run.sup) span.addClass(`mmw-sup`);
-      if (run.style === `mono`) span.style.fontFamily = `"${EXPORT_MONO_FAMILY}", monospace`;
-      if (run.style === `bold` || run.style === `boldItalic`) span.style.fontWeight = `700`;
-      if (run.style === `italic` || run.style === `boldItalic`) span.style.fontStyle = `italic`;
+      if (run.style === `mono`) span.addClass(`mmw-run-mono`);
+      if (run.style === `bold` || run.style === `boldItalic`) span.addClass(`mmw-run-bold`);
+      if (run.style === `italic` || run.style === `boldItalic`) span.addClass(`mmw-run-italic`);
       if (run.link) {
         span.addClass(`mmw-export-link`);
         const url = run.link;
@@ -193,8 +193,7 @@ export class ExportPreviewView extends ItemView {
       el.addClass(`mmw-row-toc`);
       el.addEventListener(`click`, () => this.goTo(anchor));
       if (row.toc.page >= 0) {
-        el.style.display = `flex`;
-        el.style.whiteSpace = `pre`;
+        el.addClass(`mmw-row-toc-numbered`);
         el.createSpan({ cls: `mmw-row-leader` });
         el.createSpan({ text: String(row.toc.page) });
       }
@@ -263,7 +262,6 @@ export class ExportPreviewView extends ItemView {
       const page = sheet.createDiv({ cls: `mmw-export-page` });
       page.style.width = `${A4_SETUP.width}pt`;
       page.style.height = `${A4_SETUP.height}pt`;
-      page.style.fontFamily = `"${EXPORT_FONT_FAMILY}", serif`;
       const textWidth = A4_SETUP.width - A4_SETUP.marginLeft - A4_SETUP.marginRight;
       if (pg.header) {
         const h = page.createDiv({ cls: `mmw-export-header`, text: pg.header });

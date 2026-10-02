@@ -169,7 +169,7 @@ const PAIRS: [string, string][] = [
   [`Échap`, `Esc`],
   [`Retour arrière`, `Backspace`],
   // Commandes
-  [`Ouvrir Mindmap Note Writing`, `Open Mindmap Note Writing`],
+  [`Ouvrir Bigorneau`, `Open Bigorneau`],
   [`Chapitre précédent`, `Previous chapter`],
   [`Chapitre suivant`, `Next chapter`],
   [`Chapitre parent`, `Parent chapter`],
@@ -182,7 +182,7 @@ const PAIRS: [string, string][] = [
   [`La note montre tous les chapitres.`, `The note now shows all chapters.`],
   [`Revenir à la carte`, `Back to the map`],
   [`Ouvrir la carte de la note active`, `Open the map of the active note`],
-  [`Mindmap Note Writing`, `Mindmap Note Writing`],
+  [`Bigorneau`, `Bigorneau`],
   // Fenetre de titre
   [`Nom de la note`, `Note name`],
   [`Modifier le titre`, `Edit the heading`],
@@ -420,7 +420,6 @@ const PAIRS: [string, string][] = [
   [`L'export a échoué : {0}`, `Export failed: {0}`],
   [`Export PDF`, `PDF export`],
   [`Mise en page, tables des matières, figures et médias de l'export PDF de haute qualité`, `Page layout, tables of contents, figures and media of the high-quality PDF export`],
-  [`Document`, `Document`],
   [`Mise en page`, `Page layout`],
   [`En-tête de page`, `Page header`],
   [`Texte placé en haut de chaque page, sauf sur la première.`, `Text placed at the top of every page except the first.`],
@@ -453,6 +452,7 @@ const PAIRS: [string, string][] = [
   [`Jusqu'au niveau {0}`, `Down to level {0}`],
   [`Figures, renvois et médias`, `Figures, references and media`],
   [`Insérer une note de bas de page`, `Insert a footnote`],
+  [`Les réglages de l'ancien plugin Mindmap Note Writing ont été repris.`, `The settings of the former Mindmap Note Writing plugin were imported.`],
   [`Activer ou désactiver la table des matières de la note`, `Turn the table of contents of the note on or off`],
   [`Insérer une légende de tableau`, `Insert a table caption`],
   [`Insérer une formule en ligne`, `Insert an inline formula`],

@@ -1,6 +1,6 @@
 # Politique de développement de l'export de haute qualité
 
-Document destiné à Claude Code, à lire en entier avant toute action sur la fonction d'export du plugin Mindmap Note Writing. Il a été rédigé à la demande de l'utilisateur à l'issue d'une recherche sur le fonctionnement de LaTeX, de LyX, de Typst et de Paged.js. Il décrit d'abord ce que ces outils font pour produire des documents équilibrés, puis les règles que Claude Code doit suivre pour reproduire cette qualité dans le plugin.
+Document destiné à Claude Code, à lire en entier avant toute action sur la fonction d'export du plugin Bigorneau. Il a été rédigé à la demande de l'utilisateur à l'issue d'une recherche sur le fonctionnement de LaTeX, de LyX, de Typst et de Paged.js. Il décrit d'abord ce que ces outils font pour produire des documents équilibrés, puis les règles que Claude Code doit suivre pour reproduire cette qualité dans le plugin.
 
 ## 1. Décisions déjà prises par l'utilisateur
 

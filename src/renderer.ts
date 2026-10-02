@@ -14,6 +14,7 @@ import { MapLink, parseLinks, WebLink, webLinks } from "./links";
 import { HeadingItem, VaultPicker } from "./vault-picker";
 import { WebDialog, WebDialogOptions } from "./web-dialog";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, shapeChoice, ShapeChoice, shapePatch, StylePatch } from "./style";
+import { setSvg } from "./dom";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
 export interface MapEdit {
@@ -646,7 +647,7 @@ export class MapRenderer {
     if (web) {
       const mark = document.createElement(`span`);
       mark.className = `mmw-web-mark`;
-      mark.innerHTML = iconSvg(`web`, s.iconWeb);
+      setSvg(mark, iconSvg(`web`, s.iconWeb));
       if (s.iconColorWeb) mark.style.color = s.iconColorWeb;
       mark.title = web.map((w) => `${w.label} (${w.url})`).join(`\n`);
       el.appendChild(mark);
@@ -659,7 +660,7 @@ export class MapRenderer {
       if (ext.length > 0) {
         const mark = document.createElement(`span`);
         mark.className = `mmw-link-mark`;
-        mark.innerHTML = iconSvg(`external`, s.iconExternal);
+        setSvg(mark, iconSvg(`external`, s.iconExternal));
         if (s.iconColorExternal) mark.style.color = s.iconColorExternal;
         mark.title = ext.map((l) => (l.heading ? `${l.note} › ${l.heading}` : l.note)).join(`\n`);
         el.appendChild(mark);
@@ -670,7 +671,7 @@ export class MapRenderer {
       if (inner.length > 0) {
         const mark = document.createElement(`span`);
         mark.className = `mmw-int-mark`;
-        mark.innerHTML = iconSvg(`internal`, s.iconInternal);
+        setSvg(mark, iconSvg(`internal`, s.iconInternal));
         if (s.iconColorInternal) mark.style.color = s.iconColorInternal;
         mark.title = inner.map((l) => t(`Aller à : {0}`, l.heading ?? ``)).join(`\n`);
         el.appendChild(mark);
@@ -699,7 +700,7 @@ export class MapRenderer {
     if (meta?.comment) {
       const mark = document.createElement(`span`);
       mark.className = `mmw-comment-mark`;
-      mark.innerHTML = COMMENT_ICON;
+      setSvg(mark, COMMENT_ICON);
       el.appendChild(mark);
       tip.push(meta.comment);
     }
@@ -721,7 +722,7 @@ export class MapRenderer {
     const el = document.createElement(`div`);
     el.className = `mmw-eye` + (own ? ` mmw-eye-on` : ``);
     el.dataset.eye = n.key;
-    el.innerHTML = own ? EYE_OFF_ICON : EYE_ICON;
+    setSvg(el, own ? EYE_OFF_ICON : EYE_ICON);
     el.title = own ? t(`Afficher ce titre dans la note`) : t(`Masquer ce titre dans la note`);
     if (this.isList()) {
       // Vue Liste : l'oeil est a l'extremite droite de la ligne.
@@ -746,7 +747,7 @@ export class MapRenderer {
     const el = document.createElement(`div`);
     el.className = `mmw-lfold` + (n.collapsed ? ` mmw-lfold-collapsed` : ``);
     el.dataset.fold = n.key;
-    el.innerHTML = FOLD_ICON;
+    setSvg(el, FOLD_ICON);
     el.title = n.collapsed ? t(`Déplier`) : t(`Replier`);
     el.style.left = `${n.x + 6}px`;
     el.style.top = `${n.y + n.h / 2 - 9}px`;
@@ -875,7 +876,7 @@ export class MapRenderer {
       label.textContent = l.heading ? `${name} › ${l.heading}` : name;
       const open = document.createElement(`span`);
       open.className = `mmw-ext-open`;
-      open.innerHTML = OPEN_ICON;
+      setSvg(open, OPEN_ICON);
       open.title = t(`Ouvrir la carte de cette note (Cmd ou Ctrl : ouvrir la note dans un nouvel onglet)`);
       el.append(label, open);
       el.title = t(`Cliquer pour sélectionner (glisser pour changer l'ordre, Suppr pour retirer), double clic pour modifier`);
@@ -911,7 +912,7 @@ export class MapRenderer {
     const defs = document.createElementNS(SVG_NS, `defs`);
     const marker = (id: string, cls: string): string =>
       `<marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9 z" class="${cls}"/></marker>`;
-    defs.innerHTML = marker(`mmw-arrow`, `mmw-link-head`) + marker(`mmw-arrow-blue`, `mmw-link-head mmw-link-head-blue`);
+    setSvg(defs, marker(`mmw-arrow`, `mmw-link-head`) + marker(`mmw-arrow-blue`, `mmw-link-head mmw-link-head-blue`));
     return defs;
   }
 

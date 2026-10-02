@@ -84,7 +84,7 @@ export class MindmapView extends ItemView {
   }
 
   getDisplayText(): string {
-    return t(`Mindmap Note Writing`);
+    return t(`Bigorneau`);
   }
 
   getIcon(): string {

@@ -9,7 +9,7 @@ import { columnWidths } from "../src/export/table";
 
 const PARA = `Le bâtiment a été construit en 1972 et sa consommation d'énergie finale reste aujourd'hui supérieure à 180 kWh/m².an ; une rénovation globale suppose d'abord une analyse précise : isolation des murs et de la toiture, remplacement des menuiseries, régulation du chauffage et ventilation double flux.`;
 const INLINE = { ...DEFAULT_PAGE_STYLE, floats: `inline` as const };
-const REQ = { creator: `Mindmap Note Writing`, created: new Date(`2026-10-01T15:00:00Z`) };
+const REQ = { creator: `Bigorneau`, created: new Date(`2026-10-01T15:00:00Z`) };
 
 function image(w = 400, h = 200): ImageAsset {
   return { naturalWidth: w, naturalHeight: h, pixelWidth: 2, pixelHeight: 2, kind: `rgb`, data: new Uint8Array(12), alpha: new Uint8Array(4) };
