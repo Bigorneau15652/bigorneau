@@ -11,3 +11,13 @@ export function setSvg(el: Element, markup: string): void {
   if (doc.querySelector(`parsererror`)) return;
   for (const node of Array.from(doc.documentElement.childNodes)) el.appendChild(el.ownerDocument.importNode(node, true));
 }
+
+// Ajoute dans `parent` l'element svg decrit par un texte SVG complet (un dessin de MathJax, par exemple) et le renvoie ; null si le texte
+// est mal forme. Meme principe que setSvg : le texte est lu comme du XML, jamais comme du HTML.
+export function appendSvgDocument(parent: Element, markup: string): SVGElement | null {
+  const doc = new DOMParser().parseFromString(markup, `image/svg+xml`);
+  if (doc.querySelector(`parsererror`) || doc.documentElement.localName !== `svg`) return null;
+  const node = parent.ownerDocument.importNode(doc.documentElement, true) as unknown as SVGElement;
+  parent.appendChild(node);
+  return node;
+}

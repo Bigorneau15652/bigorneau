@@ -1684,8 +1684,41 @@
   width: min(760px, 94vw);
 }
 
-.mmw-formula-mode {
+.mmw-formula-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.mmw-formula-hidden {
+  display: none;
+}
+
+.mmw-formula-guide-body {
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.mmw-formula-svg {
+  font-size: 2em;
+  cursor: pointer;
+}
+
+.mmw-formula-svg-block {
+  font-size: 2.4em;
+}
+
+.mmw-formula-svg .mmw-formula-hl {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent);
+}
+
+.mmw-formula-key svg {
+  font-size: 1.1em;
+  max-height: 2.2em;
 }
 
 .mmw-formula-tabs {
@@ -1714,7 +1747,7 @@
 
 .mmw-formula-key {
   min-width: 36px;
-  height: 32px;
+  min-height: 34px;
   padding: 0 6px;
   font-size: var(--font-ui-medium);
 }
