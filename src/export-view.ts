@@ -7,7 +7,9 @@ import type { MathAsset } from "./export/math";
 import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, Row } from "./export/typeset";
-import { loadAssets, pageStyleOf, warningLines } from "./export-context";
+import { loadAssets, pageStyleOf } from "./export-context";
+import { warningLines } from "./export-report";
+import { MATH_SERVICE, MathRenderer } from "./script-formulas";
 import { loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
@@ -219,7 +221,7 @@ export class ExportPreviewView extends ItemView {
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.read(file));
     if (token !== this.token) return;
 
-    const loaded = await loadAssets(this.app, text, file.name, file.path);
+    const loaded = await loadAssets(this.app, text, file.name, file.path, this.plugin.scripts.service<MathRenderer>(MATH_SERVICE));
     if (token !== this.token) {
       for (const u of loaded.urls) URL.revokeObjectURL(u);
       return;
@@ -246,7 +248,7 @@ export class ExportPreviewView extends ItemView {
       cls: `mmw-export-stats`,
       text: t(`{0} lignes, dont {1} avec césure ({2} consécutives) ; {3} lâches, {4} serrées, {5} débordantes`, s.lines, s.hyphenatedLines, s.consecutiveHyphens, s.looseLines, s.tightLines, s.overfullLines),
     });
-    for (const line of warningLines(typeset.warnings)) head.createDiv({ cls: `mmw-export-stats`, text: line });
+    for (const line of warningLines(typeset.warnings, { formulasEnabled: this.plugin.scripts.isEnabled(`formulas`) })) head.createDiv({ cls: `mmw-export-stats`, text: line });
     if (typeset.missing.length > 0) {
       head.createDiv({ cls: `mmw-export-stats`, text: t(`Caractères absents de la police : {0}`, typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)) });
     }

@@ -20,6 +20,7 @@ export interface PanelHost {
   // Enregistre le nouvel ordre complet des boutons.
   saveOrder(order: string[]): Promise<void>;
   openHelp(): void;
+  openScripts(): void;
 }
 
 // Duree d'appui, en millisecondes, avant que le bouton puisse etre deplace ; au-dela de ce deplacement en pixels avant la fin de
@@ -96,6 +97,13 @@ export class ButtonPanel {
     if (panel.dataset.signature === signature) return;
     panel.dataset.signature = signature;
     panel.empty();
+
+    const scripts = panel.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
+    scripts.type = `button`;
+    setIcon(scripts, pickIcon([`shell`, `puzzle`, `blocks`, `package`]));
+    scripts.setAttr(`aria-label`, t(`Scripts de Bigorneau`));
+    setTooltip(scripts, t(`Scripts de Bigorneau`), { placement: `left` });
+    scripts.addEventListener(`click`, () => this.host.openScripts());
 
     const help = panel.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
     help.type = `button`;

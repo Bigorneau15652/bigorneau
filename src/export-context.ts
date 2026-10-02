@@ -4,9 +4,8 @@ import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
-import { renderTex } from "./export/mathjax";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
-import { t } from "./i18n";
+import type { MathRenderer } from "./script-formulas";
 import type { MmSettings } from "./settings";
 
 export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportPageRefs` | `exportMedia` | `exportHeader` | `exportFooter` | `exportFlushBottom` | `exportChapterBreak` | `exportFootnoteNumbering` | `exportProtrusion` | `exportToc` | `exportTocDepth` | `exportChapterToc` | `exportChapterTocDepth`>): PageStyle {
@@ -26,20 +25,6 @@ export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportP
     chapterToc: settings.exportChapterToc,
     chapterTocDepth: settings.exportChapterTocDepth,
   };
-}
-
-// Messages du compte rendu d'export, d'apres les signalements de la composition.
-export function warningLines(warnings: string[]): string[] {
-  const out: string[] = [];
-  for (const w of warnings) {
-    if (w.startsWith(`note:`)) out.push(t(`Note de bas de page sans définition : {0}`, w.slice(5)));
-    else if (w.startsWith(`image:`)) out.push(t(`Image introuvable : {0}`, w.slice(6)));
-    else if (w.startsWith(`webimage:`)) out.push(t(`Image du web non téléchargée, remplacée par son adresse : {0}`, w.slice(9)));
-    else if (w.startsWith(`renvoi:`)) out.push(t(`Renvoi sans cible dans la note : {0}`, w.slice(7)));
-    else if (w.startsWith(`formule:`)) out.push(t(`Formule non dessinée, son texte est gardé tel quel : {0}`, w.slice(8)));
-    else if (w.startsWith(`media:`)) out.push(t(`Média remplacé par un cadre avec son adresse : {0}`, w.slice(6)));
-  }
-  return out;
 }
 
 export interface LoadedAssets {
@@ -65,8 +50,8 @@ function fileFor(app: App, target: string, sourcePath: string): TFile | null {
 // Charge les images des figures de la note : lues dans le coffre, decodees par le navigateur, reduites a 300 points par pouce au
 // plus de la taille affichee. Les JPEG en couleurs sont gardes tels quels. Les images absentes ou illisibles n'ont pas d'entree :
 // la composition les remplace par un repere et les signale.
-export async function loadAssets(app: App, text: string, fileName: string, sourcePath: string): Promise<LoadedAssets> {
-  const formulas = await loadFormulas(text, fileName);
+export async function loadAssets(app: App, text: string, fileName: string, sourcePath: string, math?: MathRenderer): Promise<LoadedAssets> {
+  const formulas = math ? await loadFormulas(text, fileName, math) : new Map<string, MathAsset>();
   const images = new Map<string, ImageAsset>();
   const urls: string[] = [];
   const bounds = figureBounds(A4_SETUP);
@@ -133,12 +118,12 @@ async function loadOne(app: App, file: TFile, requestedWidth: number | undefined
   return { naturalWidth, naturalHeight, pixelWidth: pw, pixelHeight: ph, kind: `rgb`, data: rgb, ...(translucent ? { alpha } : {}), previewUrl: url };
 }
 
-// Dessin des formules de la note par MathJax (integre au plugin). Une formule que MathJax refuse n'a pas d'entree : la composition
+// Dessin des formules de la note par le service du script Formules. Une formule que MathJax refuse n'a pas d'entree : la composition
 // garde son texte et le signale.
-async function loadFormulas(text: string, fileName: string): Promise<Map<string, MathAsset>> {
+async function loadFormulas(text: string, fileName: string, render: MathRenderer): Promise<Map<string, MathAsset>> {
   const out = new Map<string, MathAsset>();
   for (const { tex, display } of formulaTargets(text, fileName)) {
-    const asset = renderTex(tex, display);
+    const asset = await render(tex, display);
     if (asset) out.set(mathKey(tex, display), asset);
   }
   return out;

@@ -3,7 +3,9 @@
 import { Notice, Platform, TFile } from "obsidian";
 import { composeNote, composeToPdf } from "./export/compose";
 import { ExportDialog, ExportReportModal, targetPath } from "./export-dialog";
-import { loadAssets, pageStyleOf, warningLines } from "./export-context";
+import { loadAssets, pageStyleOf } from "./export-context";
+import { warningLines } from "./export-report";
+import { MATH_SERVICE, MathRenderer } from "./script-formulas";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
 
@@ -32,7 +34,7 @@ export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile)
     const text = plugin.getOpenText(file) ?? (await plugin.app.vault.read(file));
     // Laisse le temps d'afficher le message avant le calcul.
     await new Promise((r) => window.setTimeout(r, 30));
-    const { images, formulas, urls } = await loadAssets(plugin.app, text, file.name, file.path);
+    const { images, formulas, urls } = await loadAssets(plugin.app, text, file.name, file.path, plugin.scripts.service<MathRenderer>(MATH_SERVICE));
     const composed = composeNote(text, file.name, undefined, pageStyleOf(plugin.settings), { images, formulas });
     for (const u of urls) URL.revokeObjectURL(u);
     const pdf = await composeToPdf(composed, {
@@ -50,7 +52,7 @@ export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile)
     notice.hide();
 
     const lines: string[] = [];
-    lines.push(...warningLines(composed.typeset.warnings));
+    lines.push(...warningLines(composed.typeset.warnings, { formulasEnabled: plugin.scripts.isEnabled(`formulas`) }));
     if (composed.typeset.missing.length > 0) lines.push(t(`Caractères absents de la police : {0}`, composed.typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)));
     if (composed.typeset.stats.overfullLines > 0) lines.push(t(`{0} lignes débordent de la colonne.`, composed.typeset.stats.overfullLines));
     if (lines.length > 0) new ExportReportModal(plugin.app, path, lines).open();
