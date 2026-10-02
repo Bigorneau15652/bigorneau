@@ -64,6 +64,12 @@ test(`reglages : auteur du PDF vide par defaut, nettoye quand il est enregistre`
   assert.equal(DEFAULT_SETTINGS.exportChapterTocDepth, 3);
   const m = migrateSettings({ exportHeader: `title`, exportFooter: `none`, exportFlushBottom: true, exportChapterBreak: `level1`, exportFootnoteNumbering: `perChapter`, exportProtrusion: false, exportToc: true, exportTocDepth: 5, exportChapterToc: true, exportChapterTocDepth: 2 });
   assert.deepEqual([m.exportHeader, m.exportFooter, m.exportFlushBottom, m.exportChapterBreak, m.exportFootnoteNumbering, m.exportProtrusion, m.exportToc, m.exportTocDepth, m.exportChapterToc, m.exportChapterTocDepth], [`title`, `none`, true, `level1`, `perChapter`, false, true, 5, true, 2]);
+  assert.equal(DEFAULT_SETTINGS.panelVisible, true);
+  assert.equal(DEFAULT_SETTINGS.panelOnMobile, false);
+  assert.deepEqual([DEFAULT_SETTINGS.panelOrder, DEFAULT_SETTINGS.panelHidden], [[], []]);
+  const panel = migrateSettings({ panelVisible: false, panelOnMobile: true, panelOrder: [`a`, 3, `b`], panelHidden: `x` });
+  assert.deepEqual([panel.panelVisible, panel.panelOnMobile, panel.panelOrder, panel.panelHidden], [false, true, [`a`, `b`], []]);
+  assert.equal(migrateSettings({ panelVisible: `non` }).panelVisible, true);
   const bad = migrateSettings({ exportHeader: `x`, exportFooter: 1, exportFlushBottom: `oui`, exportChapterBreak: `x`, exportFootnoteNumbering: `x`, exportProtrusion: `non`, exportToc: `oui`, exportTocDepth: 9, exportChapterToc: 1, exportChapterTocDepth: 0 });
   assert.deepEqual([bad.exportHeader, bad.exportFooter, bad.exportFlushBottom, bad.exportChapterBreak, bad.exportFootnoteNumbering, bad.exportProtrusion, bad.exportToc, bad.exportTocDepth, bad.exportChapterToc, bad.exportChapterTocDepth], [`chapter`, `number`, false, `none`, `continuous`, true, false, 3, false, 3]);
 });

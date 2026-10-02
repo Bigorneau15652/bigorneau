@@ -1589,3 +1589,77 @@
   font-size: 10pt;
   color: #666;
 }
+
+/* Panneau de boutons a droite de la zone de redaction, au milieu de la hauteur. */
+.mmw-has-panel {
+  position: relative;
+}
+
+.mmw-panel {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  transform: translateY(-50%);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+}
+
+.mmw-panel-functions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+  margin-top: 2px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.mmw-panel-button {
+  touch-action: none;
+  user-select: none;
+}
+
+.mmw-panel-dragging {
+  z-index: 2;
+  opacity: 0.75;
+  background: var(--background-modifier-hover);
+  box-shadow: var(--shadow-s);
+}
+
+.mmw-panel-drop-before {
+  box-shadow: 0 -2px 0 0 var(--interactive-accent);
+}
+
+.mmw-panel-drop-after {
+  box-shadow: 0 2px 0 0 var(--interactive-accent);
+}
+
+/* Fenetre d'aide. */
+.mmw-help-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.mmw-help-results {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.mmw-help-entry h4 {
+  margin: 12px 0 4px;
+}
+
+.mmw-help-entry p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.mmw-help-empty {
+  color: var(--text-muted);
+}

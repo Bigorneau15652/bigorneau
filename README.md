@@ -55,6 +55,10 @@ A video, a sound, an embedded PDF or an embedded web content cannot be played on
 
 The settings of the chapter "PDF export" cover the author of the PDF, the page header, the page footer, pages aligned at the bottom, a page break before each chapter, footnote numbering, protrusion, the tables of contents, the placement of figures and tables, the references and the media. Five commands of the command palette write into the note, and you can give them a keyboard shortcut in the Obsidian settings: insert a footnote, turn the table of contents of the note on or off, insert a table caption, insert an inline formula and insert a block formula.
 
+## Button panel and help
+
+A panel of small buttons sits on the right of the writing area, halfway up, in every note editor. The first button opens the help window, which has a search box and works offline, in French or in English depending on the plugin language. The other buttons are the functions of the plugin: the five commands that write into the note, then the preview and the export. Each function is also a command of the command palette, where you can give it a keyboard shortcut in the Obsidian settings. A long press on a button, then a drag, moves it, and the order is kept. The chapter "Button panel" of the settings shows or hides the panel, hides a button, and moves buttons up or down without dragging. The command "Show or hide the button panel" toggles the panel. On tablets and phones the panel is hidden by default, and a setting shows it. Functions that write into the note work in editing mode only.
+
 ## Privacy and disclosures
 
 Bigorneau does not connect to the internet. It has no telemetry, no advertising, no account and no payment. It reads and writes files only inside your vault. Links open in your browser only when you click them, and images from the web are not downloaded for the export.

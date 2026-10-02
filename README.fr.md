@@ -55,6 +55,10 @@ Une vidéo, un son, un PDF intégré ou un contenu web intégré ne se lit pas s
 
 Les réglages du chapitre « Export PDF » couvrent l'auteur du PDF, l'en-tête, le pied de page, l'alignement des pages en bas, le saut de page avant chaque chapitre, la numérotation des notes de bas de page, la protrusion, les tables des matières, la place des figures et des tableaux, les renvois et les médias. Cinq commandes de la palette écrivent dans la note, et chacune peut recevoir un raccourci clavier dans les réglages d'Obsidian : insérer une note de bas de page, activer ou désactiver la table des matières de la note, insérer une légende de tableau, insérer une formule en ligne et insérer une formule en bloc.
 
+## Panneau de boutons et aide
+
+Un panneau de petits boutons se trouve à droite de la zone de rédaction, au milieu de la hauteur, dans tous les éditeurs de notes. Le premier bouton ouvre la fenêtre d'aide, qui offre une zone de recherche et fonctionne hors connexion, en français ou en anglais selon la langue du plugin. Les autres boutons sont les fonctions du plugin : les cinq commandes qui écrivent dans la note, puis l'aperçu et l'export. Chaque fonction est aussi une commande de la palette de commandes, où l'on peut lui attribuer un raccourci clavier dans les réglages d'Obsidian. Un clic long sur un bouton, puis un glissement, le déplace, et l'ordre est conservé. Le chapitre « Panneau de boutons » des réglages affiche ou masque le panneau, masque un bouton, et monte ou descend les boutons sans glisser. La commande « Afficher ou masquer le panneau de boutons » bascule le panneau. Sur tablette et téléphone, le panneau est masqué par défaut, et un réglage l'affiche. Les fonctions qui écrivent dans la note ne marchent qu'en mode édition.
+
 ## Confidentialité et divulgations
 
 Bigorneau ne se connecte pas à Internet. Il n'a ni télémétrie, ni publicité, ni compte, ni paiement. Il ne lit et n'écrit des fichiers que dans votre coffre. Les liens ne s'ouvrent dans votre navigateur que lorsque vous cliquez dessus, et les images du web ne sont pas téléchargées pour l'export.
