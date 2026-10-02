@@ -1,17 +1,24 @@
 import type { EditorView } from "@codemirror/view";
-import { setLanguage, t } from "./i18n";
+import { currentLang, setLanguage, t } from "./i18n";
 import { debounce, Editor, MarkdownView, normalizePath, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
-import { InsertResult, insertBlockMath, insertFootnote, insertInlineMath, insertTableCaption, toggleToc } from "./export/insert";
+import { insertFootnote, insertTableCaption, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
 import { FunctionRegistry, PanelFunction } from "./functions";
 import { HelpRegistry } from "./help";
 import { PLUGIN_HELP } from "./help-data";
 import { HelpModal } from "./help-modal";
 import { ButtonPanel, FunctionContext } from "./panel";
+import { applyInsert } from "./insert-apply";
+import { runScript } from "./script-runner";
+import { FORMULAS_SCRIPT } from "./script-formulas";
+import { buildExternal, ExternalScript, ScriptManager } from "./scripts";
+import { ScriptStore } from "./script-store";
+import { ScriptsModal } from "./scripts-modal";
+import * as obsidianApi from "obsidian";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
@@ -26,6 +33,22 @@ export default class MindmapWritingPlugin extends Plugin {
   functions = new FunctionRegistry<FunctionContext>();
   helpEntries = new HelpRegistry();
   panel = new ButtonPanel(this);
+  // Scripts : les scripts officiels sont integres au plugin ; les autres sont des fichiers ajoutes a la main.
+  scriptStore = new ScriptStore(this.app, `bigorneau`);
+  scripts: ScriptManager = new ScriptManager(
+    {
+      app: this.app,
+      obsidian: obsidianApi,
+      language: () => currentLang(),
+      notice: (message) => void new Notice(message),
+      registerFunction: (fn) => this.addFunction(fn),
+      addHelp: (entries) => this.helpEntries.add(entries),
+      runExternal: (code, api, id) => runScript(code, api, id),
+      saveState: () => void this.saveSettings(false),
+    },
+    { enabled: {}, approved: {} },
+    [FORMULAS_SCRIPT]
+  );
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
 
@@ -39,6 +62,7 @@ export default class MindmapWritingPlugin extends Plugin {
       new Notice(t(`Les réglages de l'ancien plugin Mindmap Note Writing ont été repris.`));
     }
     setLanguage(this.settings.language);
+    this.scripts.bindState({ enabled: this.settings.scriptsEnabled, approved: this.settings.scriptsApproved });
     this.fixed = this.settings.fixedViews.map((entry) => ({ entry: { ...entry }, leaf: null }));
     this.addSettingTab(new MmSettingTab(this.app, this));
     this.applyBodySettings();
@@ -140,6 +164,7 @@ export default class MindmapWritingPlugin extends Plugin {
 
     // Panneau de boutons : pose dans chaque editeur Markdown, mis a jour quand les volets changent.
     this.helpEntries.add(PLUGIN_HELP);
+    this.app.workspace.onLayoutReady(() => void this.startScripts());
     this.registerEvent(this.app.workspace.on(`layout-change`, () => this.panel.sync()));
     this.registerEvent(this.app.workspace.on(`active-leaf-change`, () => this.panel.sync()));
     this.app.workspace.onLayoutReady(() => this.panel.sync());
@@ -222,7 +247,7 @@ export default class MindmapWritingPlugin extends Plugin {
       name: () => t(`Insérer une note de bas de page`),
       icons: [`superscript`, `asterisk`],
       needsEditor: true,
-      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from, to) => insertFootnote(text, from, to)),
+      run: ({ editor }) => applyInsert(editor as Editor, (text, from, to) => insertFootnote(text, from, to)),
     });
     this.addFunction({
       id: `toggle-toc`,
@@ -231,7 +256,7 @@ export default class MindmapWritingPlugin extends Plugin {
       needsEditor: true,
       run: ({ editor }) => {
         let enabled = false;
-        this.applyInsert(editor as Editor, (text) => {
+        applyInsert(editor as Editor, (text) => {
           const r = toggleToc(text);
           enabled = r.enabled;
           return r;
@@ -244,21 +269,7 @@ export default class MindmapWritingPlugin extends Plugin {
       name: () => t(`Insérer une légende de tableau`),
       icons: [`table`, `table-2`],
       needsEditor: true,
-      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from) => insertTableCaption(text, from)),
-    });
-    this.addFunction({
-      id: `insert-inline-math`,
-      name: () => t(`Insérer une formule en ligne`),
-      icons: [`sigma`, `pi`],
-      needsEditor: true,
-      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from, to) => insertInlineMath(text, from, to)),
-    });
-    this.addFunction({
-      id: `insert-block-math`,
-      name: () => t(`Insérer une formule en bloc`),
-      icons: [`square-function`, `function-square`, `pi`, `sigma`],
-      needsEditor: true,
-      run: ({ editor }) => this.applyInsert(editor as Editor, (text, from, to) => insertBlockMath(text, from, to)),
+      run: ({ editor }) => applyInsert(editor as Editor, (text, from) => insertTableCaption(text, from)),
     });
     // L'export de haute qualite est reserve a l'ordinateur : sur tablette et telephone, ces fonctions ne sont pas proposees.
     this.addFunction({
@@ -290,6 +301,11 @@ export default class MindmapWritingPlugin extends Plugin {
         this.settings.panelVisible = !this.settings.panelVisible;
         void this.saveSettings(false);
       },
+    });
+    this.addCommand({
+      id: `open-scripts`,
+      name: t(`Ouvrir les scripts de Bigorneau`),
+      callback: () => this.openScripts(),
     });
     this.addCommand({
       id: `open-help`,
@@ -473,13 +489,17 @@ export default class MindmapWritingPlugin extends Plugin {
 
   // Ecriture differee : evite d'enregistrer a chaque cran d'une reglette.
   // Enregistre une fonction : elle devient une commande de la palette, et le panneau de boutons lui donne un bouton.
-  private addFunction(fn: PanelFunction<FunctionContext>): void {
+  addFunction(fn: PanelFunction<FunctionContext>): void {
     this.functions.register(fn);
     if (fn.needsEditor) {
       this.addCommand({
         id: fn.id,
         name: fn.name(),
-        editorCallback: (editor, view) => void fn.run({ app: this.app, editor, ...(view instanceof MarkdownView ? { view } : {}) }),
+        editorCheckCallback: (checking, editor, view) => {
+          if (fn.available && !fn.available()) return false;
+          if (!checking) void fn.run({ app: this.app, editor, ...(view instanceof MarkdownView ? { view } : {}) });
+          return true;
+        },
       });
     } else {
       this.addCommand({
@@ -492,6 +512,40 @@ export default class MindmapWritingPlugin extends Plugin {
         },
       });
     }
+  }
+
+  openScripts(): void {
+    new ScriptsModal(this.app, this).open();
+  }
+
+  // Lit le fichier choisi par l'utilisateur : renvoie le script a confirmer, ou affiche pourquoi il est refuse.
+  async prepareScript(file: string, code: string): Promise<ExternalScript | null> {
+    const built = await buildExternal(file, code);
+    if (!built.ok) {
+      const why = built.error === `header` ? t(`l'en-tête /* bigorneau-script */ est absent`) : built.error === `name` ? t(`le nom du script est absent de l'en-tête`) : t(`la version de l'interface (api) est absente ou invalide`);
+      new Notice(t(`Ce fichier n'est pas un script Bigorneau : {0}.`, why));
+      return null;
+    }
+    return built.script;
+  }
+
+  // Apres confirmation : le fichier est copie dans le dossier technique du plugin, puis le script est active et charge.
+  async confirmScript(script: ExternalScript, _isNew: boolean): Promise<void> {
+    await this.scriptStore.write(script.file, script.code);
+    await this.scripts.approve(script);
+    this.panel.sync();
+  }
+
+  // Scripts ajoutes a la main presents dans le dossier technique, puis chargement des scripts actifs.
+  private async startScripts(): Promise<void> {
+    const found: ExternalScript[] = [];
+    for (const f of await this.scriptStore.list()) {
+      const built = await buildExternal(f.file, f.code);
+      if (built.ok) found.push(built.script);
+    }
+    this.scripts.setExternal(found);
+    await this.scripts.loadEnabled();
+    this.panel.sync();
   }
 
   openHelp(): void {
@@ -548,17 +602,6 @@ export default class MindmapWritingPlugin extends Plugin {
       return true;
     }
     return false;
-  }
-
-  // Applique dans l'editeur les modifications calculees par src/export/insert.ts, de la derniere a la premiere pour que les
-  // positions restent justes, puis place le curseur. L'historique d'annulation d'Obsidian garde chaque modification.
-  private applyInsert(editor: Editor, make: (text: string, from: number, to: number) => InsertResult): void {
-    const text = editor.getValue();
-    const from = editor.posToOffset(editor.getCursor(`from`));
-    const to = editor.posToOffset(editor.getCursor(`to`));
-    const r = make(text, from, to);
-    for (const e of [...r.edits].sort((a, b) => b.from - a.from)) editor.replaceRange(e.insert, editor.offsetToPos(e.from), editor.offsetToPos(e.to));
-    if (r.cursor !== undefined) editor.setCursor(editor.offsetToPos(r.cursor));
   }
 
   private forEachView(fn: (view: MindmapView) => void) {

@@ -183,6 +183,9 @@ export interface MmSettings {
   panelOnMobile: boolean;
   panelOrder: string[];
   panelHidden: string[];
+  // Scripts : etat d'activation (identifiant -> actif) et empreinte confirmee de chaque script ajoute a la main.
+  scriptsEnabled: Record<string, boolean>;
+  scriptsApproved: Record<string, string>;
   // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
   iconExternal: string;
   iconInternal: string;
@@ -268,6 +271,8 @@ export const DEFAULT_SETTINGS: MmSettings = {
   panelOnMobile: false,
   panelOrder: [],
   panelHidden: [],
+  scriptsEnabled: {},
+  scriptsApproved: {},
   iconExternal: `chain`,
   iconInternal: `return`,
   iconWeb: `globe`,
@@ -358,6 +363,16 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.panelOnMobile = merged.panelOnMobile === true;
   for (const k of [`panelOrder`, `panelHidden`] as const) {
     merged[k] = Array.isArray(data[k]) ? (data[k] as unknown[]).filter((x): x is string => typeof x === `string`) : [];
+  }
+  merged.scriptsEnabled = {};
+  merged.scriptsApproved = {};
+  const rawEnabled: unknown = data.scriptsEnabled;
+  const rawApproved: unknown = data.scriptsApproved;
+  if (typeof rawEnabled === `object` && rawEnabled !== null) {
+    for (const [k, v] of Object.entries(rawEnabled)) if (typeof v === `boolean`) merged.scriptsEnabled[k] = v;
+  }
+  if (typeof rawApproved === `object` && rawApproved !== null) {
+    for (const [k, v] of Object.entries(rawApproved)) if (typeof v === `string`) merged.scriptsApproved[k] = v;
   }
   for (const k of [`exportTocDepth`, `exportChapterTocDepth`] as const) {
     if (!Number.isInteger(merged[k]) || merged[k] < 1 || merged[k] > 6) merged[k] = 3;

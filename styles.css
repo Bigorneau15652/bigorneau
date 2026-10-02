@@ -1664,3 +1664,17 @@
 .mmw-help-empty {
   color: var(--text-muted);
 }
+
+/* Fenetre des scripts. */
+.mmw-scripts-intro {
+  color: var(--text-muted);
+}
+
+.mmw-scripts-status {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-scripts-warning {
+  color: var(--text-warning);
+}

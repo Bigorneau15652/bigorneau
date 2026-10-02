@@ -151,10 +151,19 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `formulas`,
     title: { fr: `Formules`, en: `Formulas` },
     text: {
-      fr: `Les formules s'écrivent $formule$ dans le texte et $$formule$$ sur leurs propres lignes. Elles sont dessinées par MathJax et écrites dans le PDF en dessin vectoriel. Une formule refusée par MathJax est gardée telle qu'elle est écrite et signalée. Les commandes « Insérer une formule en ligne » et « Insérer une formule en bloc » les écrivent.`,
-      en: `Formulas are written $formula$ inside the text and $$formula$$ on their own lines. They are drawn by MathJax and written in the PDF as vector graphics. A formula rejected by MathJax is kept as written and reported. The commands "Insert an inline formula" and "Insert a block formula" write them.`,
+      fr: `Les formules s'écrivent $formule$ dans le texte et $$formule$$ sur leurs propres lignes. Elles sont dessinées par MathJax et écrites dans le PDF en dessin vectoriel. Cela demande le script Formules, désactivé par défaut : activez-le avec le bouton bigorneau du panneau. Sans lui, les formules restent écrites telles quelles dans le PDF, et ses deux commandes « Insérer une formule en ligne » et « Insérer une formule en bloc » n'existent pas. Une formule refusée par MathJax est gardée telle qu'elle est écrite et signalée.`,
+      en: `Formulas are written $formula$ inside the text and $$formula$$ on their own lines. They are drawn by MathJax and written in the PDF as vector graphics. This needs the Formulas script, which is off by default: turn it on with the bigorneau button of the panel. Without it, formulas stay written as they are in the PDF, and its two commands "Insert an inline formula" and "Insert a block formula" do not exist. A formula rejected by MathJax is kept as written and reported.`,
     },
     keywords: { fr: `formule mathematique latex mathjax equation`, en: `formula math latex mathjax equation` },
+  },
+  {
+    id: `scripts`,
+    title: { fr: `Scripts`, en: `Scripts` },
+    text: {
+      fr: `Les scripts ajoutent des fonctions à Bigorneau : chacun apporte ses boutons et ses commandes. Le bouton bigorneau, en haut du panneau, ouvre la fenêtre des scripts : on y active ou désactive chaque script. Désactiver un script le rend inactif tout de suite, mais son code ne se décharge qu'au redémarrage d'Obsidian. Le script Formules est intégré au plugin et désactivé par défaut. On peut aussi ajouter un script écrit à la main (fichier JavaScript avec un en-tête) : il est copié dans le dossier technique du plugin, confirmé avant son premier lancement et confirmé de nouveau s'il change. Un script a les mêmes pouvoirs que le plugin : n'ajoutez que des scripts dont vous connaissez l'origine.`,
+      en: `Scripts add functions to Bigorneau: each one brings its own buttons and commands. The bigorneau button at the top of the panel opens the scripts window, where each script is turned on or off. Turning a script off makes it inactive at once, but its code is only unloaded when Obsidian restarts. The Formulas script is built into the plugin and off by default. You can also add a script written by hand (a JavaScript file with a header): it is copied into the technical folder of the plugin, confirmed before its first run and confirmed again if it changes. A script has the same powers as the plugin: only add scripts whose origin you know.`,
+    },
+    keywords: { fr: `script scripts bigorneau activer desactiver ajouter fichier javascript extension`, en: `script scripts bigorneau enable disable add file javascript extension` },
   },
   {
     id: `media`,
@@ -196,8 +205,8 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `privacy`,
     title: { fr: `Confidentialité`, en: `Privacy` },
     text: {
-      fr: `Bigorneau ne se connecte pas à Internet. Il n'a ni télémétrie, ni publicité, ni compte, ni paiement. Il ne lit et n'écrit des fichiers que dans votre coffre. Les liens ne s'ouvrent dans votre navigateur que lorsque vous cliquez dessus.`,
-      en: `Bigorneau does not connect to the internet. It has no telemetry, no advertising, no account and no payment. It reads and writes files only inside your vault. Links open in your browser only when you click them.`,
+      fr: `Bigorneau ne se connecte pas à Internet. Il n'a ni télémétrie, ni publicité, ni compte, ni paiement. Il ne lit et n'écrit des fichiers que dans votre coffre et dans son dossier technique, hormis un fichier de script que vous choisissez vous-même. Les liens ne s'ouvrent dans votre navigateur que lorsque vous cliquez dessus.`,
+      en: `Bigorneau does not connect to the internet. It has no telemetry, no advertising, no account and no payment. It reads and writes files only inside your vault and its own technical folder, apart from a script file that you choose yourself. Links open in your browser only when you click them.`,
     },
     keywords: { fr: `reseau internet donnees licence`, en: `network internet data licence license` },
   },
