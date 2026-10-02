@@ -206,6 +206,7 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
     let top = setup.marginTop;
     const drawRow = (row: Row, left: number, rowTop: number): void => {
       if (row.anchor !== undefined && !anchors.has(row.anchor)) anchors.set(row.anchor, { page: pageIndex, x: left + row.x, y: rowTop });
+      if (row.shade) ops.push(`q ${num(row.shade.fill)} g ${num(left + row.x)} ${num(H - rowTop - row.height)} ${num(row.width)} ${num(row.height)} re f Q`);
       if (row.rules) {
         // Filets du tableau, sur toute sa largeur.
         const x1 = left + row.x;
@@ -235,7 +236,9 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       if (row.cells) {
         const inner = row.height - (row.inset?.top ?? 0) - (row.inset?.bottom ?? 0);
         const cellBase = baselineIn(rowTop + (row.inset?.top ?? 0), inner, row.fontSize, regular.font);
+        if (row.shade?.text === `white`) ops.push(`q 1 g`);
         for (const c of row.cells) drawRuns(ops, links, c.runs, left + row.x + c.x, cellBase, row.fontSize, 0);
+        if (row.shade?.text === `white`) ops.push(`Q`);
         return;
       }
       if (row.image) {

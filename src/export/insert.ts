@@ -49,6 +49,12 @@ export function insertBlockMath(text: string, from: number, to: number): InsertR
 
 // Legende de tableau : ligne « Tableau : » (« Table: » pour une note en anglais) juste au-dessus du tableau ou le curseur se
 // trouve, sinon au-dessus de la ligne du curseur.
+// Mot qui ouvre une legende de tableau : « Table » pour une note en anglais (propriete lang), « Tableau » sinon.
+export function captionWord(text: string): string {
+  const english = /^(?:lang|langue|language)[ \t]*:[ \t]*[\x22\x27\x60]?en/im.test(text.slice(0, Math.max(0, text.indexOf(`\n---`, 3))));
+  return english ? `Table` : `Tableau`;
+}
+
 export function insertTableCaption(text: string, from: number): InsertResult {
   const eol = eolOf(text);
   const english = /^(?:lang|langue|language)[ \t]*:[ \t]*[\x22\x27\x60]?en/im.test(text.slice(0, Math.max(0, text.indexOf(`\n---`, 3))));
