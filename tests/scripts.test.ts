@@ -182,9 +182,11 @@ test(`le script Formules fournit le rendu et ses deux fonctions seulement une fo
   assert.equal(m.service(MATH_SERVICE), undefined);
   assert.equal(m.isEnabled(`formulas`), false);
   await m.setEnabled(`formulas`, true);
-  assert.deepEqual(log.functions.map((f) => f.id), [`insert-inline-math`, `insert-block-math`]);
+  assert.deepEqual(log.functions.map((f) => f.id), [`edit-formula`, `insert-inline-math`, `insert-block-math`]);
   assert.equal(typeof m.service(MATH_SERVICE), `function`);
   assert.ok(log.functions.every((f) => f.needsEditor && f.available()));
+  // Seul l'editeur a un bouton ; les deux commandes d'avant gardent leur identifiant sans bouton.
+  assert.deepEqual(log.functions.map((f) => (f as { button?: boolean }).button !== false), [true, false, false]);
 });
 
 test(`le rapport d'export regroupe les formules quand le script Formules est desactive`, () => {

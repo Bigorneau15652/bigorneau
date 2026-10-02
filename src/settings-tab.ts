@@ -567,7 +567,7 @@ export class MmSettingTab extends PluginSettingTab {
     const list = el.createDiv({ cls: `mmw-panel-settings` });
     const draw = (): void => {
       list.empty();
-      const all = this.plugin.functions.all().filter((f) => !f.available || f.available());
+      const all = this.plugin.functions.all().filter((f) => f.button !== false && (!f.available || f.available()));
       const order = panelOrder(all.map((f) => f.id), s.panelOrder);
       order.forEach((id, index) => {
         const fn = all.find((f) => f.id === id);
