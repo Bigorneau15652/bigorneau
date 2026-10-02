@@ -4,6 +4,7 @@
 import type { MathAsset } from "./export/math";
 import type { Editor } from "obsidian";
 import { courseSections } from "./formula-course";
+import { renderSection } from "./formula-course-view";
 import { openFormulaEditor } from "./formula-modal";
 import type { OfficialScript } from "./scripts";
 
@@ -36,7 +37,14 @@ export const FORMULAS_SCRIPT: OfficialScript = {
     api.provide(MATH_SERVICE, render);
     api.provide(MATH_SVG_SERVICE, (async (tex, display) => (await import(`./export/mathjax`)).renderTexSvg(tex, display)) as MathSvgRenderer);
     api.addHelp(
-      courseSections().map((c) => ({ id: `course-${c.id}`, title: c.title, text: c.text, keywords: { fr: `formule formules editeur palette cours aide tex`, en: `formula formulas editor palette course help tex` } }))
+      courseSections().map((c) => ({
+        id: `course-${c.id}`,
+        title: c.title,
+        text: c.text,
+        keywords: { fr: `formule formules editeur palette cours aide tex`, en: `formula formulas editor palette course help tex` },
+        render: (el: HTMLElement, lang: `fr` | `en`) => renderSection(el, c, lang, api.service<MathSvgRenderer>(MATH_SVG_SERVICE), false),
+        renderReplacesText: c.id === `structures`,
+      }))
     );
     // Une seule fonction a bouton : l'editeur de formules. Les deux commandes d'avant gardent leur identifiant (les raccourcis
     // restent valables) et ouvrent l'editeur dans le mode correspondant, sans bouton.

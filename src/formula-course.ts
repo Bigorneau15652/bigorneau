@@ -48,6 +48,14 @@ export function courseSections(): CourseSection[] {
       },
     },
     {
+      id: `keyboard`,
+      title: { fr: `Écrire et se déplacer au clavier dans l'aperçu`, en: `Writing and moving with the keyboard in the preview` },
+      text: {
+        fr: `Quand on clique dans l'aperçu, il prend le focus (un cadre de couleur l'entoure) et un curseur clignote dans la formule : le clavier agit alors sur la formule elle-même. Flèche droite et flèche gauche avancent et reculent d'un symbole, en entrant et en sortant des fractions, des exposants et des racines. Flèche haut et flèche bas montent et descendent : du dénominateur au numérateur, de l'exposant à la base, d'une borne de somme à l'autre. Tab saute à l'emplacement vide suivant. Un emplacement vide est un petit carré ; celui qui reçoit le curseur clignote en couleur, et un clic sur un carré y place le curseur : c'est ainsi que l'on écrit sous une barre de fraction. On tape directement les chiffres, les lettres et les signes. La touche ^ ouvre un exposant, la touche _ un indice, et la touche / transforme ce qui précède en numérateur d'une fraction : taper a puis / puis b donne a sur b. Retour arrière et Suppr effacent le symbole ou la structure entière qui précède ou suit le curseur (un seul chiffre pour un nombre). Pour revenir au texte TeX, cliquez dans la zone de saisie : les flèches y déplacent alors le curseur dans le texte, comme d'habitude.`,
+        en: `When you click in the preview, it takes the focus (a coloured frame surrounds it) and a cursor blinks in the formula: the keyboard then acts on the formula itself. The right and left arrows move forward and back one symbol, entering and leaving fractions, exponents and roots. The up and down arrows go up and down: from the denominator to the numerator, from the exponent to the base, from one bound of a sum to the other. Tab jumps to the next empty slot. An empty slot is a small square; the one that holds the cursor blinks in colour, and clicking a square puts the cursor there: this is how you write under a fraction bar. You type digits, letters and signs directly. The ^ key opens an exponent, the _ key a subscript, and the / key turns what comes before it into the numerator of a fraction: typing a then / then b gives a over b. Backspace and Delete erase the symbol or the whole structure before or after the cursor (a single digit for a number). To go back to the TeX text, click in the input area: the arrows then move the cursor in the text as usual.`,
+      },
+    },
+    {
       id: `structures`,
       title: { fr: `Palette Structures : rôle de chaque bouton`, en: `Structures palette: what each button does` },
       text: { fr: structures(`fr`), en: structures(`en`) },
@@ -70,3 +78,90 @@ export function courseSections(): CourseSection[] {
     },
   ];
 }
+
+// Exemples illustres du cours : chaque etape est une formule dessinee (les emplacements vides sont des carres), avec, si `mark` est
+// donne, la partie de la formule qui apparait choisie.
+export interface CourseStep {
+  tex: string;
+  mark?: string;
+  caption: Record<HelpLang, string>;
+}
+
+export interface CourseExample {
+  id: string;
+  // Section du cours sous laquelle l'exemple est montre.
+  section: string;
+  title: Record<HelpLang, string>;
+  steps: CourseStep[];
+}
+
+const step = (tex: string, fr: string, en: string, mark?: string): CourseStep => ({ tex, caption: { fr, en }, ...(mark !== undefined ? { mark } : {}) });
+
+export const EXAMPLES: CourseExample[] = [
+  {
+    id: `two-level-fraction`,
+    section: `slots`,
+    title: { fr: `Exemple : une fraction à deux niveaux`, en: `Example: a two-level fraction` },
+    steps: [
+      step(String.raw`\frac{}{}`, `Cliquez sur Fraction : deux emplacements apparaissent.`, `Click Fraction: two slots appear.`),
+      step(String.raw`\frac{1}{}`, `Tapez 1 dans le premier, puis appuyez sur Tab.`, `Type 1 in the first one, then press Tab.`),
+      step(String.raw`\frac{1}{\frac{}{}}`, `Cliquez de nouveau sur Fraction : elle se place dans le dénominateur.`, `Click Fraction again: it goes into the denominator.`),
+      step(String.raw`\frac{1}{\frac{1}{2}}`, `Tapez 1, Tab, 2 : la fraction à deux niveaux est écrite.`, `Type 1, Tab, 2: the two-level fraction is written.`),
+    ],
+  },
+  {
+    id: `cube-root`,
+    section: `slots`,
+    title: { fr: `Exemple : une racine cubique`, en: `Example: a cube root` },
+    steps: [
+      step(String.raw`\sqrt[]{}`, `Cliquez sur la racine n-ième : un petit carré pour l'indice, un grand pour le contenu.`, `Click the n-th root: a small square for the index, a large one for the content.`),
+      step(String.raw`\sqrt[3]{}`, `Tapez 3, puis Tab.`, `Type 3, then Tab.`),
+      step(String.raw`\sqrt[3]{c}`, `Tapez c.`, `Type c.`),
+    ],
+  },
+  {
+    id: `sum`,
+    section: `slots`,
+    title: { fr: `Exemple : une somme avec ses bornes`, en: `Example: a sum with its bounds` },
+    steps: [
+      step(String.raw`\sum_{}^{}`, `Cliquez sur Somme.`, `Click Sum.`),
+      step(String.raw`\sum_{i=1}^{n}`, `Tapez i=1, Tab, n.`, `Type i=1, Tab, n.`),
+      step(String.raw`\sum_{i=1}^{n} i^{2}`, `Placez le curseur après la somme (flèche droite) et tapez i, ^, 2.`, `Move the cursor after the sum (right arrow) and type i, ^, 2.`),
+    ],
+  },
+  {
+    id: `correct`,
+    section: `preview`,
+    title: { fr: `Exemple : corriger sans lire le TeX`, en: `Example: correcting without reading TeX` },
+    steps: [
+      step(String.raw`\frac{a+1}{b}`, `La formule à corriger.`, `The formula to correct.`),
+      step(String.raw`\frac{a+1}{b}`, `Un clic sur le 1 le choisit.`, `A click on the 1 selects it.`, `1`),
+      step(String.raw`\frac{a+1}{b}`, `Un deuxième clic agrandit le choix : a+1.`, `A second click enlarges the choice: a+1.`, `a+1`),
+      step(String.raw`\frac{a+1}{b}`, `Un troisième clic choisit la fraction entière.`, `A third click selects the whole fraction.`, String.raw`\frac{a+1}{b}`),
+      step(String.raw`\frac{}{b}`, `Suppr efface la partie choisie : l'emplacement reste vide, prêt à être rempli.`, `Delete erases the chosen part: the slot stays empty, ready to be filled.`),
+    ],
+  },
+  {
+    id: `keyboard-fraction`,
+    section: `keyboard`,
+    title: { fr: `Exemple : écrire une fraction au clavier`, en: `Example: writing a fraction with the keyboard` },
+    steps: [
+      step(`a`, `Cliquez dans l'aperçu et tapez a.`, `Click in the preview and type a.`),
+      step(String.raw`\frac{a}{}`, `Tapez / : a devient le numérateur et le curseur passe sous la barre.`, `Type /: a becomes the numerator and the cursor goes under the bar.`),
+      step(String.raw`\frac{a}{b}`, `Tapez b.`, `Type b.`),
+      step(String.raw`\frac{a}{b^{}}`, `Tapez ^ : un exposant vide apparaît à côté de b.`, `Type ^: an empty exponent appears next to b.`),
+      step(String.raw`\frac{a}{b^{2}}`, `Tapez 2.`, `Type 2.`),
+    ],
+  },
+];
+
+// Touches du clavier dans l'aperçu et leur effet (tableau du cours).
+export const KEYS: { keys: string[]; text: Record<HelpLang, string> }[] = [
+  { keys: [`→`, `←`], text: { fr: `Avancer ou reculer d'un symbole, en entrant et en sortant des structures`, en: `Move forward or back one symbol, entering and leaving structures` } },
+  { keys: [`↑`, `↓`], text: { fr: `Monter ou descendre : numérateur et dénominateur, exposant et base, bornes`, en: `Go up or down: numerator and denominator, exponent and base, bounds` } },
+  { keys: [`Tab`], text: { fr: `Passer à l'emplacement vide suivant`, en: `Go to the next empty slot` } },
+  { keys: [`^`, `_`], text: { fr: `Ouvrir un exposant ou un indice`, en: `Open a superscript or a subscript` } },
+  { keys: [`/`], text: { fr: `Faire de ce qui précède le numérateur d'une fraction`, en: `Make what comes before the numerator of a fraction` } },
+  { keys: [`⌫`, `Suppr`], text: { fr: `Effacer le symbole ou la structure qui précède ou suit`, en: `Erase the symbol or structure before or after` } },
+  { keys: [`Ctrl`, `Entrée`], text: { fr: `Insérer la formule dans la note`, en: `Insert the formula into the note` } },
+];

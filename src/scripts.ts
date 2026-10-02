@@ -28,6 +28,9 @@ export interface ScriptFunction {
 }
 
 export interface ScriptHelpEntry {
+  // Contenu ajoute sous le texte (voir HelpEntry.render).
+  render?: (el: HTMLElement, lang: HelpLang) => void;
+  renderReplacesText?: boolean;
   id: string;
   title: string | Localized;
   text: string | Localized;
@@ -334,6 +337,8 @@ export class ScriptManager {
             title: localized(e.title),
             text: localized(e.text),
             ...(e.keywords !== undefined ? { keywords: localized(e.keywords) } : {}),
+            ...(e.render !== undefined ? { render: e.render } : {}),
+            ...(e.renderReplacesText === true ? { renderReplacesText: true } : {}),
           }))
         ),
       provide: (name, impl) => {

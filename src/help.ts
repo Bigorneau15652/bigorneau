@@ -9,6 +9,9 @@ export interface HelpEntry {
   text: Record<HelpLang, string>;
   // Mots a trouver en plus du titre et du texte (synonymes, noms de commandes).
   keywords?: Partial<Record<HelpLang, string>>;
+  // Contenu ajoute sous le texte (dessins, exemples). S'il remplace le texte, celui-ci ne sert qu'a la recherche.
+  render?: (el: HTMLElement, lang: HelpLang) => void;
+  renderReplacesText?: boolean;
 }
 
 // Texte sans majuscules, sans accents et sans ponctuation, pour comparer sans tenir compte de ces differences.
