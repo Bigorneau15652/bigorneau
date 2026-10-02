@@ -39,6 +39,8 @@ const TEXTS = {
 const PROBE = `red`;
 // Distance maximale, en pixels, entre un clic et l'element dessine qu'il designe.
 const HIT_DISTANCE = 14;
+// Distance maximale pour qu'un clic compte comme un clic sur le carre d'un emplacement vide.
+const SLOT_DISTANCE = 6;
 
 // Elements dessines (glyphes et traits) d'un dessin affiche, dans le meme ordre que svgLeaves.
 function leafElements(svg: Element): Element[] {
@@ -46,9 +48,9 @@ function leafElements(svg: Element): Element[] {
 }
 
 // Indice de l'element dessine designe par un clic : celui qui contient le point, sinon le plus proche dans la limite de distance.
-function hitLeaf(leaves: Element[], x: number, y: number): number {
+function hitLeaf(leaves: Element[], x: number, y: number, maxDistance = HIT_DISTANCE): number {
   let best = -1;
-  let bestDistance = HIT_DISTANCE;
+  let bestDistance = maxDistance;
   leaves.forEach((el, k) => {
     const r = el.getBoundingClientRect();
     const dx = Math.max(r.left - x, 0, x - r.right);
@@ -468,22 +470,45 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
       }
     }
 
-    // Clic dans l'apercu : sur un carre d'emplacement vide, le curseur y est place ; sur un element, la partie correspondante du TeX
-    // est selectionnee et coloree, et un clic de plus au meme endroit agrandit le choix. Le focus passe a l'apercu, ou les fleches
-    // deplacent le curseur dans la formule.
+    // Clic dans l'apercu : le curseur se place au point le plus proche (le bord d'un symbole, ou le carre d'un emplacement vide), sans rien
+    // colorer, pour continuer a ecrire. Un double clic choisit l'element touche (partie correspondante du TeX, en couleur) ; un clic
+    // de plus au meme endroit agrandit le choix. Le focus passe a l'apercu, ou les fleches deplacent le curseur dans la formule.
     private async onPreviewClick(e: MouseEvent): Promise<void> {
       const shown = this.shown;
       if (!shown) return;
       this.previewBox.focus();
       const leaves = leafElements(shown.svg);
-      const leaf = hitLeaf(leaves, e.clientX, e.clientY);
-      if (leaf < 0) return;
-      for (const slot of shown.model.slots) {
-        if ((await this.setOf({ slot })).includes(leaf)) {
-          this.place(slot);
-          return;
+      if (e.detail >= 2) {
+        const leaf = hitLeaf(leaves, e.clientX, e.clientY);
+        if (leaf >= 0) await this.chooseAt(shown, leaves, leaf);
+        return;
+      }
+      // Un clic sur le carre d'un emplacement vide place le curseur dedans (c'est ainsi que l'on ecrit sous une barre de fraction).
+      const near = hitLeaf(leaves, e.clientX, e.clientY, SLOT_DISTANCE);
+      if (near >= 0) {
+        for (const slot of shown.model.slots) {
+          if ((await this.setOf({ slot })).includes(near)) {
+            this.place(slot);
+            return;
+          }
         }
       }
+      const origin = this.previewBox.getBoundingClientRect();
+      const x = e.clientX - origin.left + this.previewBox.scrollLeft;
+      const y = e.clientY - origin.top;
+      let best: { offset: number; d: number } | null = null;
+      for (const p of shown.model.points) {
+        const spot = await this.spotOf(p);
+        if (!spot) continue;
+        const d = Math.hypot(spot.x - x, (spot.y - y) * 1.5);
+        if (!best || d < best.d) best = { offset: spot.offset, d };
+      }
+      if (this.shown !== shown) return;
+      if (best) this.place(best.offset);
+    }
+
+    // Choisit l'element dessine d'indice `leaf` : la plus petite partie du TeX qui le contient, puis des parties de plus en plus grandes.
+    private async chooseAt(shown: NonNullable<FormulaModal[`shown`]>, leaves: Element[], leaf: number): Promise<void> {
       const sets: number[][] = [];
       for (const unit of shown.model.units) sets.push(await this.setOf({ unit }));
       if (this.shown !== shown) return;

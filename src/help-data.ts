@@ -52,8 +52,8 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `list-view`,
     title: { fr: `Vue Liste`, en: `List view` },
     text: {
-      fr: `La vue Liste condense la carte en un titre par ligne, décalé selon son niveau, avec un triangle pour replier les enfants et le même glisser-déposer pour réorganiser les titres. On bascule avec le bouton de la barre de commandes ou avec la commande « Basculer entre la vue Mindmap et la vue Liste ».`,
-      en: `The List view condenses the map into one heading per line, indented by level, with a triangle to fold the children and the same drag and drop to reorganise headings. Switch with the button of the command bar or with the command "Switch between Mindmap view and List view".`,
+      fr: `La vue Liste condense la carte en un titre par ligne, décalé selon son niveau, avec un triangle pour replier les enfants et le même glisser-déposer pour réorganiser les titres. La liste est un cadre fixe qui épouse son contenu : le titre de la note reste en haut, la glissière, la molette ou les flèches font défiler les lignes, et un titre trop long est coupé par des points de suspension (le titre complet s'affiche au survol). On bascule avec le bouton de la barre de commandes ou avec la commande « Basculer entre la vue Mindmap et la vue Liste ».`,
+      en: `The List view condenses the map into one heading per line, indented by level, with a triangle to fold the children and the same drag and drop to reorganise headings. The list is a fixed frame that fits its content: the title of the note stays at the top, the scroll bar, the wheel or the arrow keys scroll the lines, and a heading that is too long is cut with an ellipsis (the full title appears on hover). Switch with the button of the command bar or with the command "Switch between Mindmap view and List view".`,
     },
     keywords: { fr: `liste condensee replier basculer`, en: `list condensed fold switch` },
   },
