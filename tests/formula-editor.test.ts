@@ -105,9 +105,26 @@ test(`chaque bouton de structure a son explication et un dessin d'exemple valide
 test(`le cours de l'editeur couvre chaque bouton de structure dans les deux langues`, async () => {
   const { courseSections } = await import(`../src/formula-course`);
   const sections = courseSections();
-  assert.deepEqual(sections.map((s) => s.id), [`start`, `modes`, `slots`, `preview`, `structures`, `symbols`, `tex`]);
+  assert.deepEqual(sections.map((s) => s.id), [`start`, `modes`, `slots`, `preview`, `keyboard`, `structures`, `symbols`, `tex`]);
   for (const s of sections) for (const lang of [`fr`, `en`] as const) assert.ok(s.text[lang].length > 50 && s.title[lang].length > 5, `${s.id} ${lang}`);
   const structures = PALETTE.find((g) => g.id === `structures`);
   const fr = sections.find((s) => s.id === `structures`)?.text.fr ?? ``;
   for (const item of structures?.items ?? []) assert.ok(fr.includes(item.tip.fr), item.tip.fr);
+});
+
+test(`chaque etape des exemples du cours se dessine, et la partie marquee existe dans la formule`, async () => {
+  const { EXAMPLES, KEYS } = await import(`../src/formula-course`);
+  const { renderTexSvg } = await import(`../src/export/mathjax`);
+  const { previewTex, texModel } = await import(`../src/formula-units`);
+  assert.ok(EXAMPLES.length >= 5 && KEYS.length >= 6);
+  const sections = (await import(`../src/formula-course`)).courseSections().map((x) => x.id);
+  for (const ex of EXAMPLES) {
+    assert.ok(sections.includes(ex.section), ex.id);
+    assert.ok(ex.steps.length >= 3, ex.id);
+    for (const st of ex.steps) {
+      assert.ok(st.caption.fr.length > 5 && st.caption.en.length > 5, st.tex);
+      assert.notEqual(renderTexSvg(previewTex(st.tex, texModel(st.tex).slots), false), null, `dessin : ${st.tex}`);
+      if (st.mark !== undefined) assert.ok(st.tex.includes(st.mark), `marque ${st.mark} dans ${st.tex}`);
+    }
+  }
 });

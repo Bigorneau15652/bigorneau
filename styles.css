@@ -1759,6 +1759,7 @@
 }
 
 .mmw-formula-preview {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1776,4 +1777,141 @@
 
 .mmw-formula-error {
   color: var(--text-error);
+}
+
+.mmw-formula-preview:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+}
+
+.mmw-formula-caret {
+  display: none;
+  position: absolute;
+  width: 2px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+}
+
+.mmw-formula-preview:focus .mmw-formula-caret.is-visible {
+  display: block;
+  animation: mmw-formula-blink 1s steps(1) infinite;
+}
+
+.mmw-formula-svg .mmw-formula-slot {
+  fill: var(--text-faint);
+  stroke: var(--text-faint);
+}
+
+.mmw-formula-preview:focus .mmw-formula-svg .mmw-formula-slot-active {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent);
+  animation: mmw-formula-blink 1s steps(1) infinite;
+}
+
+@keyframes mmw-formula-blink {
+  50% {
+    opacity: 0.1;
+  }
+}
+
+/* Cours de l'editeur de formules : boutons, symboles et exemples dessines. */
+.mmw-course-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mmw-course-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mmw-course-key {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  min-height: 40px;
+  padding: 2px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+
+.mmw-course-key svg {
+  font-size: 1.3em;
+  max-height: 2.6em;
+}
+
+.mmw-course-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mmw-course-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-course-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.mmw-course-kbd {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  min-width: 96px;
+}
+
+.mmw-course-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mmw-course-step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 168px;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+.mmw-course-number {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-course-pic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+}
+
+.mmw-course-pic svg {
+  font-size: 1.6em;
+  max-width: 100%;
+}
+
+.mmw-course-caption {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.mmw-course-svg g[fill="red"] {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent);
 }

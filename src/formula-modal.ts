@@ -4,9 +4,10 @@
 import type { App, Editor } from "obsidian";
 import { appendSvgDocument } from "./dom";
 import { courseSections } from "./formula-course";
+import { renderSection } from "./formula-course-view";
 import { findFormula, insertTemplate, nextSlot, writeFormula } from "./formula-edit";
 import { PALETTE, sampleOf } from "./formula-palette";
-import { colorUnit, deleteUnit, svgLeaves, TexUnit, texUnits, unitsAt } from "./formula-units";
+import { CaretSpot, deleteUnit, eraseAt, pickVertical, previewTex, stepPoint, svgLeaves, TexModel, TexUnit, texModel, typeKey, unitEndingAt, unitStartingAt, unitsAt } from "./formula-units";
 import type { HelpLang } from "./help";
 import { applyInsert } from "./insert-apply";
 import type { MathSvgRenderer } from "./script-formulas";
@@ -38,12 +39,6 @@ const TEXTS = {
 const PROBE = `red`;
 // Distance maximale, en pixels, entre un clic et l'element dessine qu'il designe.
 const HIT_DISTANCE = 14;
-
-interface Analysis {
-  key: string;
-  units: TexUnit[];
-  sets: number[][];
-}
 
 // Elements dessines (glyphes et traits) d'un dessin affiche, dans le meme ordre que svgLeaves.
 function leafElements(svg: Element): Element[] {
@@ -91,9 +86,12 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
     private guideView!: HTMLElement;
     private token = 0;
     private timer = 0;
-    // Dessin affiche : formule, texte SVG et element dans la page.
-    private shown: { tex: string; display: boolean; svgText: string; svg: SVGElement } | null = null;
-    private analysis: Analysis | null = null;
+    // Dessin affiche : texte de la formule (tel que saisi, pour que les positions soient celles de la zone de saisie), texte SVG, element
+    // dans la page, decoupage en unites et points de curseur.
+    private shown: { tex: string; display: boolean; svgText: string; svg: SVGElement; model: TexModel; count: number } | null = null;
+    // Elements dessines de chaque partie (unite ou emplacement) du dessin affiche, calcules a la demande.
+    private sets = new Map<string, number[]>();
+    private caretEl: HTMLElement | null = null;
     // Dernier choix fait par un clic dans l'apercu : il permet le clic suivant a agrandir le choix et la touche Suppr a effacer l'unite.
     private last: { tex: string; leaf: number; unit: TexUnit } | null = null;
 
@@ -165,7 +163,10 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
       this.area.addEventListener(`keydown`, (e) => this.onKey(e));
 
       this.previewBox = root.createDiv({ cls: `mmw-formula-preview` });
+      this.previewBox.tabIndex = 0;
       this.previewBox.addEventListener(`click`, (e) => void this.onPreviewClick(e));
+      this.previewBox.addEventListener(`keydown`, (e) => void this.onPreviewKey(e));
+      this.previewBox.addEventListener(`focus`, () => void this.syncView());
 
       const buttons = root.createDiv({ cls: `modal-button-container` });
       const cancel = buttons.createEl(`button`, { text: TEXTS.cancel[lang] });
@@ -186,7 +187,7 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
       const body = root.createDiv({ cls: `mmw-formula-guide-body` });
       for (const section of courseSections()) {
         body.createEl(`h4`, { text: section.title[lang] });
-        for (const line of section.text[lang].split(`\n`)) body.createEl(`p`, { text: line });
+        renderSection(body, section, lang, deps.renderSvg);
       }
     }
 
@@ -247,18 +248,20 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
     }
 
     // Apercu : redessine peu de temps apres la derniere frappe.
-    private refresh(): void {
+    private refresh(delay = 150): void {
       window.clearTimeout(this.timer);
-      this.timer = window.setTimeout(() => void this.draw(), 150);
+      this.timer = window.setTimeout(() => void this.draw(), delay);
     }
 
     private async draw(): Promise<void> {
-      const tex = this.area.value.trim();
+      window.clearTimeout(this.timer);
+      const tex = this.area.value;
       const mine = ++this.token;
       this.shown = null;
-      this.analysis = null;
+      this.sets = new Map();
+      this.caretEl = null;
       this.previewBox.empty();
-      if (tex === ``) {
+      if (tex.trim() === ``) {
         this.previewBox.createDiv({ cls: `mmw-formula-note`, text: TEXTS.empty[lang] });
         return;
       }
@@ -266,7 +269,8 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
         this.previewBox.createDiv({ cls: `mmw-formula-note`, text: TEXTS.disabled[lang] });
         return;
       }
-      const svgText = await deps.renderSvg(tex, display);
+      const model = texModel(tex);
+      const svgText = await deps.renderSvg(previewTex(tex, model.slots), display);
       if (mine !== this.token) return;
       this.previewBox.empty();
       const svg = svgText ? appendSvgDocument(this.previewBox, svgText) : null;
@@ -277,39 +281,213 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
       svg.removeAttribute(`style`);
       svg.classList.add(`mmw-formula-svg`);
       if (display) svg.classList.add(`mmw-formula-svg-block`);
-      this.shown = { tex, display, svgText, svg };
+      this.shown = { tex, display, svgText, svg, model, count: svgLeaves(svgText).length };
+      this.caretEl = this.previewBox.createDiv({ cls: `mmw-formula-caret` });
+      await this.markSlots();
+      await this.syncView();
     }
 
-    // Pour chaque unite de la formule, indices des elements dessines qui lui appartiennent : la formule est redessinee avec l'unite en
-    // couleur. Le calcul se fait au premier clic suivant chaque modification.
-    private async analyse(): Promise<Analysis | null> {
+    // Elements dessines (indices) d'une partie du dessin : une unite ou un emplacement vide, repere en la redessinant en couleur.
+    private async setOf(part: { unit: TexUnit } | { slot: number }): Promise<number[]> {
       const shown = this.shown;
-      if (!shown || !deps.renderSvg) return null;
-      const key = `${shown.display ? `b` : `i`}:${shown.tex}`;
-      if (this.analysis?.key === key) return this.analysis;
-      const count = svgLeaves(shown.svgText).length;
-      const units = texUnits(shown.tex);
-      const sets: number[][] = [];
-      for (const unit of units) {
-        const variant = await deps.renderSvg(colorUnit(shown.tex, unit, PROBE), shown.display);
-        const leaves = variant ? svgLeaves(variant) : [];
-        sets.push(leaves.length === count ? leaves.flatMap((l, k) => (l.color === PROBE ? [k] : [])) : []);
-      }
-      if (this.shown !== shown) return null;
-      this.analysis = { key, units, sets };
-      return this.analysis;
+      if (!shown || !deps.renderSvg) return [];
+      const key = `unit` in part ? `u${part.unit.start}:${part.unit.end}` : `s${part.slot}`;
+      const cached = this.sets.get(key);
+      if (cached) return cached;
+      const probe = `unit` in part ? { color: PROBE, unit: part.unit } : { color: PROBE, slot: part.slot };
+      const variant = await deps.renderSvg(previewTex(shown.tex, shown.model.slots, probe), shown.display);
+      const leaves = variant ? svgLeaves(variant) : [];
+      const set = leaves.length === shown.count ? leaves.flatMap((l, k) => (l.color === PROBE ? [k] : [])) : [];
+      if (this.shown === shown) this.sets.set(key, set);
+      return set;
     }
 
-    // Clic dans l'apercu : la partie correspondante du TeX est selectionnee et colorée ; un clic de plus au meme endroit agrandit le choix.
+    private leaves(): Element[] {
+      return this.shown ? leafElements(this.shown.svg) : [];
+    }
+
+    // Les carres des emplacements vides s'affichent en discret.
+    private async markSlots(): Promise<void> {
+      const shown = this.shown;
+      if (!shown) return;
+      for (const slot of shown.model.slots) {
+        const set = await this.setOf({ slot });
+        if (this.shown !== shown) return;
+        const leaves = this.leaves();
+        for (const k of set) leaves[k]?.classList.add(`mmw-formula-slot`);
+      }
+    }
+
+    // Rectangle (dans l'apercu) qui entoure des elements dessines.
+    private boxOf(set: number[]): { left: number; right: number; top: number; bottom: number } | null {
+      const leaves = this.leaves();
+      const origin = this.previewBox.getBoundingClientRect();
+      let box: { left: number; right: number; top: number; bottom: number } | null = null;
+      for (const k of set) {
+        const el = leaves[k];
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const b = { left: r.left - origin.left + this.previewBox.scrollLeft, right: r.right - origin.left + this.previewBox.scrollLeft, top: r.top - origin.top, bottom: r.bottom - origin.top };
+        box = box ? { left: Math.min(box.left, b.left), right: Math.max(box.right, b.right), top: Math.min(box.top, b.top), bottom: Math.max(box.bottom, b.bottom) } : b;
+      }
+      return box;
+    }
+
+    // Position du curseur a un decalage du texte TeX : au bord de l'element voisin, ou sur le carre d'un emplacement vide.
+    private async spotOf(offset: number): Promise<(CaretSpot & { slot: boolean; set: number[] }) | null> {
+      const shown = this.shown;
+      if (!shown) return null;
+      if (shown.model.slots.includes(offset)) {
+        const set = await this.setOf({ slot: offset });
+        const box = this.boxOf(set);
+        return box ? { offset, x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2, slot: true, set } : null;
+      }
+      const prev = unitEndingAt(shown.model.units, offset);
+      const next = prev ? null : unitStartingAt(shown.model.units, offset);
+      const unit = prev ?? next;
+      if (!unit) return null;
+      const set = await this.setOf({ unit });
+      const box = this.boxOf(set);
+      return box ? { offset, x: prev ? box.right : box.left, y: (box.top + box.bottom) / 2, slot: false, set: [] } : null;
+    }
+
+    private fontPx(): number {
+      const svg = this.shown?.svg;
+      return svg ? parseFloat(getComputedStyle(svg).fontSize) || 24 : 24;
+    }
+
+    // Met a jour ce que la vue montre de la selection : une partie choisie est coloree ; un curseur sans selection clignote a sa place,
+    // sur le carre de l'emplacement vide quand il y en a un.
+    private async syncView(): Promise<void> {
+      const shown = this.shown;
+      if (!shown) return;
+      const leaves = this.leaves();
+      for (const el of leaves) el.classList.remove(`mmw-formula-hl`, `mmw-formula-slot-active`);
+      this.caretEl?.classList.remove(`is-visible`);
+      const start = this.area.selectionStart;
+      const end = this.area.selectionEnd;
+      if (end > start) {
+        const unit = shown.model.units.find((u) => u.start === start && u.end === end);
+        if (!unit) return;
+        const set = await this.setOf({ unit });
+        if (this.shown !== shown) return;
+        for (const k of set) leaves[k]?.classList.add(`mmw-formula-hl`);
+        return;
+      }
+      const spot = await this.spotOf(end);
+      if (!spot || this.shown !== shown) return;
+      if (spot.slot) {
+        for (const k of spot.set) leaves[k]?.classList.add(`mmw-formula-slot-active`);
+        return;
+      }
+      const h = this.fontPx();
+      const caret = this.caretEl;
+      if (!caret) return;
+      caret.style.setProperty(`left`, `${spot.x}px`);
+      caret.style.setProperty(`top`, `${spot.y - h / 2}px`);
+      caret.style.setProperty(`height`, `${h}px`);
+      caret.classList.add(`is-visible`);
+    }
+
+    // Le dessin est a jour par rapport a la zone de saisie (sinon il est redessine tout de suite).
+    private async fresh(): Promise<boolean> {
+      if (this.shown?.tex !== this.area.value) await this.draw();
+      return this.shown?.tex === this.area.value;
+    }
+
+    private place(start: number, end = start): void {
+      this.area.setSelectionRange(start, end);
+      this.last = null;
+      void this.syncView();
+    }
+
+    private edited(r: { text: string; start: number; end: number }): void {
+      this.area.value = r.text;
+      this.area.setSelectionRange(r.start, r.end);
+      this.last = null;
+      void this.draw();
+    }
+
+    // Touches pressees dans l'apercu : fleches pour se deplacer dans la formule, Tab pour l'emplacement vide suivant, frappe directe,
+    // Retour arriere et Suppr.
+    private async onPreviewKey(e: KeyboardEvent): Promise<void> {
+      if (e.key === `Enter` && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        this.commit();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const printable = e.key.length === 1 && e.key !== ` `;
+      const known = printable || [`ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `Backspace`, `Delete`, `Tab`, ` `].includes(e.key);
+      if (!known) return;
+      if (e.key === `Tab` && e.shiftKey) return;
+      e.preventDefault();
+      if (!(await this.fresh())) return;
+      const shown = this.shown;
+      if (!shown) return;
+      const { model } = shown;
+      const start = this.area.selectionStart;
+      const end = this.area.selectionEnd;
+      switch (e.key) {
+        case `ArrowRight`:
+        case `ArrowLeft`: {
+          const p = stepPoint(model.points, start, end, e.key === `ArrowRight` ? 1 : -1);
+          if (p !== null) this.place(p);
+          return;
+        }
+        case `ArrowUp`:
+        case `ArrowDown`: {
+          const from = await this.spotOf(e.key === `ArrowDown` ? end : start);
+          if (!from) return;
+          const spots: CaretSpot[] = [];
+          for (const p of model.points) {
+            const spot = await this.spotOf(p);
+            if (spot && p !== from.offset) spots.push(spot);
+          }
+          if (this.shown !== shown) return;
+          const pick = pickVertical(spots, from, e.key === `ArrowUp` ? `up` : `down`, this.fontPx() * 0.5);
+          if (pick) this.place(pick.offset);
+          return;
+        }
+        case `Tab`: {
+          const at = nextSlot(this.area.value, end);
+          if (at >= 0) this.place(at);
+          return;
+        }
+        case `Backspace`:
+        case `Delete`: {
+          const r = eraseAt(this.area.value, start, end, e.key === `Backspace` ? -1 : 1, model.units);
+          if (r) this.edited(r);
+          return;
+        }
+        default: {
+          if (e.key === ` `) return;
+          const r = typeKey(this.area.value, start, end, e.key, model.units);
+          if (r) this.edited(r);
+        }
+      }
+    }
+
+    // Clic dans l'apercu : sur un carre d'emplacement vide, le curseur y est place ; sur un element, la partie correspondante du TeX
+    // est selectionnee et coloree, et un clic de plus au meme endroit agrandit le choix. Le focus passe a l'apercu, ou les fleches
+    // deplacent le curseur dans la formule.
     private async onPreviewClick(e: MouseEvent): Promise<void> {
       const shown = this.shown;
       if (!shown) return;
+      this.previewBox.focus();
       const leaves = leafElements(shown.svg);
       const leaf = hitLeaf(leaves, e.clientX, e.clientY);
       if (leaf < 0) return;
-      const a = await this.analyse();
-      if (!a || this.shown !== shown) return;
-      const candidates = unitsAt(a.units, a.sets, leaf);
+      for (const slot of shown.model.slots) {
+        if ((await this.setOf({ slot })).includes(leaf)) {
+          this.place(slot);
+          return;
+        }
+      }
+      const sets: number[][] = [];
+      for (const unit of shown.model.units) sets.push(await this.setOf({ unit }));
+      if (this.shown !== shown) return;
+      const candidates = unitsAt(shown.model.units, sets, leaf);
       if (candidates.length === 0) return;
       let pick = candidates[0];
       const last = this.last;
@@ -317,11 +495,9 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
         const at = candidates.findIndex((u) => u.start === last.unit.start && u.end === last.unit.end);
         pick = candidates[Math.min(at + 1, candidates.length - 1)];
       }
-      this.area.focus();
       this.area.setSelectionRange(pick.start, pick.end);
       this.last = { tex: shown.tex, leaf, unit: pick };
-      for (const el of leaves) el.classList.remove(`mmw-formula-hl`);
-      for (const k of a.sets[a.units.indexOf(pick)] ?? []) leaves[k]?.classList.add(`mmw-formula-hl`);
+      await this.syncView();
     }
 
     private commit(): void {

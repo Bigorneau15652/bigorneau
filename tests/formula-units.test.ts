@@ -99,3 +99,98 @@ test(`chaque unite d'une matrice, d'une racine et de parentheses se dessine en c
     }
   }
 });
+
+import { eraseAt, pickVertical, previewTex, stepPoint, texModel, typeKey, unitEndingAt } from "../src/formula-units";
+
+test(`les points de curseur et les emplacements vides d'une fraction`, () => {
+  const t = String.raw`\frac{}{b}+x^{}`;
+  const m = texModel(t);
+  assert.deepEqual(m.slots, [6, t.indexOf(`^{`) + 2]);
+  // Debut et fin de chaque suite, et entre les elements : numerateur vide, denominateur, apres la fraction, apres le +.
+  for (const p of [0, 6, 8, 9, t.indexOf(`+`) + 1]) assert.ok(m.points.includes(p), `point ${p} dans ${m.points}`);
+  assert.ok(!m.points.includes(2), `pas de point au milieu d'un nom de commande`);
+  assert.deepEqual(texModel(`{}`).slots, [1]);
+  assert.deepEqual(texModel(String.raw`\sqrt[]{x}`).slots, [6]);
+});
+
+test(`les fleches avancent et reculent de point en point, une selection se replie sur son bord`, () => {
+  const points = [0, 3, 5, 9];
+  assert.equal(stepPoint(points, 3, 3, 1), 5);
+  assert.equal(stepPoint(points, 3, 3, -1), 0);
+  assert.equal(stepPoint(points, 9, 9, 1), null);
+  assert.equal(stepPoint(points, 0, 0, -1), null);
+  assert.equal(stepPoint(points, 3, 9, 1), 9);
+  assert.equal(stepPoint(points, 3, 9, -1), 3);
+});
+
+test(`haut et bas choisissent la rangee voisine puis le point le plus proche horizontalement`, () => {
+  const spots = [
+    { offset: 1, x: 10, y: 0 },
+    { offset: 2, x: 50, y: 0 },
+    { offset: 3, x: 30, y: 40 },
+    { offset: 4, x: 90, y: 41 },
+    { offset: 5, x: 30, y: 80 },
+  ];
+  assert.equal(pickVertical(spots, { x: 48, y: 0 }, `down`, 10)?.offset, 3);
+  assert.equal(pickVertical(spots, { x: 95, y: 40 }, `up`, 10)?.offset, 2);
+  assert.equal(pickVertical(spots, { x: 30, y: 40 }, `down`, 10)?.offset, 5);
+  assert.equal(pickVertical(spots, { x: 30, y: 80 }, `down`, 10), null);
+  assert.equal(pickVertical(spots, { x: 10, y: 0 }, `up`, 10), null);
+});
+
+test(`la frappe dans la vue : caractere, exposant, indice et fraction avec l'element precedent`, () => {
+  const units = (t: string) => texModel(t).units;
+  assert.deepEqual(typeKey(`ab`, 1, 1, `x`, units(`ab`)), { text: `axb`, start: 2, end: 2 });
+  assert.deepEqual(typeKey(`ab`, 1, 2, `x`, units(`ab`)), { text: `ax`, start: 2, end: 2 });
+  assert.deepEqual(typeKey(`x`, 1, 1, `^`, units(`x`)), { text: `x^{}`, start: 3, end: 3 });
+  assert.deepEqual(typeKey(`x`, 1, 1, `_`, units(`x`)), { text: `x_{}`, start: 3, end: 3 });
+  // a/ devient \frac{a}{} avec le curseur dans le denominateur ; un nombre entier passe au numerateur.
+  const f = typeKey(`12`, 2, 2, `/`, units(`12`));
+  assert.equal(f?.text, String.raw`\frac{12}{}`);
+  assert.equal(f?.start, String.raw`\frac{12}{`.length);
+  const g = typeKey(`a+b`, 3, 3, `/`, units(`a+b`));
+  assert.equal(g?.text, String.raw`a+\frac{b}{}`);
+  // Sans element precedent, la barre oblique est un simple caractere.
+  assert.equal(typeKey(``, 0, 0, `/`, [])?.text, `/`);
+});
+
+test(`Retour arriere et Suppr dans la vue effacent l'unite entiere, sauf un chiffre d'un nombre`, () => {
+  const t = String.raw`a+\sqrt[3]{c}`;
+  const u = texModel(t).units;
+  assert.deepEqual(eraseAt(t, t.length, t.length, -1, u), { text: `a+`, start: 2, end: 2 });
+  assert.deepEqual(eraseAt(t, 1, 1, 1, u)?.text, String.raw`a\sqrt[3]{c}`);
+  assert.equal(eraseAt(t, 0, 0, -1, u), null);
+  assert.deepEqual(eraseAt(`x12`, 3, 3, -1, texModel(`x12`).units), { text: `x1`, start: 2, end: 2 });
+  assert.deepEqual(eraseAt(`x12`, 1, 1, 1, texModel(`x12`).units), { text: `x2`, start: 1, end: 1 });
+  // Une selection qui est une unite part avec son signe d'exposant.
+  const p = `x^{2}`;
+  assert.deepEqual(eraseAt(p, 3, 4, -1, texModel(p).units)?.text, `x`);
+  assert.equal(unitEndingAt(texModel(p).units, 5)?.start, 0);
+  // Retour arriere dans un exposant vide supprime l'exposant.
+  assert.deepEqual(eraseAt(`x^{}+1`, 3, 3, -1, texModel(`x^{}+1`).units), { text: `x+1`, start: 1, end: 1 });
+});
+
+test(`l'apercu montre un carre dans chaque emplacement vide, et chaque emplacement ou unite se repere par sa couleur`, () => {
+  const t = String.raw`\frac{}{b}+\sqrt[]{x}`;
+  const m = texModel(t);
+  const shown = previewTex(t, m.slots);
+  assert.equal(shown, String.raw`\frac{\square}{b}+\sqrt[\square]{x}`);
+  const base = renderTexSvg(shown, true);
+  assert.ok(base);
+  const n = svgLeaves(base).length;
+  const reds = m.slots.map((s) => {
+    const v = renderTexSvg(previewTex(t, m.slots, { color: `red`, slot: s }), true);
+    assert.ok(v, `emplacement ${s}`);
+    const l = svgLeaves(v);
+    assert.equal(l.length, n);
+    return l.flatMap((e, k) => (e.color === `red` ? [k] : []));
+  });
+  assert.deepEqual(reds.map((r) => r.length), [1, 1]);
+  assert.notDeepEqual(reds[0], reds[1]);
+  // Une unite coloree en meme temps que les carres garde le meme nombre d'elements.
+  for (const u of m.units) {
+    const v = renderTexSvg(previewTex(t, m.slots, { color: `red`, unit: u }), true);
+    assert.ok(v, t.slice(u.start, u.end));
+    assert.equal(svgLeaves(v).length, n, t.slice(u.start, u.end));
+  }
+});

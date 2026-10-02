@@ -20,8 +20,22 @@ const ARGS: Record<string, number> = {
 
 const isSpace = (c: string): boolean => c === ` ` || c === `\n` || c === `\t` || c === `\r`;
 
+export interface TexModel {
+  units: TexUnit[];
+  // Positions du texte ou l'on peut placer le curseur : debut et fin de chaque suite d'elements, et entre deux elements.
+  points: number[];
+  // Positions des emplacements vides (« {} » ou « [] » d'une racine), ou le dessin montre un carre.
+  slots: number[];
+}
+
 export function texUnits(tex: string): TexUnit[] {
+  return texModel(tex).units;
+}
+
+export function texModel(tex: string): TexModel {
   const units: TexUnit[] = [];
+  const pointSet = new Set<number>();
+  const slotSet = new Set<number>();
   const seen = new Set<string>();
   const push = (start: number, end: number): void => {
     if (end <= start || tex.slice(start, end).trim() === ``) return;
@@ -40,9 +54,11 @@ export function texUnits(tex: string): TexUnit[] {
 
   // Suite d'elements jusqu'a un arret ; renvoie la position de l'arret.
   const sequence = (from: number): number => {
+    pointSet.add(from);
     let i = skip(from);
     while (!stops(i)) {
       const next = element(i);
+      pointSet.add(next > i ? next : i + 1);
       i = skip(next > i ? next : i + 1);
     }
     return i;
@@ -65,6 +81,7 @@ export function texUnits(tex: string): TexUnit[] {
     if (tex[i] === `{`) {
       const close = sequence(i + 1);
       push(i + 1, close);
+      if (tex[close] === `}` && tex.slice(i + 1, close).trim() === ``) slotSet.add(i + 1);
       return tex[close] === `}` ? close + 1 : close;
     }
     return atom(i);
@@ -115,6 +132,9 @@ export function texUnits(tex: string): TexUnit[] {
           const close = tex.indexOf(`]`, k);
           if (close > 0) {
             push(k + 1, close);
+            pointSet.add(k + 1);
+            pointSet.add(close);
+            if (tex.slice(k + 1, close).trim() === ``) slotSet.add(k + 1);
             end = close + 1;
           }
         }
@@ -152,7 +172,7 @@ export function texUnits(tex: string): TexUnit[] {
   };
 
   sequence(0);
-  return units;
+  return { units, points: [...pointSet].filter((p) => p >= 0 && p <= tex.length).sort((a, b) => a - b), slots: [...slotSet].sort((a, b) => a - b) };
 }
 
 export interface SvgLeaf {
@@ -215,4 +235,110 @@ export function unitsAt(units: TexUnit[], sets: number[][], leaf: number): TexUn
   const out: TexUnit[] = [];
   for (const f of found) if (!out.some((o) => o.start === f.unit.start && o.end === f.unit.end)) out.push(f.unit);
   return out;
+}
+
+// Texte TeX dessine dans l'apercu : chaque emplacement vide montre un carre, et au plus une partie (unite ou emplacement) est
+// dessinee dans la couleur d'essai pour retrouver ses elements.
+export function previewTex(tex: string, slots: number[], probe?: { color: string; unit?: TexUnit; slot?: number }): string {
+  const inserts: { at: number; text: string }[] = [];
+  for (const s of slots) {
+    const coloured = probe?.slot === s;
+    inserts.push({ at: s, text: coloured ? `\\color{${probe.color}}\\square` : `\\square` });
+  }
+  if (probe?.unit) {
+    inserts.push({ at: probe.unit.start, text: `{\\color{${probe.color}}` });
+    inserts.push({ at: probe.unit.end, text: `}` });
+  }
+  // De la fin au debut, pour que les positions restent justes ; a position egale, la fermeture passe avant l'ouverture.
+  inserts.sort((a, b) => b.at - a.at || (a.text === `}` ? -1 : 0) - (b.text === `}` ? -1 : 0));
+  let out = tex;
+  for (const i of inserts) out = out.slice(0, i.at) + i.text + out.slice(i.at);
+  return out;
+}
+
+// Point de curseur suivant (sens +1) ou precedent (sens -1) a partir d'une selection ; une selection non vide est d'abord repliee sur
+// son bord. Renvoie null s'il n'y en a pas.
+export function stepPoint(points: number[], start: number, end: number, dir: 1 | -1): number | null {
+  if (dir === 1) {
+    if (end > start) return points.find((p) => p >= end) ?? null;
+    return points.find((p) => p > end) ?? null;
+  }
+  const before = points.filter((p) => (end > start ? p <= start : p < start));
+  return before.length > 0 ? before[before.length - 1] : null;
+}
+
+export interface CaretSpot {
+  offset: number;
+  x: number;
+  y: number;
+}
+
+// Point de curseur atteint par une fleche haut ou bas : dans la rangee la plus proche (au-dessus ou en dessous), le plus proche
+// horizontalement. `row` est la tolerance verticale, en pixels, pour dire que deux points sont dans la meme rangee.
+export function pickVertical(spots: CaretSpot[], from: { x: number; y: number }, dir: `up` | `down`, row: number): CaretSpot | null {
+  const sign = dir === `up` ? -1 : 1;
+  const cands = spots.filter((c) => (c.y - from.y) * sign > row * 0.5);
+  if (cands.length === 0) return null;
+  const nearest = Math.min(...cands.map((c) => Math.abs(c.y - from.y)));
+  const inRow = cands.filter((c) => Math.abs(c.y - from.y) <= nearest + row);
+  return inRow.reduce((best, c) => (Math.abs(c.x - from.x) < Math.abs(best.x - from.x) ? c : best));
+}
+
+// Plus grande unite qui se termine au decalage donne (celle que Retour arriere efface), ou celle qui y commence.
+export function unitEndingAt(units: TexUnit[], offset: number): TexUnit | null {
+  const cands = units.filter((u) => u.end === offset && u.start < u.end);
+  return cands.length === 0 ? null : cands.reduce((a, b) => (b.end - b.start > a.end - a.start ? b : a));
+}
+
+export function unitStartingAt(units: TexUnit[], offset: number): TexUnit | null {
+  const cands = units.filter((u) => u.start === offset && u.start < u.end);
+  return cands.length === 0 ? null : cands.reduce((a, b) => (b.end - b.start > a.end - a.start ? b : a));
+}
+
+export interface Edited {
+  text: string;
+  start: number;
+  end: number;
+}
+
+// Frappe d'une touche dans la vue mathematique, a la place de la selection : un caractere s'insere ; ^ et _ ouvrent un exposant ou un
+// indice vide ; / fait de l'element qui precede le numerateur d'une fraction et place le curseur dans le denominateur.
+export function typeKey(tex: string, start: number, end: number, key: string, units: TexUnit[]): Edited | null {
+  if (key === `^` || key === `_`) {
+    const text = `${tex.slice(0, start)}${key}{}${tex.slice(end)}`;
+    return { text, start: start + 2, end: start + 2 };
+  }
+  if (key === `/` && start === end) {
+    const prev = unitEndingAt(units, start);
+    if (prev) {
+      const body = tex.slice(prev.start, prev.end);
+      const head = `${tex.slice(0, prev.start)}\\frac{${body}}{`;
+      return { text: `${head}}${tex.slice(end)}`, start: head.length, end: head.length };
+    }
+  }
+  const text = tex.slice(0, start) + key + tex.slice(end);
+  return { text, start: start + key.length, end: start + key.length };
+}
+
+// Retour arriere (sens -1) ou Suppr (sens 1) dans la vue : une selection s'efface ; sans selection, l'unite qui precede (ou suit)
+// le curseur s'efface en entier, sauf un nombre dont on n'enleve qu'un chiffre.
+export function eraseAt(tex: string, start: number, end: number, dir: 1 | -1, units: TexUnit[]): Edited | null {
+  if (end > start) {
+    const unit = units.find((u) => u.start === start && u.end === end);
+    const r = unit ? deleteUnit(tex, unit) : { text: tex.slice(0, start) + tex.slice(end), caret: start };
+    return { text: r.text, start: r.caret, end: r.caret };
+  }
+  // Dans un exposant ou un indice vide (x^{|}), Retour arriere supprime l'exposant ou l'indice avec son signe.
+  if (dir === -1 && tex[start - 1] === `{` && tex[start] === `}` && /[\^_]/.test(tex[start - 2] ?? ``)) {
+    return { text: tex.slice(0, start - 2) + tex.slice(start + 1), start: start - 2, end: start - 2 };
+  }
+  const unit = dir === -1 ? unitEndingAt(units, start) : unitStartingAt(units, start);
+  if (!unit) return null;
+  const body = tex.slice(unit.start, unit.end);
+  if (/^[0-9]{2,}$/.test(body)) {
+    const at = dir === -1 ? unit.end - 1 : unit.start;
+    return { text: tex.slice(0, at) + tex.slice(at + 1), start: dir === -1 ? at : unit.start, end: dir === -1 ? at : unit.start };
+  }
+  const r = deleteUnit(tex, unit);
+  return { text: r.text, start: r.caret, end: r.caret };
 }
