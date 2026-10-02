@@ -137,14 +137,16 @@ export class ButtonPanel {
     let pointerId = -1;
     let dragging = false;
     let target = 0;
+    let origin = 0;
     const others = (): HTMLElement[] => Array.from(list.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c !== btn);
     const clearMarks = (): void => {
       for (const el of Array.from(list.children)) el.removeClasses([`mmw-panel-drop-before`, `mmw-panel-drop-after`]);
     };
+    // Le trait de depot n'apparait que lorsque le bouton a quitte sa place : au debut du geste, c'est le bouton entier qui est entoure.
     const mark = (): void => {
       clearMarks();
       const rest = others();
-      if (rest.length === 0) return;
+      if (rest.length === 0 || target === origin) return;
       if (target < rest.length) rest[target].addClass(`mmw-panel-drop-before`);
       else rest[rest.length - 1].addClass(`mmw-panel-drop-after`);
     };
@@ -175,7 +177,8 @@ export class ButtonPanel {
       pointerId = e.pointerId;
       timer = window.setTimeout(() => {
         dragging = true;
-        target = shown.indexOf(btn.dataset.id as string);
+        origin = shown.indexOf(btn.dataset.id as string);
+        target = origin;
         btn.setPointerCapture(pointerId);
         btn.addClass(`mmw-panel-dragging`);
         mark();
