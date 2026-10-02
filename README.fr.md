@@ -1,6 +1,6 @@
 # Bigorneau
 
-Bigorneau est un plugin Obsidian pour écrire des notes sous forme de cartes mentales. Chaque titre d'une note devient un nœud de la carte, et chaque nœud porte un véritable paragraphe : la carte sert donc à écrire et à réorganiser un long texte, pas seulement à le dessiner. Le même plugin contient un compositeur de documents longs, qui transforme une note en PDF composé comme un livre, avec la coupure de lignes de TeX, la césure française et anglaise britannique, les notes de bas de page, les tableaux, les figures, une table des matières, des renvois et des formules.
+Bigorneau transforme une note Obsidian en document long. Chaque titre est un nœud d'une carte mentale qui porte un véritable paragraphe : on planifie, on déplace et on réorganise les chapitres visuellement, puis on les rédige sur place. Quand la structure est la bonne, une seule commande exporte un PDF composé. Le moteur de mise en page suit les algorithmes de TeX : coupure de lignes optimale, césure automatique, règles de la typographie française, notes de bas de page, tableaux et figures légendés, table des matières, renvois et formules. Aucune installation de LaTeX n'est nécessaire. Il est fait pour les rapports universitaires et tout long texte comportant de nombreuses sections.
 
 Une version anglaise de ce fichier est disponible dans [README.md](README.md).
 

@@ -1,6 +1,6 @@
 # Bigorneau
 
-Bigorneau is an Obsidian plugin for writing notes as mind maps. Every heading of a note becomes a node of the map, and every node holds a real paragraph, so the map is a way to write and reorganise a long text and not just a diagram. The same plugin includes a long document composer: it turns a note into a typeset PDF, with the line breaking of TeX, French and British English hyphenation, footnotes, tables, figures, a table of contents, cross-references and formulas.
+Bigorneau turns an Obsidian note into a long document. Every heading is a node of a mind map that holds a real paragraph, so you can plan, drag and reorganise chapters visually, then write them in place. When the structure is right, one command exports a typeset PDF. The layout engine follows the algorithms of TeX: optimal line breaking, automatic hyphenation, French typography rules, footnotes, captioned tables and figures, a table of contents, cross-references and formulas. No LaTeX installation is needed. It is made for academic reports and any long text with many sections.
 
 A French version of this file is available in [README.fr.md](README.fr.md).
 
