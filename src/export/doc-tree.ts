@@ -2,6 +2,7 @@
 // A partir du texte d'une note, produit un arbre neutre (titres, paragraphes, listes, citations, code, tableaux, figures)
 // sans aucune information de mise en page. Les commentaires du plugin (%% ... %%) n'y apparaissent jamais.
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
+import { markTableMarkers, styleFromSentinel, TABLE_MARKER_SENTINEL, TableStyle } from "../table-marker";
 import { MmNode, parseNote, splitLines } from "../model";
 
 export interface DocListItem {
@@ -20,7 +21,7 @@ export type DocBlock =
   | { type: `quote`; text: string; id?: string }
   | { type: `code`; lang: string; text: string }
   // La premiere ligne est l'en-tete. `caption` : texte de la ligne « Tableau : ... » placee juste au-dessus.
-  | { type: `table`; rows: string[][]; align: ColumnAlign[]; caption?: string; id?: string }
+  | { type: `table`; rows: string[][]; align: ColumnAlign[]; caption?: string; id?: string; style?: TableStyle }
   // `width` : largeur demandee en pixels (![[image.png|400]]).
   | { type: `figure`; target: string; caption: string; width?: number; id?: string }
   // Formule en bloc ($$ ... $$), ecrite en TeX.
@@ -223,7 +224,7 @@ function indentWidth(s: string): number {
 
 // Decoupe le texte situe sous un titre en blocs.
 export function parseBlocks(text: string): DocBlock[] {
-  const lines = splitFootnoteDefinitions(stripComments(text)).text.split(`\n`);
+  const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(text))).text.split(`\n`);
   const blocks: DocBlock[] = [];
   let para: string[] = [];
   const flushPara = (): void => {
@@ -381,15 +382,43 @@ export function parseBlocks(text: string): DocBlock[] {
       continue;
     }
 
+    // Repere de style de tableau : bloc a part, attache plus bas au tableau qui suit.
+    if (line.startsWith(TABLE_MARKER_SENTINEL)) {
+      flushPara();
+      blocks.push({ type: `paragraph`, text: line });
+      i++;
+      continue;
+    }
+
     para.push(line.trim());
     i++;
   }
   flushPara();
+  // Les reperes de style se rattachent au tableau qui suit, directement ou apres sa legende ; ceux qui n'ont pas de tableau disparaissent.
+  const styled: DocBlock[] = [];
+  let pending: TableStyle | null = null;
+  for (const b of blocks) {
+    if (b.type === `paragraph`) {
+      const st = styleFromSentinel(b.text);
+      if (st) {
+        pending = st;
+        continue;
+      }
+      if (pending && !TABLE_CAPTION_RE.test(b.text.trim())) pending = null;
+    } else if (b.type === `table`) {
+      styled.push(pending ? { ...b, style: pending } : b);
+      pending = null;
+      continue;
+    } else pending = null;
+    styled.push(b);
+  }
   // La ligne « Tableau : legende » placee juste au-dessus d'un tableau devient sa legende.
   const out: DocBlock[] = [];
-  for (const b of blocks) {
+  for (const b of styled) {
     const prev = out[out.length - 1];
     if (b.type === `table` && prev && prev.type === `paragraph`) {
+      // Une legende restee vide (« Tableau : » sans nom) ne s'imprime pas.
+      if (/^(?:Tableau|Table)[ \t\u00a0]*:[ \t\u00a0]*$/i.test(prev.text.trim())) out.pop();
       const m = TABLE_CAPTION_RE.exec(prev.text.trim());
       if (m) {
         out.pop();

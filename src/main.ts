@@ -1,11 +1,11 @@
 import type { EditorView } from "@codemirror/view";
 import { currentLang, setLanguage, t } from "./i18n";
-import { debounce, Editor, MarkdownView, normalizePath, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { debounce, Editor, MarkdownView, Menu, normalizePath, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
-import { insertFootnote, insertTableCaption, toggleToc } from "./export/insert";
+import { captionWord, insertFootnote, insertTableCaption, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
 import { FunctionRegistry, PanelFunction } from "./functions";
 import { HelpRegistry } from "./help";
@@ -19,6 +19,10 @@ import { buildExternal, ExternalScript, ScriptManager } from "./scripts";
 import { ScriptStore } from "./script-store";
 import { ScriptsModal } from "./scripts-modal";
 import * as obsidianApi from "obsidian";
+import { columnAt, findTable, insertBlock, newTableBlock, tableContext } from "./table-edit";
+import { cellAtLine, MenuSpec, tableMenu } from "./table-menu";
+import { TableModal } from "./table-modal";
+import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
@@ -268,9 +272,16 @@ export default class MindmapWritingPlugin extends Plugin {
       },
     });
     this.addFunction({
+      id: `insert-table`,
+      name: () => t(`Insérer un tableau`),
+      icons: [`table`, `table-2`],
+      needsEditor: true,
+      run: ({ editor }) => this.openTableDialog(editor as Editor),
+    });
+    this.addFunction({
       id: `insert-table-caption`,
       name: () => t(`Insérer une légende de tableau`),
-      icons: [`table`, `table-2`],
+      icons: [`captions`, `subtitles`, `table-2`],
       needsEditor: true,
       run: ({ editor }) => applyInsert(editor as Editor, (text, from) => insertTableCaption(text, from)),
     });
@@ -296,6 +307,58 @@ export default class MindmapWritingPlugin extends Plugin {
         }
         void this.exportPdf();
       },
+    });
+    // Lignes et colonnes du tableau sous le curseur (le clic droit et les triangles du tableau font la meme chose).
+    const tableCommands: { id: string; name: string; title: string }[] = [
+      { id: `table-row-below`, name: t(`Tableau : insérer une ligne en dessous`), title: t(`Insérer une ligne en dessous`) },
+      { id: `table-row-above`, name: t(`Tableau : insérer une ligne au-dessus`), title: t(`Insérer une ligne au-dessus`) },
+      { id: `table-column-right`, name: t(`Tableau : insérer une colonne à droite`), title: t(`Insérer une colonne à droite`) },
+      { id: `table-column-left`, name: t(`Tableau : insérer une colonne à gauche`), title: t(`Insérer une colonne à gauche`) },
+      { id: `table-delete-row`, name: t(`Tableau : supprimer la ligne`), title: t(`Supprimer la ligne`) },
+      { id: `table-delete-column`, name: t(`Tableau : supprimer la colonne`), title: t(`Supprimer la colonne`) },
+    ];
+    for (const c of tableCommands) {
+      this.addCommand({
+        id: c.id,
+        name: c.name,
+        editorCheckCallback: (checking, editor) => {
+          const found = this.tableItem(editor, c.title);
+          if (!found || found.disabled) return false;
+          if (!checking) this.runTableItem(editor, found);
+          return true;
+        },
+      });
+    }
+    this.addCommand({
+      id: `describe-tables`,
+      name: t(`Décrire les tableaux de la note (diagnostic)`),
+      callback: () => this.describeTables(),
+    });
+    this.registerEditorExtension(tableWidgetExtension({ showMenu: (event, items, access) => this.showTableMenu(event, items, access) }));
+    // Mode Source : clic droit dans un tableau.
+    this.registerEvent(
+      this.app.workspace.on(`editor-menu`, (menu, editor) => {
+        const items = this.tableItems(editor);
+        if (!items) return;
+        menu.addSeparator();
+        this.fillMenu(menu, items, this.editorAccess(editor));
+      })
+    );
+    // Mode Lecture : le style du tableau (en-tete fonce, alternance, colonnes egales).
+    this.registerMarkdownPostProcessor((el, ctx) => {
+      const info = ctx.getSectionInfo(el);
+      if (!info || !info.text.includes(`mmw-table`)) return;
+      let offset = 0;
+      const lines = info.text.split(`\n`);
+      for (let i = 0; i < info.lineStart && i < lines.length; i++) offset += lines[i].length + 1;
+      const span = findTable(info.text, offset);
+      if (!span) return;
+      const style = tableContext(info.text, span).style;
+      for (const table of Array.from(el.querySelectorAll(`table`))) {
+        table.classList.toggle(`mmw-t-header`, style.header === true);
+        table.classList.toggle(`mmw-t-stripes`, style.stripes === true);
+        table.classList.toggle(`mmw-t-equal`, style.equal === true);
+      }
     });
     this.addCommand({
       id: `toggle-panel`,
@@ -549,6 +612,113 @@ export default class MindmapWritingPlugin extends Plugin {
     this.scripts.setExternal(found);
     await this.scripts.loadEnabled();
     this.panel.sync();
+  }
+
+  // ---------------------------------------------------------------- tableaux
+
+  // Fenetre de creation : le tableau est insere a la place du curseur, avec son style et, si demande, la ligne du nom a remplir.
+  private openTableDialog(editor: Editor): void {
+    const s = this.settings;
+    new TableModal(
+      this.app,
+      { header: s.tableHeader, stripes: s.tableStripes, caption: s.tableCaption },
+      (choice) => {
+        const text = editor.getValue();
+        const block = newTableBlock({ rows: choice.rows, cols: choice.cols, style: { header: choice.header, stripes: choice.stripes, equal: true }, caption: choice.caption, word: captionWord(text) }, text.includes(`\r\n`) ? `\r\n` : `\n`);
+        const at = editor.posToOffset(editor.getCursor(`to`));
+        const r = insertBlock(text, at, block);
+        editor.replaceRange(r.edit.insert, editor.offsetToPos(r.edit.from), editor.offsetToPos(r.edit.to));
+        editor.setCursor(editor.offsetToPos(r.cursor));
+        editor.focus();
+      },
+      (v) => {
+        s.tableHeader = v.header;
+        s.tableStripes = v.stripes;
+        s.tableCaption = v.caption;
+        void this.saveSettings(false);
+      }
+    ).open();
+  }
+
+  private editorAccess(editor: Editor): { text(): string; apply(text: string): void } {
+    return {
+      text: () => editor.getValue(),
+      apply: (next) => {
+        const change = diffChange(editor.getValue(), next);
+        if (change) editor.replaceRange(change.insert, editor.offsetToPos(change.from), editor.offsetToPos(change.to));
+      },
+    };
+  }
+
+  // Entrees du menu du tableau sous le curseur de l'editeur, ou null hors tableau.
+  private tableItems(editor: Editor): MenuSpec[] | null {
+    const text = editor.getValue();
+    const cursor = editor.getCursor();
+    const offset = editor.posToOffset(cursor);
+    const cell = cellAtLine(text, cursor.line, cursor.ch, columnAt);
+    return tableMenu(text, offset, cell ?? undefined);
+  }
+
+  private tableItem(editor: Editor, title: string): MenuSpec | undefined {
+    return this.tableItems(editor)?.find((i) => i.title === title);
+  }
+
+  private runTableItem(editor: Editor, item: MenuSpec): void {
+    const next = item.run?.(editor.getValue());
+    if (next !== null && next !== undefined) this.editorAccess(editor).apply(next);
+  }
+
+  // Remplit un menu Obsidian avec les entrees d'un tableau (le sous-menu d'alignement est mis a plat : l'API ne propose pas de sous-menu).
+  private fillMenu(menu: Menu, items: MenuSpec[], access: { text(): string; apply(text: string): void }): void {
+    const add = (spec: MenuSpec, prefix = ``): void => {
+      if (spec.separator) {
+        menu.addSeparator();
+        return;
+      }
+      if (spec.submenu) {
+        for (const sub of spec.submenu) add(sub, `${spec.title ?? ``} : `);
+        return;
+      }
+      menu.addItem((item) => {
+        item.setTitle(`${prefix}${spec.title ?? ``}`);
+        if (spec.icon) item.setIcon(spec.icon);
+        if (spec.checked !== undefined) item.setChecked(spec.checked);
+        if (spec.disabled) item.setDisabled(true);
+        item.onClick(() => {
+          const next = spec.run?.(access.text());
+          if (next !== null && next !== undefined) access.apply(next);
+        });
+      });
+    };
+    for (const spec of items) add(spec);
+  }
+
+  private showTableMenu(event: MouseEvent, items: MenuSpec[], access: { text(): string; apply(text: string): void }): void {
+    const menu = new Menu();
+    this.fillMenu(menu, items, access);
+    menu.showAtMouseEvent(event);
+  }
+
+  // Diagnostic : decrit les elements des tableaux affiches dans la note active et copie le resultat dans le presse-papiers, pour
+  // adapter le plugin si Obsidian change la facon de les dessiner.
+  private describeTables(): void {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const tables = view ? Array.from(view.contentEl.querySelectorAll(`table`)) : [];
+    const name = (el: Element): string => `${el.tagName.toLowerCase()}${el.className && typeof el.className === `string` ? `.${el.className.trim().split(/\s+/).join(`.`)}` : ``}`;
+    const lines: string[] = [`Obsidian ${(this.app as unknown as { appVersion?: string }).appVersion ?? `?`}`, `Tableaux trouves : ${tables.length}`];
+    tables.forEach((table, i) => {
+      const chain: string[] = [];
+      for (let e: Element | null = table; e && e !== view?.contentEl; e = e.parentElement) chain.push(name(e));
+      lines.push(`Tableau ${i + 1} : ${chain.join(` < `)}`);
+      const first = table.querySelector(`tr`);
+      if (first) lines.push(`  premiere ligne : ${name(first)} > ${Array.from(first.children).map(name).join(`, `)}`);
+      lines.push(`  freres : ${Array.from(table.parentElement?.children ?? []).map(name).join(`, `)}`);
+    });
+    const out = lines.join(`\n`);
+    void navigator.clipboard.writeText(out).then(
+      () => new Notice(t(`Description copiée dans le presse-papiers : {0} tableau(x).`, tables.length)),
+      () => new Notice(out)
+    );
   }
 
   openHelp(): void {

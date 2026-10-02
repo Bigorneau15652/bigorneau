@@ -2,6 +2,7 @@
 // bas, en-tete en gras, pas de quadrillage). Largeur des colonnes adaptee au contenu, texte des cellules compose comme celui
 // d'un paragraphe, alignement des colonnes repris du Markdown. Un tableau long se coupe entre deux lignes : l'en-tete est
 // repete en haut de la page suivante (voir paginate.ts).
+import type { TableStyle } from "../table-marker";
 import type { ColumnAlign } from "./doc-tree";
 import { FontStyle, measureText } from "./font-metrics";
 import { InlineText, plainOf } from "./inline";
@@ -46,7 +47,19 @@ export function columnWidths(natural: number[], min: number[], available: number
   return min.map((m, i) => m + (spare * demand[i]) / total);
 }
 
-export function layoutTable(rowsText: string[][], align: ColumnAlign[], opts: TableOptions, tableId: number): TableLayout {
+// Gris de l'en-tete fonce et d'une ligne sur deux (0 : noir, 1 : blanc).
+export const HEADER_FILL = 0.2;
+export const STRIPE_FILL = 0.93;
+
+// Colonnes de meme largeur : la place disponible est partagee a parts egales, sauf si un mot plus long que cette part l'interdit
+// (le partage suit alors la largeur naturelle, comme sans cette option).
+export function equalWidths(natural: number[], min: number[], available: number): number[] {
+  const share = available / natural.length;
+  if (min.every((m) => m <= share)) return natural.map(() => share);
+  return columnWidths(natural, min, available);
+}
+
+export function layoutTable(rowsText: string[][], align: ColumnAlign[], opts: TableOptions, tableId: number, style: TableStyle = {}): TableLayout {
   const cols = Math.max(1, ...rowsText.map((r) => r.length));
   const cells = rowsText.map((r, ri) => {
     const out: { inline: InlineText; style: FontStyle }[] = [];
@@ -68,7 +81,7 @@ export function layoutTable(rowsText: string[][], align: ColumnAlign[], opts: Ta
     min.push(mn);
   }
   const available = opts.textWidth - TABLE_GAP * (cols - 1);
-  const widths = columnWidths(natural, min, available);
+  const widths = style.equal ? equalWidths(natural, min, available) : columnWidths(natural, min, available);
   const tableWidth = widths.reduce((a, b) => a + b, 0) + TABLE_GAP * (cols - 1);
   const left = Math.max(0, (opts.textWidth - tableWidth) / 2);
   const xs: number[] = [];
@@ -114,6 +127,8 @@ export function layoutTable(rowsText: string[][], align: ColumnAlign[], opts: Ta
         align: `left`,
         cells: lineCells,
         inset: { top, bottom },
+        // En-tete fonce (ecriture blanche) et alternance de lignes, d'apres le style du tableau.
+        ...(ri === 0 && style.header ? { shade: { fill: HEADER_FILL, text: `white` as const } } : ri > 0 && style.stripes && ri % 2 === 0 ? { shade: { fill: STRIPE_FILL } } : {}),
         ...(notes.length > 0 ? { notes } : {}),
       });
     }

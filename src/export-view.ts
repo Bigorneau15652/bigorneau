@@ -121,6 +121,15 @@ export class ExportPreviewView extends ItemView {
     const el = parent.createDiv({ cls: `mmw-row mmw-row-${row.kind}` });
     el.style.height = `${row.height}pt`;
     if (row.anchor !== undefined) el.dataset.anchor = row.anchor;
+    if (row.shade) {
+      // Fond de la ligne d'un tableau, sur toute sa largeur (en-tete fonce, alternance).
+      el.style.position = `relative`;
+      const fill = el.createDiv({ cls: `mmw-row-fill` });
+      fill.style.left = `${row.x}pt`;
+      fill.style.width = `${row.width}pt`;
+      fill.style.background = `rgb(${Math.round(row.shade.fill * 255)}, ${Math.round(row.shade.fill * 255)}, ${Math.round(row.shade.fill * 255)})`;
+      if (row.shade.text === `white`) el.style.color = `#fff`;
+    }
     if (row.rules) {
       // Filets du tableau, sur toute sa largeur.
       el.style.position = `relative`;
