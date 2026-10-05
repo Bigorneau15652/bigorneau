@@ -4,7 +4,7 @@ import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { composeNote } from "./export/compose";
 import type { ImageAsset } from "./export/image";
 import type { MathAsset } from "./export/math";
-import type { DecorItem } from "./export/page-decor";
+import type { DecorItem, DecorLeaf } from "./export/page-decor";
 import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, Row } from "./export/typeset";
@@ -120,6 +120,19 @@ export class ExportPreviewView extends ItemView {
 
   // Element de l'en-tete, du pied de page ou du numero (reglages de la note), place en points sur la page.
   private renderDecor(page: HTMLElement, item: DecorItem): void {
+    if (item.kind === `group`) {
+      // Bord exterieur : une boite tournee dont l'origine est posee sur la page, avec les elements dedans.
+      const box = page.createDiv({ cls: `mmw-decor mmw-decor-group` });
+      box.style.left = `${item.qx}pt`;
+      box.style.top = `${item.qy}pt`;
+      box.style.transform = `rotate(${item.rot}deg)`;
+      for (const leaf of item.items) this.renderDecor(box, leaf);
+      return;
+    }
+    this.renderLeaf(page, item);
+  }
+
+  private renderLeaf(page: HTMLElement, item: DecorLeaf): void {
     if (item.kind === `text`) {
       const el = page.createDiv({ cls: `mmw-decor mmw-decor-text`, text: item.text });
       el.style.left = `${item.x}pt`;

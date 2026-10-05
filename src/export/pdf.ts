@@ -5,6 +5,7 @@
 import { FONT_STYLES, fontFor, FontStyle } from "./font-metrics";
 import { ImageAsset } from "./image";
 import { OpenTypeFont } from "./font";
+import type { DecorLeaf } from "./page-decor";
 import { LineRun, SUP_SCALE } from "./paragraph";
 import { FOOTNOTE_RULE_HEIGHT, Page } from "./paginate";
 import { PageSetup, Row } from "./typeset";
@@ -72,7 +73,7 @@ function mathOps(d: string): string {
 }
 
 // Couleur #rrggbb en trois nombres entre 0 et 1, comme les attend un operateur de couleur PDF.
-const hexOperands = (hex: string, _stroke = false): string => {
+const hexOperands = (hex: string): string => {
   const n = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
   return n.map((v) => num(v)).join(` `);
 };
@@ -351,8 +352,8 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       const boxTop = H - 30 - 1.14 * fs;
       drawRuns(ops, links, [{ text: page.footer, style: `regular` }], (setup.width - w) / 2, boxTop + 0.894 * fs, fs, 0, `0.4 0.4 0.4`);
     }
-    // En-tete, pied de page et numero composes d'apres les reglages de la note.
-    for (const item of page.decor ?? []) {
+    // En-tete, pied de page et bord exterieur composes d'apres les reglages de la note.
+    const drawLeaf = (item: DecorLeaf): void => {
       if (item.kind === `text`) {
         drawRuns(ops, links, [{ text: item.text, style: item.style }], item.x, item.baseline, item.size, 0, hexOperands(item.color));
       } else if (item.kind === `image`) {
@@ -361,8 +362,20 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       } else if (item.kind === `rule`) {
         ops.push(`q 0.6 G 0.4 w ${num(item.x1)} ${num(H - item.y)} m ${num(item.x2)} ${num(H - item.y)} l S Q`);
       } else {
-        ops.push(`q ${hexOperands(item.fill)} rg ${hexOperands(item.stroke, true)} RG 0.8 w ${shapePath(item.shape, item.x, H - item.y - item.height, item.width, item.height)} B Q`);
+        ops.push(`q ${hexOperands(item.fill)} rg ${hexOperands(item.stroke)} RG 0.8 w ${shapePath(item.shape, item.x, H - item.y - item.height, item.width, item.height)} B Q`);
       }
+    };
+    for (const item of page.decor ?? []) {
+      if (item.kind !== `group`) {
+        drawLeaf(item);
+        continue;
+      }
+      // Rotation de 90 degres : la ligne horizontale composee est posee sur son origine (qx, qy) de la page.
+      const qy = H - item.qy;
+      const m = item.rot === 90 ? [0, -1, 1, 0, item.qx - H, qy] : [0, 1, -1, 0, item.qx + H, qy];
+      ops.push(`q ${m.map((v) => num(v)).join(` `)} cm`);
+      for (const leaf of item.items) drawLeaf(leaf);
+      ops.push(`Q`);
     }
     pageContents.push({ ops, links });
   });

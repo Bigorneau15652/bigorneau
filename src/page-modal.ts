@@ -3,9 +3,9 @@
 // montre dans la ligne de formule : **gras**, *italique*, {xs} {s} {m} {l}, {page}, ![[image.png|hauteur]].
 import { App, Modal, Setting, TFile } from "obsidian";
 import { t } from "./i18n";
-import { Band, defaultConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, NumberAlign, NumberPlace, NumberShape, PageConfig, parseZone, SIZE_CODES, SizeCode, VARIABLES, ZONE_MAX_LINES, Zones } from "./page-config";
+import { Band, defaultConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, NumberShape, PageConfig, parseZone, SIZE_CODES, SizeCode, VARIABLES, ZONE_MAX_LINES, Zones } from "./page-config";
 
-export type PageTab = `header` | `footer` | `numbering`;
+export type PageTab = `header` | `footer` | `edge`;
 
 export interface PageModalHost {
   // Reglages actuels de la note, et ecriture des nouveaux.
@@ -111,7 +111,7 @@ export class PageModal extends Modal {
     const names: [PageTab, string][] = [
       [`header`, t(`En-tête`)],
       [`footer`, t(`Pied de page`)],
-      [`numbering`, t(`Numérotation`)],
+      [`edge`, t(`Bord extérieur`)],
     ];
     for (const [id, label] of names) {
       const b = tabs.createEl(`button`, { text: label, cls: `mmw-ptab` });
@@ -123,7 +123,7 @@ export class PageModal extends Modal {
       });
     }
     new Setting(contentEl)
-      .setName(t(`Pas d'en-tête, de pied de page ni de numéro sur la première page`))
+      .setName(t(`Pas d'en-tête, de pied de page ni de bord sur la première page`))
       .setDesc(t(`Pour une page de garde.`))
       .addToggle((x) =>
         x.setValue(this.config.skipFirst).onChange((v) => {
@@ -131,8 +131,7 @@ export class PageModal extends Modal {
           this.save();
         })
       );
-    if (this.tab === `numbering`) this.renderNumbering(contentEl);
-    else this.renderBand(contentEl, this.tab);
+    this.renderBand(contentEl, this.tab);
     new Setting(contentEl).addButton((b) =>
       b
         .setButtonText(t(`Réinitialiser tous les réglages de page`))
@@ -145,9 +144,14 @@ export class PageModal extends Modal {
     );
   }
 
-  private renderBand(parent: HTMLElement, which: `header` | `footer`): void {
+  private renderBand(parent: HTMLElement, which: PageTab): void {
     const band: Band = this.config[which];
-    parent.createDiv({ cls: `mmw-pnote`, text: which === `header` ? t(`L'en-tête apparaît dès qu'une zone est remplie.`) : t(`Le pied de page apparaît dès qu'une zone est remplie.`) });
+    const notes: Record<PageTab, string> = {
+      header: t(`L'en-tête apparaît dès qu'une zone est remplie.`),
+      footer: t(`Le pied de page apparaît dès qu'une zone est remplie.`),
+      edge: t(`Le bord extérieur apparaît dès qu'une zone est remplie : le texte y est écrit à 90 degrés, à droite des pages de droite et à gauche des pages de gauche.`),
+    };
+    parent.createDiv({ cls: `mmw-pnote`, text: notes[which] });
     new Setting(parent).setName(t(`Filet fin entre le texte et la page`)).addToggle((x) =>
       x.setValue(band.rule).onChange((v) => {
         band.rule = v;
@@ -156,17 +160,46 @@ export class PageModal extends Modal {
     );
     new Setting(parent)
       .setName(t(`Pages de gauche différentes de celles de droite`))
-      .setDesc(t(`Quand elles sont identiques, les zones gauche et droite sont échangées d'une page à l'autre.`))
+      .setDesc(t(`À l'activation, les zones des pages de gauche reprennent celles de droite en miroir ; vous pouvez ensuite les modifier.`))
       .addToggle((x) =>
         x.setValue(band.mirror).onChange((v) => {
           band.mirror = v;
+          if (v && [band.verso.left, band.verso.center, band.verso.right].every((z) => z.trim() === ``)) band.verso = which === `edge` ? { ...band.zones } : mirrorZones(band.zones);
           this.save();
           this.render();
         })
       );
     this.toolbar(parent);
-    this.zones(parent, band.mirror ? t(`Pages de droite`) : t(`Toutes les pages`), band.zones);
-    if (band.mirror) this.zones(parent, t(`Pages de gauche`), band.verso);
+    this.zones(parent, band.mirror ? t(`Pages de droite`) : t(`Toutes les pages`), band.zones, which === `edge`);
+    if (band.mirror) this.zones(parent, t(`Pages de gauche`), band.verso, which === `edge`);
+    this.shapeSettings(parent, band);
+  }
+
+  // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande.
+  private shapeSettings(parent: HTMLElement, band: Band): void {
+    const shape = band.pageShape;
+    parent.createDiv({ cls: `mmw-pzone-title`, text: t(`Numéro de page dans cette bande`) });
+    parent.createDiv({ cls: `mmw-pnote`, text: t(`Écrivez {page} dans une zone (liste Insérer une valeur) : la forme et les couleurs ci-dessous s'appliquent à chaque numéro de la bande.`) });
+    new Setting(parent).setName(t(`Forme derrière le numéro`)).addDropdown((d) =>
+      d
+        .addOptions({ none: t(`Aucune`), circle: t(`Rond`), square: t(`Carré`), rounded: t(`Carré aux coins arrondis`) })
+        .setValue(shape.shape)
+        .onChange((v) => {
+          shape.shape = v as NumberShape;
+          this.save();
+        })
+    );
+    const color = (name: string, key: `fill` | `stroke` | `color`): void => {
+      new Setting(parent).setName(name).addColorPicker((c) =>
+        c.setValue(shape[key]).onChange((v) => {
+          shape[key] = v.toLowerCase();
+          this.save();
+        })
+      );
+    };
+    color(t(`Couleur de fond de la forme`), `fill`);
+    color(t(`Couleur du contour de la forme`), `stroke`);
+    color(t(`Couleur du numéro`), `color`);
   }
 
   // Barre de mise en forme : elle agit sur la derniere zone dans laquelle on a ecrit.
@@ -201,7 +234,7 @@ export class PageModal extends Modal {
     button(t(`Image`), t(`Insérer une image ou un dessin`), () => new ImagePicker(this.app, (target) => this.insert(`![[${target}]]`)).open());
   }
 
-  private zones(parent: HTMLElement, title: string, zones: Zones): void {
+  private zones(parent: HTMLElement, title: string, zones: Zones, edge = false): void {
     parent.createDiv({ cls: `mmw-pzone-title`, text: title });
     const grid = parent.createDiv({ cls: `mmw-pzones` });
     const preview = parent.createDiv({ cls: `mmw-ppreview` });
@@ -220,10 +253,15 @@ export class PageModal extends Modal {
               }
               const img = row.createEl(`img`, { cls: `mmw-ppreview-img` });
               img.src = this.app.vault.getResourcePath(file);
-              // Meme regle que l'export : largeur demandee en pixels, au plus le maximum permis.
-              if (tok.width) img.style.width = `${Math.min(tok.width, IMAGE_MAX_WIDTH_PX)}px`;
-              img.style.maxWidth = `${IMAGE_MAX_WIDTH_PX}px`;
-              img.style.maxHeight = `${IMAGE_MAX_HEIGHT_PX}px`;
+              // Meme regle que l'export : largeur demandee en pixels, ramenee au maximum permis en gardant les proportions.
+              const requested = tok.width;
+              img.addEventListener(`load`, () => {
+                const ratio = img.naturalHeight > 0 && img.naturalWidth > 0 ? img.naturalHeight / img.naturalWidth : 1;
+                let w = Math.min(requested && requested > 0 ? requested : img.naturalWidth, IMAGE_MAX_WIDTH_PX);
+                if (w * ratio > IMAGE_MAX_HEIGHT_PX) w = IMAGE_MAX_HEIGHT_PX / ratio;
+                img.style.width = `${w}px`;
+                img.style.height = `${w * ratio}px`;
+              });
               continue;
             }
             const sample = tok.kind === `variable` ? this.sample(tok.name) : tok.text;
@@ -235,7 +273,7 @@ export class PageModal extends Modal {
         }
       }
     };
-    const labels: Record<`left` | `center` | `right`, string> = { left: t(`Gauche`), center: t(`Centre`), right: t(`Droite`) };
+    const labels: Record<`left` | `center` | `right`, string> = edge ? { left: t(`Haut`), center: t(`Milieu`), right: t(`Bas`) } : { left: t(`Gauche`), center: t(`Centre`), right: t(`Droite`) };
     for (const key of [`left`, `center`, `right`] as const) {
       const box = grid.createDiv({ cls: `mmw-pzone` });
       box.createDiv({ cls: `mmw-pzone-label`, text: labels[key] });
@@ -278,49 +316,5 @@ export class PageModal extends Modal {
     input.setRangeText(text, from, to, `end`);
     input.dispatchEvent(new Event(`input`));
     input.focus();
-  }
-
-  private renderNumbering(parent: HTMLElement): void {
-    const n = this.config.numbering;
-    const set = <K extends keyof typeof n>(key: K, value: (typeof n)[K], redraw = false): void => {
-      n[key] = value;
-      this.save();
-      if (redraw) this.render();
-    };
-    new Setting(parent).setName(t(`Numéroter les pages`)).addToggle((x) => x.setValue(n.enabled).onChange((v) => set(`enabled`, v)));
-    new Setting(parent).setName(t(`Emplacement du numéro`)).addDropdown((d) =>
-      d
-        .addOptions({ header: t(`Dans l'en-tête`), footer: t(`Dans le pied de page`), outer: t(`Sur le bord extérieur de la page`) })
-        .setValue(n.place)
-        .onChange((v) => set(`place`, v as NumberPlace))
-    );
-    new Setting(parent)
-      .setName(t(`Position horizontale`))
-      .setDesc(t(`Extérieur : à droite sur les pages de droite et à gauche sur les pages de gauche.`))
-      .addDropdown((d) =>
-        d
-          .addOptions({ outer: t(`Extérieur`), inner: t(`Intérieur`), center: t(`Centre`) })
-          .setValue(n.align)
-          .onChange((v) => set(`align`, v as NumberAlign))
-      );
-    new Setting(parent).setName(t(`Taille du numéro`)).addDropdown((d) =>
-      d
-        .addOptions({ xs: `XS`, s: `S`, m: `M`, l: `L` })
-        .setValue(n.size)
-        .onChange((v) => set(`size`, v as SizeCode))
-    );
-    new Setting(parent).setName(t(`Forme autour du numéro`)).addDropdown((d) =>
-      d
-        .addOptions({ none: t(`Aucune`), circle: t(`Rond`), square: t(`Carré`), rounded: t(`Carré aux coins arrondis`) })
-        .setValue(n.shape)
-        .onChange((v) => set(`shape`, v as NumberShape))
-    );
-    const color = (name: string, key: `fill` | `stroke` | `color`): void => {
-      new Setting(parent).setName(name).addColorPicker((c) => c.setValue(n[key]).onChange((v) => set(key, v.toLowerCase())));
-    };
-    color(t(`Couleur de fond de la forme`), `fill`);
-    color(t(`Couleur du contour de la forme`), `stroke`);
-    color(t(`Couleur du numéro`), `color`);
-    parent.createDiv({ cls: `mmw-pnote`, text: t(`Le numéro est dessiné au premier plan : il peut recouvrir le texte de l'en-tête ou du pied de page.`) });
   }
 }

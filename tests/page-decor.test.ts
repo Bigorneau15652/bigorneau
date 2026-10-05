@@ -21,8 +21,7 @@ test(`une note sans reglage de page n'a aucun decor`, () => {
 test(`l'en-tete et le numero sont composes sur chaque page`, () => {
   const text = noteWith((c) => {
     c.header.zones.center = `{document}`;
-    c.numbering.enabled = true;
-    c.numbering.place = `footer`;
+    c.footer.zones.center = `{page}`;
   }, longBody());
   const c = composeNote(text, `Rapport.md`);
   assert.ok(c.pages.length > 1);
@@ -45,8 +44,8 @@ test(`la page de garde peut etre sans en-tete`, () => {
 
 test(`une forme autour du numero est dessinee avant le numero`, () => {
   const text = noteWith((c) => {
-    c.numbering.enabled = true;
-    c.numbering.shape = `circle`;
+    c.footer.zones.center = `{page}`;
+    c.footer.pageShape.shape = `circle`;
   }, `# Un\n\nTexte.`);
   const items = composeNote(text, `N.md`).pages[0].decor ?? [];
   const shape = items.findIndex((i) => i.kind === `shape`);
@@ -57,8 +56,8 @@ test(`une forme autour du numero est dessinee avant le numero`, () => {
 test(`le PDF contient le texte du decor`, async () => {
   const text = noteWith((c) => {
     c.footer.zones.left = `Pied special`;
-    c.numbering.enabled = true;
-    c.numbering.shape = `rounded`;
+    c.footer.zones.center = `{page}`;
+    c.footer.pageShape.shape = `rounded`;
   }, `# Un\n\nTexte.`);
   const pdf = Buffer.from(await composeToPdf(composeNote(text, `N.md`), REQ)).toString(`latin1`);
   assert.ok(pdf.startsWith(`%PDF`));
@@ -82,4 +81,36 @@ test(`une image d'en-tete est ramenee au maximum permis`, () => {
   const items = composeNote(text, `N.md`, undefined, undefined, { images }).pages[0].decor ?? [];
   const img = items.find((i) => i.kind === `image`);
   assert.ok(img && img.kind === `image` && img.height <= 45 + 1e-6 && img.width <= 225 + 1e-6);
+});
+
+test(`le bord exterieur est ecrit a 90 degres : il descend a droite des pages de droite et monte a gauche des pages de gauche`, () => {
+  const text = noteWith((c) => {
+    c.edge.zones.left = `{chapter}`;
+    c.edge.zones.right = `{page}`;
+    c.edge.pageShape.shape = `circle`;
+  }, longBody());
+  const pages = composeNote(text, `N.md`).pages;
+  const recto = (pages[0].decor ?? []).find((i) => i.kind === `group`);
+  const verso = (pages[1].decor ?? []).find((i) => i.kind === `group`);
+  assert.ok(recto && recto.kind === `group` && recto.rot === 90);
+  assert.ok(verso && verso.kind === `group` && verso.rot === -90);
+  if (recto && recto.kind === `group`) {
+    // Dans la marge de droite, et le numero (zone du bas) est une forme suivie du chiffre.
+    assert.ok(recto.qx > 595.28 - 72 && recto.qx < 595.28);
+    assert.ok(recto.items.some((i) => i.kind === `shape`));
+  }
+  if (verso && verso.kind === `group`) assert.ok(verso.qx > 0 && verso.qx < 72);
+});
+
+test(`le numero de page peut se placer dans l'en-tete, avec la forme et les couleurs de la bande`, () => {
+  const text = noteWith((c) => {
+    c.header.zones.right = `**{page}**`;
+    c.header.pageShape = { shape: `square`, fill: `#ffd43b`, stroke: `#000000`, color: `#ff0000` };
+  }, `# Un\n\nTexte.`);
+  const items = composeNote(text, `N.md`).pages[0].decor ?? [];
+  const shape = items.findIndex((i) => i.kind === `shape`);
+  const number = items.findIndex((i) => i.kind === `text`);
+  assert.ok(shape >= 0 && number > shape);
+  const n = items[number];
+  assert.ok(n.kind === `text` && n.color === `#ff0000` && n.style === `bold`);
 });

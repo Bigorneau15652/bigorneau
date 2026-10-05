@@ -1,7 +1,7 @@
-// Reglages des pages d'une note : en-tete, pied de page, numerotation. Ils sont ecrits dans la note, sur une ligne de commentaire
+// Reglages des pages d'une note : en-tete, pied de page et bord exterieur (ecrit a 90 degres). Ils sont ecrits dans la note, sur une ligne de commentaire
 // Obsidian placee sous les proprietes : %% mmw-page {...} %%, invisible en lecture et masquee dans l'apercu en direct. Chaque zone de
-// l'en-tete et du pied de page est un texte avec un balisage minimal : **gras**, *italique*, {xs} {s} {m} {l} pour la taille,
-// {document} {chapter} {section} {author} {date} {page} {pages} pour les valeurs variables, ![[image.png|hauteur]] pour une image.
+// ces trois bandes est un texte avec un balisage minimal : **gras**, *italique*, {xs} {s} {m} {l} pour la taille,
+// {document} {chapter} {section} {author} {date} {page} {pages} pour les valeurs variables, ![[image.png|largeur]] pour une image.
 // Ce module ne depend pas d'Obsidian : il sert a l'export et aux fenetres de reglage.
 
 export type SizeCode = `xs` | `s` | `m` | `l`;
@@ -14,6 +14,17 @@ export interface Zones {
   right: string;
 }
 
+export type NumberShape = `none` | `circle` | `square` | `rounded`;
+
+// Forme dessinee derriere chaque {page} ecrit dans une bande, avec ses couleurs (#rrggbb).
+export interface PageShape {
+  shape: NumberShape;
+  fill: string;
+  stroke: string;
+  // Couleur du chiffre.
+  color: string;
+}
+
 export interface Band {
   // Zones des pages de droite (recto), ou de toutes les pages.
   zones: Zones;
@@ -22,29 +33,16 @@ export interface Band {
   verso: Zones;
   // Filet fin entre le texte et la bande.
   rule: boolean;
-}
-
-export type NumberPlace = `header` | `footer` | `outer`;
-export type NumberAlign = `outer` | `inner` | `center`;
-export type NumberShape = `none` | `circle` | `square` | `rounded`;
-
-export interface Numbering {
-  enabled: boolean;
-  place: NumberPlace;
-  align: NumberAlign;
-  shape: NumberShape;
-  // Couleurs de la forme et du chiffre (#rrggbb).
-  fill: string;
-  stroke: string;
-  color: string;
-  size: SizeCode;
+  pageShape: PageShape;
 }
 
 export interface PageConfig {
   header: Band;
   footer: Band;
-  numbering: Numbering;
-  // Pas d'en-tete, de pied de page ni de numero sur la premiere page (page de garde).
+  // Bord exterieur de la page (a droite des pages de droite, a gauche des pages de gauche) : le texte y est ecrit a 90 degres. Les
+  // zones gauche, centre et droite y sont, de haut en bas : haut, milieu et bas.
+  edge: Band;
+  // Pas d'en-tete, de pied de page ni de bord sur la premiere page (page de garde).
   skipFirst: boolean;
 }
 
@@ -53,17 +51,14 @@ export type Variable = (typeof VARIABLES)[number];
 
 const emptyZones = (): Zones => ({ left: ``, center: ``, right: `` });
 
+export const defaultShape = (): PageShape => ({ shape: `none`, fill: `#e9ecef`, stroke: `#495057`, color: `#212529` });
+
 export function defaultBand(): Band {
-  return { zones: emptyZones(), mirror: false, verso: emptyZones(), rule: false };
+  return { zones: emptyZones(), mirror: false, verso: emptyZones(), rule: false, pageShape: defaultShape() };
 }
 
 export function defaultConfig(): PageConfig {
-  return {
-    header: defaultBand(),
-    footer: defaultBand(),
-    numbering: { enabled: false, place: `footer`, align: `center`, shape: `none`, fill: `#e9ecef`, stroke: `#495057`, color: `#212529`, size: `m` },
-    skipFirst: false,
-  };
+  return { header: defaultBand(), footer: defaultBand(), edge: defaultBand(), skipFirst: false };
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === `object` && v !== null && !Array.isArray(v);
@@ -77,31 +72,33 @@ function zonesOf(v: unknown): Zones {
   return { left: text(r.left), center: text(r.center), right: text(r.right) };
 }
 
-function bandOf(v: unknown): Band {
+function shapeOf(v: unknown): PageShape {
   const r = isObject(v) ? v : {};
-  return { zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false) };
+  const d = defaultShape();
+  return { shape: pick(r.shape, [`none`, `circle`, `square`, `rounded`], d.shape), fill: color(r.fill, d.fill), stroke: color(r.stroke, d.stroke), color: color(r.color, d.color) };
 }
 
-// Reglages lus dans un objet JSON quelconque : tout ce qui est invalide est remplace par la valeur par defaut.
+function bandOf(v: unknown): Band {
+  const r = isObject(v) ? v : {};
+  return { zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false), pageShape: shapeOf(r.pageShape) };
+}
+
+// Reglages lus dans un objet JSON quelconque : tout ce qui est invalide est remplace par la valeur par defaut. L'ancienne
+// numerotation (version 0.5.0 et 0.5.1) devient un {page} dans la zone correspondante, avec sa forme.
 export function sanitizeConfig(raw: unknown): PageConfig {
-  const d = defaultConfig();
   const r = isObject(raw) ? raw : {};
-  const n = isObject(r.numbering) ? r.numbering : {};
-  return {
-    header: bandOf(r.header),
-    footer: bandOf(r.footer),
-    numbering: {
-      enabled: flag(n.enabled, d.numbering.enabled),
-      place: pick(n.place, [`header`, `footer`, `outer`], d.numbering.place),
-      align: pick(n.align, [`outer`, `inner`, `center`], d.numbering.align),
-      shape: pick(n.shape, [`none`, `circle`, `square`, `rounded`], d.numbering.shape),
-      fill: color(n.fill, d.numbering.fill),
-      stroke: color(n.stroke, d.numbering.stroke),
-      color: color(n.color, d.numbering.color),
-      size: pick(n.size, SIZE_CODES, d.numbering.size),
-    },
-    skipFirst: flag(r.skipFirst, false),
-  };
+  const config: PageConfig = { header: bandOf(r.header), footer: bandOf(r.footer), edge: bandOf(r.edge), skipFirst: flag(r.skipFirst, false) };
+  const n = isObject(r.numbering) ? r.numbering : null;
+  if (n && n.enabled === true) {
+    const place = pick(n.place, [`header`, `footer`, `outer`], `footer`);
+    const band = place === `header` ? config.header : place === `outer` ? config.edge : config.footer;
+    const align = pick(n.align, [`outer`, `inner`, `center`], `center`);
+    const key = align === `center` ? `center` : align === `outer` ? `right` : `left`;
+    const size = pick(n.size, SIZE_CODES, `m`);
+    if (band.zones[key].trim() === ``) band.zones[key] = `{${size}}{page}`;
+    band.pageShape = shapeOf({ shape: n.shape, fill: n.fill, stroke: n.stroke, color: n.color });
+  }
+  return config;
 }
 
 // Une bande (en-tete ou pied de page) existe des qu'une de ses zones est remplie : il n'y a pas d'interrupteur.
@@ -110,8 +107,8 @@ export function bandUsed(band: Band): boolean {
   return filled(band.zones) || (band.mirror && filled(band.verso));
 }
 
-// Au moins un des trois elements (en-tete, pied de page, numerotation) est actif.
-export const anyDecor = (c: PageConfig): boolean => bandUsed(c.header) || bandUsed(c.footer) || c.numbering.enabled;
+// Au moins une des trois bandes (en-tete, pied de page, bord exterieur) est utilisee.
+export const anyDecor = (c: PageConfig): boolean => bandUsed(c.header) || bandUsed(c.footer) || bandUsed(c.edge);
 
 // Limites des images de l'en-tete et du pied de page, en pixels (96 par pouce) : elles tiennent dans la marge de la page.
 export const IMAGE_MAX_WIDTH_PX = 300;
