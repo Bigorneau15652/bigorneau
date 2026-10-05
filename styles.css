@@ -1659,6 +1659,12 @@
   color: #222;
 }
 
+.mmw-decor-group {
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
 .mmw-decor-rule {
   height: 0;
   border-top: 0.4pt solid #999;

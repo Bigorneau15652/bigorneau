@@ -10,7 +10,8 @@ const withFooter = () => {
 
 test(`les reglages se relisent tels qu'ils ont ete ecrits, sur une seule ligne`, () => {
   const c = withFooter();
-  c.numbering = { ...c.numbering, enabled: true, place: `outer`, align: `inner`, shape: `circle`, fill: `#ffd43b` };
+  c.edge.zones.center = `{chapter}`;
+  c.edge.pageShape = { ...c.edge.pageShape, shape: `circle`, fill: `#ffd43b` };
   const line = formatPageMarker(c);
   assert.ok(!line.includes(`\n`));
   assert.ok(line.startsWith(`%% mmw-page {`));
@@ -25,12 +26,13 @@ test(`les reglages se relisent tels qu'ils ont ete ecrits, sur une seule ligne`,
 
 test(`des reglages abimes ou incomplets sont completes par les valeurs par defaut`, () => {
   assert.deepEqual(sanitizeConfig(null), defaultConfig());
-  const c = sanitizeConfig({ footer: { zones: { center: 12, left: `a` } }, numbering: { shape: `triangle`, fill: `rouge`, size: `xl`, enabled: true }, skipFirst: `oui` });
+  const c = sanitizeConfig({ footer: { zones: { center: 12, left: `a` } }, numbering: { shape: `triangle`, fill: `rouge`, size: `xl`, enabled: true, place: `outer`, align: `center` }, skipFirst: `oui` });
   assert.equal(bandUsed(c.footer), true);
   assert.deepEqual(c.footer.zones, { left: `a`, center: ``, right: `` });
-  assert.equal(c.numbering.shape, `none`);
-  assert.equal(c.numbering.fill, defaultConfig().numbering.fill);
-  assert.equal(c.numbering.size, `m`);
+  // L'ancienne numerotation devient un {page} dans la zone du bord exterieur, avec des valeurs par defaut pour ce qui est invalide.
+  assert.equal(c.edge.zones.center, `{m}{page}`);
+  assert.equal(c.edge.pageShape.shape, `none`);
+  assert.equal(c.edge.pageShape.fill, defaultConfig().edge.pageShape.fill);
   assert.equal(c.skipFirst, false);
   assert.deepEqual(parsePageMarker(`%% mmw-page {abime} %%`), defaultConfig());
   assert.equal(parsePageMarker(`Texte`), null);
