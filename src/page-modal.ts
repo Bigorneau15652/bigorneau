@@ -2,6 +2,7 @@
 // ecrite tout de suite dans la note (ligne de commentaire sous les proprietes). Les zones sont des textes avec un balisage simple,
 // montre dans la ligne de formule : **gras**, *italique*, {xs} {s} {m} {l}, {page}, ![[image.png|hauteur]].
 import { App, ColorComponent, Modal, Setting, TextComponent, TFile } from "obsidian";
+import { imageFile, ImagePicker } from "./image-picker";
 import { t } from "./i18n";
 import { Band, defaultConfig, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
 
@@ -15,73 +16,6 @@ export interface PageModalHost {
   author?: { get(): string; fallback: string; set(value: string): void };
 }
 
-const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg|bmp|avif)$/i;
-
-const IMAGE_LIMIT = 60;
-
-// Fichier du coffre designe par la cible d'une image de zone ; un dessin Excalidraw est lu par son export image.
-function imageFile(app: App, target: string): TFile | null {
-  const names = /\.excalidraw$/i.test(target) ? [`${target}.svg`, `${target}.png`] : [target];
-  for (const name of names) {
-    const f = app.metadataCache.getFirstLinkpathDest(name, ``);
-    if (f) return f;
-  }
-  return null;
-}
-
-// Choix d'une image ou d'un dessin parmi tous ceux du coffre : recherche par nom, vignettes.
-class ImagePicker extends Modal {
-  constructor(app: App, private onPick: (target: string) => void) {
-    super(app);
-  }
-
-  private items(): { target: string; file: TFile }[] {
-    const out: { target: string; file: TFile }[] = [];
-    for (const f of this.app.vault.getFiles()) {
-      if (/\.excalidraw\.(svg|png)$/i.test(f.name)) continue;
-      if (IMAGE_EXT.test(f.name)) out.push({ target: f.name, file: f });
-      else if (/\.excalidraw\.md$/i.test(f.name)) {
-        const target = f.name.replace(/\.md$/i, ``);
-        const rendered = imageFile(this.app, target);
-        if (rendered) out.push({ target, file: rendered });
-      }
-    }
-    return out.sort((a, b) => a.target.localeCompare(b.target));
-  }
-
-  onOpen(): void {
-    this.titleEl.setText(t(`Choisir une image ou un dessin`));
-    this.modalEl.addClass(`mmw-pmodal`);
-    const { contentEl } = this;
-    contentEl.empty();
-    const all = this.items();
-    const search = contentEl.createEl(`input`, { type: `text`, cls: `mmw-ipick-search` });
-    search.placeholder = t(`Rechercher dans le coffre`);
-    const info = contentEl.createDiv({ cls: `mmw-pnote` });
-    const grid = contentEl.createDiv({ cls: `mmw-ipick-grid` });
-    const paint = (): void => {
-      grid.empty();
-      const q = search.value.trim().toLowerCase();
-      const found = all.filter((i) => q === `` || i.target.toLowerCase().includes(q));
-      info.setText(found.length > IMAGE_LIMIT ? `${found.length} / ${all.length} : ${t(`affinez la recherche pour voir les autres.`)}` : `${found.length} / ${all.length}`);
-      for (const item of found.slice(0, IMAGE_LIMIT)) {
-        const card = grid.createEl(`button`, { cls: `mmw-ipick-card` });
-        card.type = `button`;
-        const img = card.createEl(`img`);
-        img.src = this.app.vault.getResourcePath(item.file);
-        img.loading = `lazy`;
-        card.createDiv({ cls: `mmw-ipick-name`, text: item.target });
-        card.addEventListener(`click`, () => {
-          this.close();
-          this.onPick(item.target);
-        });
-      }
-    };
-    search.addEventListener(`input`, paint);
-    paint();
-    search.focus();
-  }
-}
 
 const SIZE_LABEL: Record<SizeCode, string> = { xs: `XS`, s: `S`, m: `M`, l: `L` };
 

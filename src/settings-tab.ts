@@ -537,6 +537,17 @@ export class MmSettingTab extends PluginSettingTab {
     );
     this.exportChoice(
       el,
+      t(`Légende des figures et des dessins`),
+      t(`Un dessin ou une image écrit ![[dessin.excalidraw|Nom]] reçoit la légende « Figure 3 : Nom ». Sans nom, il n'a ni légende ni numéro.`),
+      [
+        [`below`, t(`Sous la figure`)],
+        [`above`, t(`Au-dessus de la figure`)],
+      ],
+      s.exportFigureCaption,
+      (v) => (s.exportFigureCaption = v === `above` ? `above` : `below`)
+    );
+    this.exportChoice(
+      el,
       t(`Renvois vers un titre, une figure ou un tableau`),
       t(`Les renvois [[#Titre]] et [[#^identifiant]] sont toujours cliquables dans le PDF. Cette option ajoute le numéro de page après le texte du renvoi.`),
       [

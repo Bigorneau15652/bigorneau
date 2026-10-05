@@ -15,6 +15,7 @@ import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
 import { runScript } from "./script-runner";
 import { FORMULAS_SCRIPT } from "./script-formulas";
+import { drawFigure, insertNamedImage } from "./drawing";
 import { createPageScript } from "./script-page";
 import { buildExternal, ExternalScript, ScriptManager } from "./scripts";
 import { ScriptStore } from "./script-store";
@@ -288,6 +289,20 @@ export default class MindmapWritingPlugin extends Plugin {
       icons: [`captions`, `subtitles`, `table-2`],
       needsEditor: true,
       run: ({ editor }) => applyInsert(editor as Editor, (text, from) => insertTableCaption(text, from)),
+    });
+    this.addFunction({
+      id: `draw`,
+      name: () => t(`Dessiner (Excalidraw)`),
+      icons: [`pencil-ruler`, `pencil`, `brush`],
+      needsEditor: true,
+      run: ({ editor }) => drawFigure(this.app, editor as Editor),
+    });
+    this.addFunction({
+      id: `insert-figure`,
+      name: () => t(`Insérer une image ou un dessin avec son nom`),
+      icons: [`image-plus`, `image`, `file-image`],
+      needsEditor: true,
+      run: ({ editor }) => insertNamedImage(this.app, editor as Editor),
     });
     // L'export de haute qualite est reserve a l'ordinateur : sur tablette et telephone, ces fonctions ne sont pas proposees.
     this.addFunction({

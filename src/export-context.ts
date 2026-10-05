@@ -2,14 +2,14 @@
 // libelles du compte rendu. Le calcul de la mise en page est dans src/export (sans Obsidian).
 import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
-import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
+import { displaySize, figureBounds, ImageAsset, imageCandidates, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
 import { configImages, findPageConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX } from "./page-config";
 import type { MathRenderer } from "./script-formulas";
 import type { MmSettings } from "./settings";
 
-export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportPageRefs` | `exportMedia` | `exportHeader` | `exportFooter` | `exportFlushBottom` | `exportChapterBreak` | `exportFootnoteNumbering` | `exportProtrusion` | `exportToc` | `exportTocDepth` | `exportChapterToc` | `exportChapterTocDepth`>): PageStyle {
+export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportFigureCaption` | `exportPageRefs` | `exportMedia` | `exportHeader` | `exportFooter` | `exportFlushBottom` | `exportChapterBreak` | `exportFootnoteNumbering` | `exportProtrusion` | `exportToc` | `exportTocDepth` | `exportChapterToc` | `exportChapterTocDepth`>): PageStyle {
   return {
     ...DEFAULT_PAGE_STYLE,
     header: settings.exportHeader,
@@ -18,6 +18,7 @@ export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportP
     chapterBreak: settings.exportChapterBreak,
     footnoteNumbering: settings.exportFootnoteNumbering,
     floats: settings.exportFloats,
+    figureCaption: settings.exportFigureCaption,
     pageRefs: settings.exportPageRefs,
     media: settings.exportMedia,
     protrusion: settings.exportProtrusion,
@@ -60,13 +61,19 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
   for (const { target, width } of imageTargets(text, fileName)) if (!widths.has(target) || widths.get(target) === undefined) widths.set(target, width);
   for (const [target, width] of widths) {
     if (!isImageTarget(target) || isWebTarget(target)) continue;
-    const file = fileFor(app, target, sourcePath);
-    if (!file) continue;
-    try {
-      const asset = await loadOne(app, file, width, bounds, urls);
-      if (asset) images.set(target, asset);
-    } catch {
-      // Image illisible : traitee comme absente.
+    // Un dessin Excalidraw se lit par son export image (.excalidraw.svg ou .excalidraw.png), sinon la cible elle-meme.
+    for (const name of imageCandidates(target)) {
+      const file = fileFor(app, name, sourcePath);
+      if (!file || !isImageTarget(file.name) || /\.excalidraw(\.md)?$/i.test(file.name)) continue;
+      try {
+        const asset = await loadOne(app, file, width, bounds, urls);
+        if (asset) {
+          images.set(target, asset);
+          break;
+        }
+      } catch {
+        // Image illisible : traitee comme absente.
+      }
     }
   }
   // Images de l'en-tete et du pied de page. Un dessin Excalidraw est lu par son export image (.excalidraw.svg ou .excalidraw.png).
@@ -74,8 +81,7 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
   if (found) {
     for (const { target, width } of configImages(found.config)) {
       if (images.has(target) || isWebTarget(target)) continue;
-      const candidates = /\.excalidraw$/i.test(target) ? [`${target}.svg`, `${target}.png`] : [target];
-      for (const name of candidates) {
+      for (const name of imageCandidates(target)) {
         const file = fileFor(app, name, sourcePath);
         if (!file || !isImageTarget(file.name)) continue;
         try {
