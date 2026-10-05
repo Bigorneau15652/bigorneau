@@ -223,6 +223,22 @@ export class MapControls {
     this.root.append(this.popup, dock, zoom, this.tipEl);
     host.appendChild(this.root);
 
+    // Quand la zone est etroite, les boutons qui ne tiennent plus a cote du bouton d'aide disparaissent, en commencant par la fin :
+    // le bouton d'aide reste toujours libre.
+    const fit = (): void => {
+      for (const bar of [dock, zoom]) {
+        const kids = Array.from(bar.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+        for (const k of kids) k.removeClass(`mmw-fit-hidden`);
+        for (let i = kids.length - 1; i > 0 && bar.scrollWidth > bar.clientWidth + 1; i--) kids[i].addClass(`mmw-fit-hidden`);
+      }
+    };
+    if (typeof ResizeObserver !== `undefined`) {
+      const observer = new ResizeObserver(() => fit());
+      observer.observe(host);
+      this.cleanups.push(() => observer.disconnect());
+    }
+    fit();
+
     // Bouton d'aide en bas a droite : raccourcis et conseils de la carte.
     this.helpRoot = h(`div`, `mmw-help`);
     this.helpPanel = this.buildHelp();

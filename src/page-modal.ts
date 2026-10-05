@@ -1,9 +1,9 @@
 // Fenetre des reglages de page d'une note : en-tete, pied de page et numerotation, chacun sur son onglet. Chaque modification est
 // ecrite tout de suite dans la note (ligne de commentaire sous les proprietes). Les zones sont des textes avec un balisage simple,
 // montre dans la ligne de formule : **gras**, *italique*, {xs} {s} {m} {l}, {page}, ![[image.png|hauteur]].
-import { App, FuzzySuggestModal, Modal, Setting } from "obsidian";
+import { App, Modal, Setting, TFile } from "obsidian";
 import { t } from "./i18n";
-import { Band, defaultConfig, NumberAlign, NumberPlace, NumberShape, PageConfig, parseZone, SIZE_CODES, SizeCode, VARIABLES, Zones } from "./page-config";
+import { Band, defaultConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, NumberAlign, NumberPlace, NumberShape, PageConfig, parseZone, SIZE_CODES, SizeCode, VARIABLES, ZONE_MAX_LINES, Zones } from "./page-config";
 
 export type PageTab = `header` | `footer` | `numbering`;
 
@@ -15,25 +15,69 @@ export interface PageModalHost {
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg|bmp|avif)$/i;
 
-// Images du coffre, et dessins Excalidraw (leur export image est utilise a la composition).
-class ImageSuggest extends FuzzySuggestModal<string> {
+const IMAGE_LIMIT = 60;
+
+// Fichier du coffre designe par la cible d'une image de zone ; un dessin Excalidraw est lu par son export image.
+function imageFile(app: App, target: string): TFile | null {
+  const names = /\.excalidraw$/i.test(target) ? [`${target}.svg`, `${target}.png`] : [target];
+  for (const name of names) {
+    const f = app.metadataCache.getFirstLinkpathDest(name, ``);
+    if (f) return f;
+  }
+  return null;
+}
+
+// Choix d'une image ou d'un dessin parmi tous ceux du coffre : recherche par nom, vignettes.
+class ImagePicker extends Modal {
   constructor(app: App, private onPick: (target: string) => void) {
     super(app);
-    this.setPlaceholder(t(`Choisir une image ou un dessin`));
   }
-  getItems(): string[] {
-    const out: string[] = [];
+
+  private items(): { target: string; file: TFile }[] {
+    const out: { target: string; file: TFile }[] = [];
     for (const f of this.app.vault.getFiles()) {
-      if (IMAGE_EXT.test(f.name) && !/\.excalidraw\.(svg|png)$/i.test(f.name)) out.push(f.name);
-      else if (/\.excalidraw\.md$/i.test(f.name)) out.push(f.name.replace(/\.md$/i, ``));
+      if (/\.excalidraw\.(svg|png)$/i.test(f.name)) continue;
+      if (IMAGE_EXT.test(f.name)) out.push({ target: f.name, file: f });
+      else if (/\.excalidraw\.md$/i.test(f.name)) {
+        const target = f.name.replace(/\.md$/i, ``);
+        const rendered = imageFile(this.app, target);
+        if (rendered) out.push({ target, file: rendered });
+      }
     }
-    return out.sort((a, b) => a.localeCompare(b));
+    return out.sort((a, b) => a.target.localeCompare(b.target));
   }
-  getItemText(item: string): string {
-    return item;
-  }
-  onChooseItem(item: string): void {
-    this.onPick(item);
+
+  onOpen(): void {
+    this.titleEl.setText(t(`Choisir une image ou un dessin`));
+    this.modalEl.addClass(`mmw-pmodal`);
+    const { contentEl } = this;
+    contentEl.empty();
+    const all = this.items();
+    const search = contentEl.createEl(`input`, { type: `text`, cls: `mmw-ipick-search` });
+    search.placeholder = t(`Rechercher dans le coffre`);
+    const info = contentEl.createDiv({ cls: `mmw-pnote` });
+    const grid = contentEl.createDiv({ cls: `mmw-ipick-grid` });
+    const paint = (): void => {
+      grid.empty();
+      const q = search.value.trim().toLowerCase();
+      const found = all.filter((i) => q === `` || i.target.toLowerCase().includes(q));
+      info.setText(found.length > IMAGE_LIMIT ? `${found.length} / ${all.length} : ${t(`affinez la recherche pour voir les autres.`)}` : `${found.length} / ${all.length}`);
+      for (const item of found.slice(0, IMAGE_LIMIT)) {
+        const card = grid.createEl(`button`, { cls: `mmw-ipick-card` });
+        card.type = `button`;
+        const img = card.createEl(`img`);
+        img.src = this.app.vault.getResourcePath(item.file);
+        img.loading = `lazy`;
+        card.createDiv({ cls: `mmw-ipick-name`, text: item.target });
+        card.addEventListener(`click`, () => {
+          this.close();
+          this.onPick(item.target);
+        });
+      }
+    };
+    search.addEventListener(`input`, paint);
+    paint();
+    search.focus();
   }
 }
 
@@ -42,7 +86,7 @@ const SIZE_LABEL: Record<SizeCode, string> = { xs: `XS`, s: `S`, m: `M`, l: `L` 
 export class PageModal extends Modal {
   private config: PageConfig;
   private tab: PageTab;
-  private lastInput: HTMLInputElement | null = null;
+  private lastInput: HTMLTextAreaElement | null = null;
 
   constructor(app: App, private host: PageModalHost, tab: PageTab = `header`) {
     super(app);
@@ -103,12 +147,7 @@ export class PageModal extends Modal {
 
   private renderBand(parent: HTMLElement, which: `header` | `footer`): void {
     const band: Band = this.config[which];
-    new Setting(parent).setName(which === `header` ? t(`Afficher l'en-tête`) : t(`Afficher le pied de page`)).addToggle((x) =>
-      x.setValue(band.enabled).onChange((v) => {
-        band.enabled = v;
-        this.save();
-      })
-    );
+    parent.createDiv({ cls: `mmw-pnote`, text: which === `header` ? t(`L'en-tête apparaît dès qu'une zone est remplie.`) : t(`Le pied de page apparaît dès qu'une zone est remplie.`) });
     new Setting(parent).setName(t(`Filet fin entre le texte et la page`)).addToggle((x) =>
       x.setValue(band.rule).onChange((v) => {
         band.rule = v;
@@ -159,7 +198,7 @@ export class PageModal extends Modal {
       if (select.value !== ``) this.insert(`{${select.value}}`);
       select.value = ``;
     });
-    button(t(`Image`), t(`Insérer une image ou un dessin`), () => new ImageSuggest(this.app, (target) => this.insert(`![[${target}|14]]`)).open());
+    button(t(`Image`), t(`Insérer une image ou un dessin`), () => new ImagePicker(this.app, (target) => this.insert(`![[${target}]]`)).open());
   }
 
   private zones(parent: HTMLElement, title: string, zones: Zones): void {
@@ -169,17 +208,30 @@ export class PageModal extends Modal {
     const paint = (): void => {
       preview.empty();
       for (const key of [`left`, `center`, `right`] as const) {
-        const cell = preview.createDiv({ cls: `mmw-ppreview-${key}` });
-        for (const tok of parseZone(zones[key])) {
-          if (tok.kind === `image`) {
-            cell.createSpan({ cls: `mmw-ppreview-image`, text: `[${tok.target}]` });
-            continue;
+        const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${key}` });
+        for (const line of zones[key].split(/\r?\n/).slice(0, ZONE_MAX_LINES)) {
+          const row = cell.createDiv({ cls: `mmw-ppreview-line` });
+          for (const tok of parseZone(line)) {
+            if (tok.kind === `image`) {
+              const file = imageFile(this.app, tok.target);
+              if (!file) {
+                row.createSpan({ cls: `mmw-ppreview-image`, text: `[${tok.target}]` });
+                continue;
+              }
+              const img = row.createEl(`img`, { cls: `mmw-ppreview-img` });
+              img.src = this.app.vault.getResourcePath(file);
+              // Meme regle que l'export : largeur demandee en pixels, au plus le maximum permis.
+              if (tok.width) img.style.width = `${Math.min(tok.width, IMAGE_MAX_WIDTH_PX)}px`;
+              img.style.maxWidth = `${IMAGE_MAX_WIDTH_PX}px`;
+              img.style.maxHeight = `${IMAGE_MAX_HEIGHT_PX}px`;
+              continue;
+            }
+            const sample = tok.kind === `variable` ? this.sample(tok.name) : tok.text;
+            const span = row.createSpan({ text: sample });
+            if (tok.bold) span.style.fontWeight = `700`;
+            if (tok.italic) span.style.fontStyle = `italic`;
+            span.style.fontSize = `${{ xs: 0.7, s: 0.85, m: 1, l: 1.2 }[tok.size]}em`;
           }
-          const sample = tok.kind === `variable` ? this.sample(tok.name) : tok.text;
-          const span = cell.createSpan({ text: sample });
-          if (tok.bold) span.style.fontWeight = `700`;
-          if (tok.italic) span.style.fontStyle = `italic`;
-          span.style.fontSize = `${{ xs: 0.7, s: 0.85, m: 1, l: 1.2 }[tok.size]}em`;
         }
       }
     };
@@ -187,7 +239,8 @@ export class PageModal extends Modal {
     for (const key of [`left`, `center`, `right`] as const) {
       const box = grid.createDiv({ cls: `mmw-pzone` });
       box.createDiv({ cls: `mmw-pzone-label`, text: labels[key] });
-      const input = box.createEl(`input`, { type: `text`, cls: `mmw-pzone-input` });
+      const input = box.createEl(`textarea`, { cls: `mmw-pzone-input` });
+      input.rows = 3;
       input.value = zones[key];
       input.spellcheck = false;
       input.addEventListener(`focus`, () => (this.lastInput = input));

@@ -5,7 +5,7 @@ import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
-import { configImages, findPageConfig } from "./page-config";
+import { configImages, findPageConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX } from "./page-config";
 import type { MathRenderer } from "./script-formulas";
 import type { MmSettings } from "./settings";
 
@@ -72,14 +72,14 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
   // Images de l'en-tete et du pied de page. Un dessin Excalidraw est lu par son export image (.excalidraw.svg ou .excalidraw.png).
   const found = findPageConfig(text);
   if (found) {
-    for (const { target, height } of configImages(found.config)) {
+    for (const { target, width } of configImages(found.config)) {
       if (images.has(target) || isWebTarget(target)) continue;
       const candidates = /\.excalidraw$/i.test(target) ? [`${target}.svg`, `${target}.png`] : [target];
       for (const name of candidates) {
         const file = fileFor(app, name, sourcePath);
         if (!file || !isImageTarget(file.name)) continue;
         try {
-          const asset = await loadOne(app, file, undefined, { maxWidth: height * 40, maxHeight: height * 4 }, urls);
+          const asset = await loadOne(app, file, width, { maxWidth: IMAGE_MAX_WIDTH_PX * 0.75, maxHeight: IMAGE_MAX_HEIGHT_PX * 0.75 }, urls);
           if (asset) {
             images.set(target, asset);
             break;

@@ -15,7 +15,6 @@ export interface Zones {
 }
 
 export interface Band {
-  enabled: boolean;
   // Zones des pages de droite (recto), ou de toutes les pages.
   zones: Zones;
   // Pages de gauche differentes de celles de droite : `verso` donne les zones des pages de gauche.
@@ -55,7 +54,7 @@ export type Variable = (typeof VARIABLES)[number];
 const emptyZones = (): Zones => ({ left: ``, center: ``, right: `` });
 
 export function defaultBand(): Band {
-  return { enabled: false, zones: emptyZones(), mirror: false, verso: emptyZones(), rule: false };
+  return { zones: emptyZones(), mirror: false, verso: emptyZones(), rule: false };
 }
 
 export function defaultConfig(): PageConfig {
@@ -80,7 +79,7 @@ function zonesOf(v: unknown): Zones {
 
 function bandOf(v: unknown): Band {
   const r = isObject(v) ? v : {};
-  return { enabled: flag(r.enabled, false), zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false) };
+  return { zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false) };
 }
 
 // Reglages lus dans un objet JSON quelconque : tout ce qui est invalide est remplace par la valeur par defaut.
@@ -104,6 +103,21 @@ export function sanitizeConfig(raw: unknown): PageConfig {
     skipFirst: flag(r.skipFirst, false),
   };
 }
+
+// Une bande (en-tete ou pied de page) existe des qu'une de ses zones est remplie : il n'y a pas d'interrupteur.
+export function bandUsed(band: Band): boolean {
+  const filled = (z: Zones): boolean => [z.left, z.center, z.right].some((s) => s.trim() !== ``);
+  return filled(band.zones) || (band.mirror && filled(band.verso));
+}
+
+// Au moins un des trois elements (en-tete, pied de page, numerotation) est actif.
+export const anyDecor = (c: PageConfig): boolean => bandUsed(c.header) || bandUsed(c.footer) || c.numbering.enabled;
+
+// Limites des images de l'en-tete et du pied de page, en pixels (96 par pouce) : elles tiennent dans la marge de la page.
+export const IMAGE_MAX_WIDTH_PX = 300;
+export const IMAGE_MAX_HEIGHT_PX = 60;
+// Nombre maximal de lignes d'une zone.
+export const ZONE_MAX_LINES = 3;
 
 export const sameConfig = (a: PageConfig, b: PageConfig): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -184,7 +198,7 @@ export function mirrorZones(z: Zones): Zones {
 export type ZoneToken =
   | { kind: `text`; text: string; bold: boolean; italic: boolean; size: SizeCode }
   | { kind: `variable`; name: Variable; bold: boolean; italic: boolean; size: SizeCode }
-  | { kind: `image`; target: string; height: number };
+  | { kind: `image`; target: string; width: number | undefined };
 
 const TOKEN_RE = /!\[\[([^\]|]+)(?:\|(\d+(?:\.\d+)?))?\]\]|\*\*|\*|\{(xs|s|m|l)\}|\{(document|chapter|section|author|date|page|pages)\}/g;
 
@@ -201,7 +215,7 @@ export function parseZone(source: string, base: SizeCode = `m`): ZoneToken[] {
   for (let m = TOKEN_RE.exec(source); m; m = TOKEN_RE.exec(source)) {
     pushText(source.slice(last, m.index));
     last = m.index + m[0].length;
-    if (m[1] !== undefined) out.push({ kind: `image`, target: m[1].trim(), height: m[2] ? Number(m[2]) : 14 });
+    if (m[1] !== undefined) out.push({ kind: `image`, target: m[1].trim(), width: m[2] ? Number(m[2]) : undefined });
     else if (m[0] === `**`) bold = !bold;
     else if (m[0] === `*`) italic = !italic;
     else if (m[3] !== undefined) size = m[3] as SizeCode;
@@ -213,10 +227,10 @@ export function parseZone(source: string, base: SizeCode = `m`): ZoneToken[] {
 }
 
 // Cibles des images ecrites dans les zones (pour les charger avant la composition).
-export function configImages(config: PageConfig): { target: string; height: number }[] {
-  const out: { target: string; height: number }[] = [];
+export function configImages(config: PageConfig): { target: string; width: number | undefined }[] {
+  const out: { target: string; width: number | undefined }[] = [];
   const all = [config.header, config.footer].flatMap((b) => [b.zones, b.verso]).flatMap((z) => [z.left, z.center, z.right]);
-  for (const src of all) for (const t of parseZone(src)) if (t.kind === `image`) out.push({ target: t.target, height: t.height });
+  for (const src of all) for (const t of parseZone(src)) if (t.kind === `image`) out.push({ target: t.target, width: t.width });
   return out;
 }
 
