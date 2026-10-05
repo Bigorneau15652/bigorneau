@@ -237,3 +237,26 @@ test(`les cadres et l'eloignement sont relus tels qu'ils ont ete ecrits, et born
   assert.equal(bad.footer.frames.left.shape, `none`);
   assert.equal(sanitizeConfig({}).header.distance, null);
 });
+
+test(`les cadres d'une bande ont la meme hauteur et contiennent les images, meme si les zones n'ont pas le meme nombre de lignes`, () => {
+  const frame = { shape: `rounded` as const, fill: `#ffd43b`, stroke: ``, color: ``, padding: 4 };
+  const text = noteWith((c) => {
+    c.header.zones.left = `Logo ![[logo.png|100]]`;
+    c.header.zones.center = `Titre\nsecond`;
+    c.header.frames.left = { ...frame };
+    c.header.frames.center = { ...frame };
+    c.header.distance = 0;
+  }, `# Un\n\nTexte.`);
+  const images = new Map([[`logo.png`, { naturalWidth: 100, naturalHeight: 100, pixelWidth: 100, pixelHeight: 100, kind: `jpeg` as const, data: new Uint8Array(0) }]]);
+  const items = composeNote(text, `N.md`, undefined, undefined, { images }).pages[0].decor ?? [];
+  const frames = items.filter((i) => i.kind === `shape`);
+  assert.equal(frames.length, 2);
+  const [a, b] = frames;
+  assert.ok(a.kind === `shape` && b.kind === `shape`);
+  if (a.kind === `shape` && b.kind === `shape`) {
+    assert.ok(Math.abs(a.y - b.y) < 1e-6 && Math.abs(a.height - b.height) < 1e-6);
+    assert.ok(Math.abs(a.y) < 1e-6);
+    const img = items.find((i) => i.kind === `image`);
+    assert.ok(img && img.kind === `image` && img.y >= a.y + 4 - 1e-6 && img.y + img.height <= a.y + a.height);
+  }
+});
