@@ -1,4 +1,6 @@
 // Export de haute qualite : de la note au fichier PDF, sans rien qui depende d'Obsidian (se teste avec node --test).
+import { layoutDecor } from "./page-decor";
+import { findPageConfig } from "../page-config";
 import { buildExportDoc } from "./doc-tree";
 import { languageOf } from "./typeset";
 import { anchorPages, paginate, Page } from "./paginate";
@@ -18,6 +20,8 @@ export interface Composed {
 
 // Ce qui vient d'Obsidian avant la composition : images des figures et dessins des formules.
 export interface ComposeAssets {
+  // Date du jour ecrite dans la langue du document (variable {date} des en-tetes et pieds de page) ; par defaut, la date de l'appel.
+  date?: string;
   images?: Map<string, ImageAsset>;
   formulas?: Map<string, MathAsset>;
 }
@@ -98,6 +102,18 @@ export function composeNote(text: string, fileName: string, setup: PageSetup = A
     const pageOf = (a: string): number | undefined => found.get(a);
     typeset = typesetDoc(doc, setup, undefined, style, { ...options, pageOf });
     pages = paginate(typeset, setup, style);
+  }
+  // En-tete, pied de page et numero d'apres les reglages ecrits dans la note : ils remplacent ceux d'origine.
+  const found = findPageConfig(text);
+  if (found) {
+    const english = languageOf(doc.language) === `en`;
+    const date = assets.date ?? new Intl.DateTimeFormat(english ? `en-GB` : `fr-FR`, { dateStyle: `long` }).format(new Date());
+    const decor = layoutDecor(found.config, pages, { setup, title: doc.title, author: doc.author ?? ``, date, ...(images ? { images } : {}) });
+    pages = pages.map((p, i) => {
+      const { header: _header, footer: _footer, ...rest } = p;
+      return { ...rest, decor: decor.pages[i] };
+    });
+    for (const target of decor.missing) typeset.warnings.push(`image:${target}`);
   }
   return {
     typeset,

@@ -71,6 +71,33 @@ function mathOps(d: string): string {
   return out.join(` `);
 }
 
+// Couleur #rrggbb en trois nombres entre 0 et 1, comme les attend un operateur de couleur PDF.
+const hexOperands = (hex: string, _stroke = false): string => {
+  const n = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  return n.map((v) => num(v)).join(` `);
+};
+
+// Contour d'une forme (cercle, carre, carre aux coins arrondis) dont le coin bas gauche est (x, y), en coordonnees PDF.
+const shapePath = (shape: `circle` | `square` | `rounded`, x: number, y: number, w: number, h: number): string => {
+  if (shape === `square`) return `${num(x)} ${num(y)} ${num(w)} ${num(h)} re`;
+  // Cercle ou coins arrondis : quatre courbes de Bezier (constante 0,5523 pour un quart de cercle).
+  const r = shape === `circle` ? Math.min(w, h) / 2 : Math.min(w, h) * 0.22;
+  const k = 0.5523 * r;
+  const x2 = x + w;
+  const y2 = y + h;
+  return [
+    `${num(x + r)} ${num(y)} m`,
+    `${num(x2 - r)} ${num(y)} l`,
+    `${num(x2 - r + k)} ${num(y)} ${num(x2)} ${num(y + r - k)} ${num(x2)} ${num(y + r)} c`,
+    `${num(x2)} ${num(y2 - r)} l`,
+    `${num(x2)} ${num(y2 - r + k)} ${num(x2 - r + k)} ${num(y2)} ${num(x2 - r)} ${num(y2)} c`,
+    `${num(x + r)} ${num(y2)} l`,
+    `${num(x + r - k)} ${num(y2)} ${num(x)} ${num(y2 - r + k)} ${num(x)} ${num(y2 - r)} c`,
+    `${num(x)} ${num(y + r)} l`,
+    `${num(x)} ${num(y + r - k)} ${num(x + r - k)} ${num(y)} ${num(x + r)} ${num(y)} c h`,
+  ].join(` `);
+};
+
 const hex4 = (n: number): string => n.toString(16).padStart(4, `0`);
 
 function pdfDate(d: Date): string {
@@ -323,6 +350,19 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       const w = natural([{ text: page.footer, style: `regular` }], fs, 0);
       const boxTop = H - 30 - 1.14 * fs;
       drawRuns(ops, links, [{ text: page.footer, style: `regular` }], (setup.width - w) / 2, boxTop + 0.894 * fs, fs, 0, `0.4 0.4 0.4`);
+    }
+    // En-tete, pied de page et numero composes d'apres les reglages de la note.
+    for (const item of page.decor ?? []) {
+      if (item.kind === `text`) {
+        drawRuns(ops, links, [{ text: item.text, style: item.style }], item.x, item.baseline, item.size, 0, hexOperands(item.color));
+      } else if (item.kind === `image`) {
+        const name = imageName(item.target);
+        if (name) ops.push(`q ${num(item.width)} 0 0 ${num(item.height)} ${num(item.x)} ${num(H - item.y - item.height)} cm /${name} Do Q`);
+      } else if (item.kind === `rule`) {
+        ops.push(`q 0.6 G 0.4 w ${num(item.x1)} ${num(H - item.y)} m ${num(item.x2)} ${num(H - item.y)} l S Q`);
+      } else {
+        ops.push(`q ${hexOperands(item.fill)} rg ${hexOperands(item.stroke, true)} RG 0.8 w ${shapePath(item.shape, item.x, H - item.y - item.height, item.width, item.height)} B Q`);
+      }
     }
     pageContents.push({ ops, links });
   });

@@ -5,6 +5,7 @@
 // page sont reservees en bas de la page de leur appel, et celles qui ne tiennent pas se prolongent sur la page suivante.
 // Reimplementation d'apres la these de Plass (1981) et le constructeur de pages de TeX, sans reprise de code.
 import { badness } from "./line-break";
+import type { DecorItem } from "./page-decor";
 import { INF_PENALTY } from "./tex-params";
 import { FloatBlock, FootnoteBlock, PageSetup, PageStyle, Row, TypesetDoc } from "./typeset";
 
@@ -20,6 +21,8 @@ export interface Page {
   bottomFloats?: Row[];
   header?: string;
   footer?: string;
+  // En-tete, pied de page et numero composes d'apres les reglages de la note (voir page-decor.ts) : ils remplacent header et footer.
+  decor?: DecorItem[];
 }
 
 // Hauteur reservee au filet de separation des notes (filet et espaces autour).

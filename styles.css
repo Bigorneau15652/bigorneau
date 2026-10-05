@@ -1640,6 +1640,23 @@
   color: #666;
 }
 
+/* En-tete, pied de page et numero composes d'apres les reglages de la note. */
+.mmw-decor {
+  position: absolute;
+  margin: 0;
+  white-space: nowrap;
+  color: #222;
+}
+
+.mmw-decor-rule {
+  height: 0;
+  border-top: 0.4pt solid #999;
+}
+
+.mmw-decor-shape {
+  box-sizing: border-box;
+}
+
 /* Panneau de boutons a droite de la zone de redaction, au milieu de la hauteur. */
 .mmw-has-panel {
   position: relative;
