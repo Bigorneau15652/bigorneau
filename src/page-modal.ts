@@ -220,10 +220,15 @@ export class PageModal extends Modal {
               }
               const img = row.createEl(`img`, { cls: `mmw-ppreview-img` });
               img.src = this.app.vault.getResourcePath(file);
-              // Meme regle que l'export : largeur demandee en pixels, au plus le maximum permis.
-              if (tok.width) img.style.width = `${Math.min(tok.width, IMAGE_MAX_WIDTH_PX)}px`;
-              img.style.maxWidth = `${IMAGE_MAX_WIDTH_PX}px`;
-              img.style.maxHeight = `${IMAGE_MAX_HEIGHT_PX}px`;
+              // Meme regle que l'export : largeur demandee en pixels, ramenee au maximum permis en gardant les proportions.
+              const requested = tok.width;
+              img.addEventListener(`load`, () => {
+                const ratio = img.naturalHeight > 0 && img.naturalWidth > 0 ? img.naturalHeight / img.naturalWidth : 1;
+                let w = Math.min(requested && requested > 0 ? requested : img.naturalWidth, IMAGE_MAX_WIDTH_PX);
+                if (w * ratio > IMAGE_MAX_HEIGHT_PX) w = IMAGE_MAX_HEIGHT_PX / ratio;
+                img.style.width = `${w}px`;
+                img.style.height = `${w * ratio}px`;
+              });
               continue;
             }
             const sample = tok.kind === `variable` ? this.sample(tok.name) : tok.text;
