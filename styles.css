@@ -1971,9 +1971,13 @@
   position: relative;
 }
 
-.mmw-t-host.mmw-t-header table th,
-table.mmw-t-header th {
-  background: #3b3f45;
+/* Toute la ligne d'en-tete, quelle que soit la balise des cellules (th ou td, vides ou non) : la ligne du thead, ou la premiere ligne
+   quand le tableau n'a pas de thead. */
+.mmw-t-host.mmw-t-header table thead tr > *,
+.mmw-t-host.mmw-t-header table:not(:has(thead)) tr:first-child > *,
+table.mmw-t-header thead tr > *,
+table.mmw-t-header:not(:has(thead)) tr:first-child > * {
+  background: #6a737d;
   color: #fff;
 }
 
