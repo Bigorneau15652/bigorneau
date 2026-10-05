@@ -162,8 +162,8 @@ export class ExportPreviewView extends ItemView {
       el.style.top = `${item.y}pt`;
       el.style.width = `${item.width}pt`;
       el.style.height = `${item.height}pt`;
-      el.style.background = item.fill;
-      el.style.border = `0.8pt solid ${item.stroke}`;
+      el.style.background = item.fill === `` ? `transparent` : item.fill;
+      el.style.border = item.stroke === `` ? `none` : `0.8pt solid ${item.stroke}`;
       el.style.borderRadius = item.shape === `circle` ? `50%` : item.shape === `rounded` ? `22%` : `0`;
     }
   }
@@ -289,7 +289,7 @@ export class ExportPreviewView extends ItemView {
     this.releaseImages();
     this.urls = loaded.urls;
     this.images = loaded.images;
-    const composed = composeNote(text, file.name, undefined, pageStyleOf(this.plugin.settings), { images: loaded.images, formulas: loaded.formulas });
+    const composed = composeNote(text, file.name, undefined, pageStyleOf(this.plugin.settings), { images: loaded.images, formulas: loaded.formulas, created: file.stat.ctime, modified: file.stat.mtime, defaultAuthor: this.plugin.settings.exportAuthor });
     const typeset = composed.typeset;
     const pages = composed.pages;
     const s = typeset.stats;

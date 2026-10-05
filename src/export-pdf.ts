@@ -35,7 +35,7 @@ export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile)
     // Laisse le temps d'afficher le message avant le calcul.
     await new Promise((r) => window.setTimeout(r, 30));
     const { images, formulas, urls } = await loadAssets(plugin.app, text, file.name, file.path, plugin.scripts.service<MathRenderer>(MATH_SERVICE));
-    const composed = composeNote(text, file.name, undefined, pageStyleOf(plugin.settings), { images, formulas });
+    const composed = composeNote(text, file.name, undefined, pageStyleOf(plugin.settings), { images, formulas, created: file.stat.ctime, modified: file.stat.mtime, defaultAuthor: plugin.settings.exportAuthor });
     for (const u of urls) URL.revokeObjectURL(u);
     const pdf = await composeToPdf(composed, {
       defaultAuthor: plugin.settings.exportAuthor,

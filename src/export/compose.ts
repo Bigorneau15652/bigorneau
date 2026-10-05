@@ -22,6 +22,11 @@ export interface Composed {
 export interface ComposeAssets {
   // Date du jour ecrite dans la langue du document (variable {date} des en-tetes et pieds de page) ; par defaut, la date de l'appel.
   date?: string;
+  // Dates de creation et de derniere modification du fichier de la note (millisecondes), ecrites par composeNote dans la langue du document.
+  created?: number;
+  modified?: number;
+  // Auteur a utiliser quand la note n'en indique pas (reglage du plugin).
+  defaultAuthor?: string;
   images?: Map<string, ImageAsset>;
   formulas?: Map<string, MathAsset>;
 }
@@ -107,8 +112,10 @@ export function composeNote(text: string, fileName: string, setup: PageSetup = A
   const found = findPageConfig(text);
   if (found) {
     const english = languageOf(doc.language) === `en`;
-    const date = assets.date ?? new Intl.DateTimeFormat(english ? `en-GB` : `fr-FR`, { dateStyle: `long` }).format(new Date());
-    const decor = layoutDecor(found.config, pages, { setup, title: doc.title, author: doc.author ?? ``, date, ...(images ? { images } : {}) });
+    const format = new Intl.DateTimeFormat(english ? `en-GB` : `fr-FR`, { dateStyle: `long` });
+    const date = assets.date ?? format.format(new Date());
+    const dated = (ms: number | undefined): string => (ms === undefined ? `` : format.format(new Date(ms)));
+    const decor = layoutDecor(found.config, pages, { setup, title: doc.title, author: doc.author ?? assets.defaultAuthor ?? ``, date, created: dated(assets.created), modified: dated(assets.modified), ...(images ? { images } : {}) });
     pages = pages.map((p, i) => {
       const { header: _header, footer: _footer, ...rest } = p;
       return { ...rest, decor: decor.pages[i] };

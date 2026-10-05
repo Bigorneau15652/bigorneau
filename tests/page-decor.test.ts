@@ -87,6 +87,7 @@ test(`le bord exterieur est ecrit a 90 degres : il descend a droite des pages de
   const text = noteWith((c) => {
     c.edge.zones.left = `{chapter}`;
     c.edge.zones.right = `{page}`;
+    c.edge.pageUpright = false;
     c.edge.pageShape.shape = `circle`;
   }, longBody());
   const pages = composeNote(text, `N.md`).pages;
@@ -113,4 +114,46 @@ test(`le numero de page peut se placer dans l'en-tete, avec la forme et les coul
   assert.ok(shape >= 0 && number > shape);
   const n = items[number];
   assert.ok(n.kind === `text` && n.color === `#ff0000` && n.style === `bold`);
+});
+
+test(`le numero de page du bord exterieur reste droit : forme et chiffre sont poses hors du groupe tourne`, () => {
+  const text = noteWith((c) => {
+    c.edge.zones.right = `{page}`;
+    c.edge.pageShape.shape = `circle`;
+  }, longBody());
+  const pages = composeNote(text, `N.md`).pages;
+  for (const [i, odd] of [[0, true], [1, false]] as const) {
+    const items = pages[i].decor ?? [];
+    const shape = items.find((x) => x.kind === `shape`);
+    const num = items.find((x) => x.kind === `text`);
+    assert.ok(shape && shape.kind === `shape` && num && num.kind === `text`);
+    if (shape && shape.kind === `shape`) {
+      const cx = shape.x + shape.width / 2;
+      // Dans la marge exterieure, au bas du texte (zone Bas).
+      assert.ok(odd ? cx > 595.28 - 72 : cx < 72);
+      assert.ok(shape.y > 841.89 / 2);
+    }
+  }
+});
+
+test(`la forme du numero peut etre sans remplissage et sans contour`, async () => {
+  const text = noteWith((c) => {
+    c.footer.zones.center = `{page}`;
+    c.footer.pageShape = { shape: `circle`, fill: ``, stroke: `#ff0000`, color: `#000000` };
+  }, `# Un\n\nTexte.`);
+  const items = composeNote(text, `N.md`).pages[0].decor ?? [];
+  const shape = items.find((i) => i.kind === `shape`);
+  assert.ok(shape && shape.kind === `shape` && shape.fill === `` && shape.stroke === `#ff0000`);
+  const pdf = Buffer.from(await composeToPdf(composeNote(text, `N.md`), REQ)).toString(`latin1`);
+  assert.ok(pdf.startsWith(`%PDF`));
+});
+
+test(`les dates de creation et de modification et l'auteur par defaut sont disponibles dans les zones`, () => {
+  const text = noteWith((c) => {
+    c.header.zones.left = `{created}`;
+    c.header.zones.center = `{modified}`;
+    c.header.zones.right = `{author}`;
+  }, `# Un\n\nTexte.`);
+  const texts = (composeNote(text, `N.md`, undefined, undefined, { created: Date.UTC(2026, 0, 5, 12), modified: Date.UTC(2026, 8, 30, 12), defaultAuthor: `Ada` }).pages[0].decor ?? []).flatMap((i) => (i.kind === `text` ? [i.text] : []));
+  assert.deepEqual(texts, [`5 janvier 2026`, `30 septembre 2026`, `Ada`]);
 });

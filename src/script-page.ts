@@ -3,10 +3,11 @@
 // Desactive, il ne change rien : l'export reste celui d'avant, avec ses reglages generaux.
 import { applyPageConfig, readPageConfig } from "./page-apply";
 import { anyDecor } from "./page-config";
-import { PageModal } from "./page-modal";
+import { PageModal, PageModalHost } from "./page-modal";
 import type { OfficialScript } from "./scripts";
 
-export const PAGE_SCRIPT: OfficialScript = {
+// `defaultAuthor` donne le reglage « Auteur du PDF » du plugin, propose quand la note n'a pas de propriete author.
+export const createPageScript = (defaultAuthor: () => string): OfficialScript => ({
   origin: `builtin`,
   id: `page-layout`,
   name: { fr: `Mise en page`, en: `Page layout` },
@@ -25,10 +26,25 @@ export const PAGE_SCRIPT: OfficialScript = {
       icon: [`panel-top`, `layout-template`, `file-text`],
       needsEditor: true,
       active: ({ editor }) => (editor ? anyDecor(readPageConfig(editor.getValue())) : false),
-      run: ({ editor }) => {
+      run: ({ editor, view }) => {
         if (!editor) return;
-        new PageModal(api.app, { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) }).open();
+        const file = view?.file ?? null;
+        const host: PageModalHost = { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) };
+        if (file) {
+          host.author = {
+            get: () => {
+              const value = api.app.metadataCache.getFileCache(file)?.frontmatter?.author;
+              return typeof value === `string` ? value : ``;
+            },
+            fallback: defaultAuthor(),
+            set: (value) => void api.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+              if (value === ``) delete fm.author;
+              else fm.author = value;
+            }),
+          };
+        }
+        new PageModal(api.app, host).open();
       },
     });
   },
-};
+});

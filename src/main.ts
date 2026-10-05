@@ -15,7 +15,7 @@ import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
 import { runScript } from "./script-runner";
 import { FORMULAS_SCRIPT } from "./script-formulas";
-import { PAGE_SCRIPT } from "./script-page";
+import { createPageScript } from "./script-page";
 import { buildExternal, ExternalScript, ScriptManager } from "./scripts";
 import { ScriptStore } from "./script-store";
 import { ScriptsModal } from "./scripts-modal";
@@ -56,7 +56,7 @@ export default class MindmapWritingPlugin extends Plugin {
       saveState: () => void this.saveSettings(false),
     },
     { enabled: {}, approved: {} },
-    [FORMULAS_SCRIPT, PAGE_SCRIPT]
+    [FORMULAS_SCRIPT, createPageScript(() => this.settings.exportAuthor)]
   );
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];

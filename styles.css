@@ -2283,3 +2283,73 @@ table.mmw-t-equal td {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
+
+/* Reglages de page : chapitre a deplier du numero de page. */
+.mmw-pdetails {
+  margin-top: 10px;
+}
+
+.mmw-pdetails > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Fenetre d'export : navigation dans les dossiers du coffre. */
+.mmw-xmodal {
+  width: 640px;
+  max-width: 94vw;
+}
+
+.mmw-xcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 4px 0 6px;
+}
+
+.mmw-xcrumb {
+  height: auto;
+  padding: 2px 6px;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-accent);
+}
+
+.mmw-xlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 80px;
+  max-height: 36vh;
+  margin-bottom: 8px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+}
+
+.mmw-xrow {
+  justify-content: flex-start;
+  height: auto;
+  padding: 4px 8px;
+  box-shadow: none;
+  background: transparent;
+  text-align: left;
+}
+
+.mmw-xrow:hover {
+  background: var(--background-modifier-hover);
+}
+
+.mmw-xfolder {
+  font-weight: 600;
+}
+
+.mmw-xpdf {
+  color: var(--text-muted);
+}
+
+.mmw-xup {
+  font-style: italic;
+}

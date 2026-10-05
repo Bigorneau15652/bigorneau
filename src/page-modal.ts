@@ -1,9 +1,9 @@
 // Fenetre des reglages de page d'une note : en-tete, pied de page et numerotation, chacun sur son onglet. Chaque modification est
 // ecrite tout de suite dans la note (ligne de commentaire sous les proprietes). Les zones sont des textes avec un balisage simple,
 // montre dans la ligne de formule : **gras**, *italique*, {xs} {s} {m} {l}, {page}, ![[image.png|hauteur]].
-import { App, Modal, Setting, TFile } from "obsidian";
+import { App, ColorComponent, Modal, Setting, TextComponent, TFile } from "obsidian";
 import { t } from "./i18n";
-import { Band, defaultConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, NumberShape, PageConfig, parseZone, SIZE_CODES, SizeCode, VARIABLES, ZONE_MAX_LINES, Zones } from "./page-config";
+import { Band, defaultConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
 
 export type PageTab = `header` | `footer` | `edge`;
 
@@ -11,6 +11,8 @@ export interface PageModalHost {
   // Reglages actuels de la note, et ecriture des nouveaux.
   read(): PageConfig;
   write(config: PageConfig): void;
+  // Auteur : valeur de la propriete `author` de la note, repli propose quand elle est vide (reglage du plugin), ecriture de la propriete.
+  author?: { get(): string; fallback: string; set(value: string): void };
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg|bmp|avif)$/i;
@@ -122,6 +124,16 @@ export class PageModal extends Modal {
         this.render();
       });
     }
+    const author = this.host.author;
+    if (author) {
+      new Setting(contentEl)
+        .setName(t(`Auteur de la note`))
+        .setDesc(author.fallback !== `` ? t(`Écrit dans la propriété author de la note. Si elle est vide, le réglage Auteur du PDF est utilisé : {0}.`, author.fallback) : t(`Écrit dans la propriété author de la note. Si elle est vide, le réglage Auteur du PDF des réglages du plugin est utilisé.`))
+        .addText((x) => {
+          x.setValue(author.get()).setPlaceholder(author.fallback);
+          x.inputEl.addEventListener(`change`, () => author.set(x.getValue().trim()));
+        });
+    }
     new Setting(contentEl)
       .setName(t(`Pas d'en-tête, de pied de page ni de bord sur la première page`))
       .setDesc(t(`Pour une page de garde.`))
@@ -170,17 +182,19 @@ export class PageModal extends Modal {
         })
       );
     this.toolbar(parent);
+    parent.createDiv({ cls: `mmw-pnote`, text: t(`Image : ![[nom.png|200]] fixe la largeur en pixels. Taille maximale : 300 pixels de large et 60 pixels de haut, les proportions sont conservées.`) });
     this.zones(parent, band.mirror ? t(`Pages de droite`) : t(`Toutes les pages`), band.zones, which === `edge`);
     if (band.mirror) this.zones(parent, t(`Pages de gauche`), band.verso, which === `edge`);
-    this.shapeSettings(parent, band);
+    this.shapeSettings(parent, band, which);
   }
 
-  // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande.
-  private shapeSettings(parent: HTMLElement, band: Band): void {
+  // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande : un chapitre a deplier.
+  private shapeSettings(parent: HTMLElement, band: Band, which: PageTab): void {
     const shape = band.pageShape;
-    parent.createDiv({ cls: `mmw-pzone-title`, text: t(`Numéro de page dans cette bande`) });
-    parent.createDiv({ cls: `mmw-pnote`, text: t(`Écrivez {page} dans une zone (liste Insérer une valeur) : la forme et les couleurs ci-dessous s'appliquent à chaque numéro de la bande.`) });
-    new Setting(parent).setName(t(`Forme derrière le numéro`)).addDropdown((d) =>
+    const details = parent.createEl(`details`, { cls: `mmw-pdetails` });
+    details.createEl(`summary`, { text: t(`Numéro de page dans cette bande`) });
+    details.createDiv({ cls: `mmw-pnote`, text: t(`Écrivez {page} dans une zone (liste Insérer une valeur) : la forme et les couleurs ci-dessous s'appliquent à chaque numéro de la bande.`) });
+    new Setting(details).setName(t(`Forme derrière le numéro`)).addDropdown((d) =>
       d
         .addOptions({ none: t(`Aucune`), circle: t(`Rond`), square: t(`Carré`), rounded: t(`Carré aux coins arrondis`) })
         .setValue(shape.shape)
@@ -189,17 +203,54 @@ export class PageModal extends Modal {
           this.save();
         })
     );
-    const color = (name: string, key: `fill` | `stroke` | `color`): void => {
-      new Setting(parent).setName(name).addColorPicker((c) =>
-        c.setValue(shape[key]).onChange((v) => {
-          shape[key] = v.toLowerCase();
-          this.save();
-        })
-      );
+    this.colorSetting(details, t(`Remplissage de la forme`), shape, `fill`, true);
+    this.colorSetting(details, t(`Contour de la forme`), shape, `stroke`, true);
+    this.colorSetting(details, t(`Couleur du numéro`), shape, `color`, false);
+    if (which === `edge`) {
+      new Setting(details)
+        .setName(t(`Numéro de page droit`))
+        .setDesc(t(`Le numéro reste horizontal sur le bord extérieur, même si le reste du texte est écrit à 90 degrés.`))
+        .addToggle((x) =>
+          x.setValue(band.pageUpright).onChange((v) => {
+            band.pageUpright = v;
+            this.save();
+          })
+        );
+    }
+  }
+
+  // Couleur choisie avec le sélecteur ou écrite en hexadécimal (#rrggbb) ; le bouton Aucune retire le remplissage ou le contour.
+  private colorSetting(parent: HTMLElement, name: string, shape: PageShape, key: `fill` | `stroke` | `color`, allowNone: boolean): void {
+    const setting = new Setting(parent).setName(name);
+    let picker: ColorComponent | null = null;
+    let field: TextComponent | null = null;
+    const show = (): void => {
+      field?.setValue(shape[key]);
+      if (shape[key] !== ``) picker?.setValue(shape[key]);
     };
-    color(t(`Couleur de fond de la forme`), `fill`);
-    color(t(`Couleur du contour de la forme`), `stroke`);
-    color(t(`Couleur du numéro`), `color`);
+    const apply = (v: string): void => {
+      shape[key] = v;
+      this.save();
+      show();
+    };
+    setting.addColorPicker((c) => {
+      picker = c;
+      c.setValue(shape[key] === `` ? `#ffffff` : shape[key]).onChange((v) => apply(v.toLowerCase()));
+    });
+    setting.addText((x) => {
+      field = x;
+      x.setPlaceholder(allowNone ? t(`aucun`) : `#rrggbb`).setValue(shape[key]);
+      x.inputEl.size = 9;
+      x.onChange((v) => {
+        const hex = normalizeHex(v);
+        if (hex !== null && (hex !== `` || allowNone)) {
+          shape[key] = hex;
+          this.save();
+          if (hex !== ``) picker?.setValue(hex);
+        }
+      });
+    });
+    if (allowNone) setting.addButton((b) => b.setButtonText(t(`Aucun`)).onClick(() => apply(``)));
   }
 
   // Barre de mise en forme : elle agit sur la derniere zone dans laquelle on a ecrit.
@@ -222,11 +273,13 @@ export class PageModal extends Modal {
       chapter: t(`Titre du chapitre`),
       section: t(`Titre de la section`),
       author: t(`Auteur`),
-      date: t(`Date`),
+      date: t(`Date du jour`),
+      created: t(`Date de création de la note`),
+      modified: t(`Date de dernière modification de la note`),
       page: t(`Numéro de page`),
       pages: t(`Nombre de pages`),
     };
-    for (const v of VARIABLES) select.createEl(`option`, { text: names[v], value: v });
+    for (const v of OFFERED_VARIABLES) select.createEl(`option`, { text: names[v], value: v });
     select.addEventListener(`change`, () => {
       if (select.value !== ``) this.insert(`{${select.value}}`);
       select.value = ``;
@@ -292,7 +345,7 @@ export class PageModal extends Modal {
   }
 
   private sample(name: string): string {
-    const values: Record<string, string> = { document: t(`Titre du document`), chapter: t(`Titre du chapitre`), section: t(`Titre de la section`), author: t(`Auteur`), date: t(`Date`), page: `1`, pages: `12` };
+    const values: Record<string, string> = { document: t(`Titre du document`), chapter: t(`Titre du chapitre`), section: t(`Titre de la section`), author: t(`Auteur`), date: t(`Date du jour`), created: t(`Date de création de la note`), modified: t(`Date de dernière modification de la note`), page: `1`, pages: `12` };
     return values[name] ?? ``;
   }
 

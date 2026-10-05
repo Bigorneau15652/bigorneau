@@ -32,6 +32,9 @@ export interface DecorContext {
   author: string;
   // Date du jour, deja ecrite dans la langue du document.
   date: string;
+  // Dates de creation et de derniere modification de la note, deja ecrites dans la langue du document.
+  created: string;
+  modified: string;
   images?: Map<string, ImageAsset>;
 }
 
@@ -68,11 +71,13 @@ function runningTitles(pages: Page[]): { chapter: string; section: string }[] {
 
 interface Piece {
   width: number;
+  // Vrai : le numero de page reste droit dans une bande tournee (il est pose a part, sans rotation).
+  upright?: boolean;
   item: (x: number, baseline: number) => DecorLeaf[];
 }
 
 // Morceaux d'une zone, avec leur largeur ; une image absente est signalee. Un {page} est entoure de la forme de la bande.
-function pieces(source: string, band: Band, values: PageValues, ctx: DecorContext, missing: Set<string>): Piece[] {
+function pieces(source: string, band: Band, rotated: boolean, values: PageValues, ctx: DecorContext, missing: Set<string>): Piece[] {
   const out: Piece[] = [];
   for (const t of parseZone(source)) {
     if (t.kind === `image`) {
@@ -94,9 +99,12 @@ function pieces(source: string, band: Band, values: PageValues, ctx: DecorContex
     if (t.kind === `variable` && t.name === `page`) {
       const shape = band.pageShape;
       const box = shape.shape === `none` ? 0 : Math.max(size * 2, w + size * 0.9);
-      const width = Math.max(w, box);
+      const upright = rotated && band.pageUpright;
+      // Droit dans une ligne tournee, le chiffre n'occupe sur la ligne que sa hauteur.
+      const width = upright ? Math.max(box, size * 1.2) : Math.max(w, box);
       out.push({
         width,
+        ...(upright ? { upright: true } : {}),
         item: (x, baseline) => {
           const cx = x + width / 2;
           const items: DecorLeaf[] = [];
@@ -112,12 +120,12 @@ function pieces(source: string, band: Band, values: PageValues, ctx: DecorContex
   return out;
 }
 
-function placeZone(source: string, band: Band, align: `left` | `center` | `right`, left: number, right: number, baseline: number, values: PageValues, ctx: DecorContext, missing: Set<string>, out: DecorLeaf[]): void {
-  const list = pieces(source, band, values, ctx, missing);
+function placeZone(source: string, band: Band, rotated: boolean, align: `left` | `center` | `right`, left: number, right: number, baseline: number, values: PageValues, ctx: DecorContext, missing: Set<string>, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
+  const list = pieces(source, band, rotated, values, ctx, missing);
   const total = list.reduce((a, p) => a + p.width, 0);
   let x = align === `left` ? left : align === `right` ? right - total : (left + right) / 2 - total / 2;
   for (const p of list) {
-    out.push(...p.item(x, baseline));
+    (p.upright ? upright : out).push(...p.item(x, baseline));
     x += p.width;
   }
 }
@@ -136,7 +144,7 @@ function bandItems(band: Band, odd: boolean, baseline: number, grow: -1 | 1, rul
   const rowBaseline = (i: number): number => (grow === -1 ? baseline - (rows - 1 - i) * ZONE_LINE_HEIGHT : baseline + i * ZONE_LINE_HEIGHT);
   const leaves: DecorLeaf[] = [];
   for (const [key, align] of [[`left`, `left`], [`center`, `center`], [`right`, `right`]] as const) {
-    zoneLines(zones[key]).forEach((line, i) => placeZone(line, band, align, left, right, rowBaseline(i), values, ctx, missing, leaves));
+    zoneLines(zones[key]).forEach((line, i) => placeZone(line, band, false, align, left, right, rowBaseline(i), values, ctx, missing, leaves));
   }
   out.push(...leaves);
   if (band.rule) out.push({ kind: `rule`, x1: left, x2: right, y: ruleY });
@@ -152,10 +160,11 @@ function edgeItems(band: Band, odd: boolean, values: PageValues, ctx: DecorConte
   // Le bloc de lignes est centre sur la ligne de base 0 (a une demi-hauteur de lettre pres).
   const rowBaseline = (i: number): number => (i - (rows - 1) / 2) * ZONE_LINE_HEIGHT;
   const leaves: DecorLeaf[] = [];
+  const uprights: DecorLeaf[] = [];
   // Sur les pages de gauche le texte monte : le haut de la page est la fin de la ligne.
   const alignOf: Record<`left` | `center` | `right`, `left` | `center` | `right`> = odd ? { left: `left`, center: `center`, right: `right` } : { left: `right`, center: `center`, right: `left` };
   for (const key of [`left`, `center`, `right`] as const) {
-    zoneLines(zones[key]).forEach((line, i) => placeZone(line, band, alignOf[key], 0, length, rowBaseline(i), values, ctx, missing, leaves));
+    zoneLines(zones[key]).forEach((line, i) => placeZone(line, band, true, alignOf[key], 0, length, rowBaseline(i), values, ctx, missing, leaves, uprights));
   }
   const glyphHalf = 3.5;
   const cx = odd ? setup.width - setup.marginRight / 2 : setup.marginLeft / 2;
@@ -164,6 +173,18 @@ function edgeItems(band: Band, odd: boolean, values: PageValues, ctx: DecorConte
     // Filet sur le cote interieur de la bande, a 6 points de la marge.
     const inner = odd ? setup.width - setup.marginRight + 6 : setup.marginLeft - 6;
     leaves.push({ kind: `rule`, x1: 0, x2: length, y: odd ? qx - inner : inner - qx });
+  }
+  // Numeros de page droits : leur centre est ramene de la ligne tournee a la page, puis ils sont poses sans rotation.
+  const toPage = (vx: number, vy: number): { x: number; y: number } => (odd ? { x: qx - vy, y: setup.marginTop + vx } : { x: qx + vy, y: setup.height - setup.marginBottom - vx });
+  for (const u of uprights) {
+    if (u.kind === `shape`) {
+      const c = toPage(u.x + u.width / 2, u.y + u.height / 2);
+      out.push({ ...u, x: c.x - u.width / 2, y: c.y - u.height / 2 });
+    } else if (u.kind === `text`) {
+      const w = measureText(u.text, u.size, u.style).width;
+      const c = toPage(u.x + w / 2, u.baseline - u.size * 0.33);
+      out.push({ ...u, x: c.x - w / 2, baseline: c.y + u.size * 0.33 });
+    }
   }
   if (leaves.length === 0) return;
   out.push({ kind: `group`, rot: odd ? 90 : -90, qx, qy: odd ? setup.marginTop : setup.height - setup.marginBottom, items: leaves });
@@ -175,7 +196,7 @@ export function layoutDecor(config: PageConfig, pages: Page[], ctx: DecorContext
   const result: DecorItem[][] = pages.map((page, index) => {
     const out: DecorItem[] = [];
     if (index === 0 && config.skipFirst) return out;
-    const values: PageValues = { document: ctx.title, chapter: titles[index].chapter, section: titles[index].section, author: ctx.author, date: ctx.date, page: page.number, pages: pages.length };
+    const values: PageValues = { document: ctx.title, chapter: titles[index].chapter, section: titles[index].section, author: ctx.author, date: ctx.date, created: ctx.created, modified: ctx.modified, page: page.number, pages: pages.length };
     const odd = page.number % 2 === 1;
     if (bandUsed(config.header)) {
       const baseline = ctx.setup.marginTop - HEADER_BASELINE_OFFSET;
