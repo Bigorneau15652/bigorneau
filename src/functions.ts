@@ -15,6 +15,10 @@ export interface PanelFunction<Ctx> {
   button?: boolean;
   // Absente : disponible partout. Sinon, faux sur les appareils ou la fonction n'existe pas (l'export, sur tablette).
   available?: () => boolean;
+  // Fonction a etat (activer ou non) : vrai quand elle est active pour la note ouverte, le bouton est alors plus contraste.
+  active?: (ctx: Ctx) => boolean;
+  // Ouvre les reglages de la fonction : appele par Ctrl + clic sur le bouton.
+  settings?: (ctx: Ctx) => void;
   run: (ctx: Ctx) => void | Promise<void>;
 }
 

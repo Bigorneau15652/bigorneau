@@ -1657,6 +1657,13 @@
   box-sizing: border-box;
 }
 
+/* Fonction a etat activee : bouton plus contraste, sans couleur. */
+.mmw-panel-button.mmw-panel-active {
+  background-color: var(--background-modifier-border-hover);
+  color: var(--text-normal);
+  box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+
 /* Panneau de boutons a droite de la zone de redaction, au milieu de la hauteur. */
 .mmw-has-panel {
   position: relative;
@@ -2106,4 +2113,89 @@ table.mmw-t-equal td {
   overflow: hidden;
   font-size: 0;
   line-height: 0;
+}
+
+/* Fenetre des reglages de page : onglets, barre de mise en forme, trois zones et apercu. */
+.mmw-pmodal {
+  width: 640px;
+  max-width: 94vw;
+}
+
+.mmw-ptabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.mmw-ptab.is-active {
+  background-color: var(--background-modifier-border-hover);
+  box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+
+.mmw-ptoolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 10px 0 4px;
+}
+
+.mmw-ptool-bold {
+  font-weight: 700;
+}
+
+.mmw-ptool-italic {
+  font-style: italic;
+}
+
+.mmw-pzone-title {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.mmw-pzones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mmw-pzone-label {
+  margin-bottom: 2px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.mmw-pzone-input {
+  width: 100%;
+  font-family: var(--font-monospace);
+}
+
+.mmw-ppreview {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 6px 0 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+}
+
+.mmw-ppreview-center {
+  text-align: center;
+}
+
+.mmw-ppreview-right {
+  text-align: right;
+}
+
+.mmw-ppreview-image {
+  color: #888;
+}
+
+.mmw-pnote {
+  margin-top: 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
 }

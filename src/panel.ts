@@ -93,7 +93,11 @@ export class ButtonPanel {
     const functions = this.available();
     const shown = visibleIds(functions.map((f) => f.id), s.panelOrder, s.panelHidden);
     // Rien n'est reconstruit tant que ni les boutons, ni leur ordre, ni la langue n'ont change.
-    const signature = JSON.stringify([shown, currentLang()]);
+    const states = shown.map((id) => {
+      const fn = functions.find((f) => f.id === id) as PanelFunction<FunctionContext>;
+      return fn.active ? fn.active({ app: this.host.app, view, editor: view.editor }) : null;
+    });
+    const signature = JSON.stringify([shown, currentLang(), states]);
     if (panel.dataset.signature === signature) return;
     panel.dataset.signature = signature;
     panel.empty();
@@ -118,23 +122,34 @@ export class ButtonPanel {
       const btn = list.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
       btn.type = `button`;
       btn.dataset.id = fn.id;
+      if (fn.active && fn.active({ app: this.host.app, view, editor: view.editor })) btn.addClass(`mmw-panel-active`);
       setIcon(btn, pickIcon(fn.icons));
       btn.setAttr(`aria-label`, fn.name());
       setTooltip(btn, fn.name(), { placement: `left` });
-      btn.addEventListener(`click`, () => {
+      btn.addEventListener(`click`, (e) => {
         if (this.suppressClick) return;
+        // Ctrl + clic (Cmd sur Mac) : les reglages de la fonction, quand elle en a.
+        if ((e.ctrlKey || e.metaKey) && fn.settings) {
+          this.run(fn, view, true);
+          return;
+        }
         this.run(fn, view);
       });
       this.makeDraggable(btn, list, functions.map((f) => f.id), shown);
     }
   }
 
-  private run(fn: PanelFunction<FunctionContext>, view: MarkdownView): void {
+  private run(fn: PanelFunction<FunctionContext>, view: MarkdownView, settings = false): void {
     if (fn.needsEditor && view.getMode() !== `source`) {
       new Notice(t(`Passez la note en mode édition pour utiliser cette fonction.`));
       return;
     }
-    void fn.run({ app: this.host.app, view, ...(fn.needsEditor ? { editor: view.editor } : {}) });
+    const ctx = { app: this.host.app, view, ...(fn.needsEditor ? { editor: view.editor } : {}) };
+    if (settings && fn.settings) {
+      fn.settings(ctx);
+      return;
+    }
+    void Promise.resolve(fn.run(ctx)).then(() => window.setTimeout(() => this.sync(), 0));
   }
 
   // Clic long puis glissement : le bouton suit le pointeur, un trait montre ou il sera depose, et le nouvel ordre est enregistre au

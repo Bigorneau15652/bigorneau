@@ -24,6 +24,10 @@ export interface ScriptFunction {
   button?: boolean;
   // Absente : disponible partout.
   available?: () => boolean;
+  // Fonction a etat : vrai quand elle est active pour la note ouverte (le bouton est alors plus contraste).
+  active?: (ctx: FunctionContext) => boolean;
+  // Reglages de la fonction, ouverts par Ctrl + clic sur son bouton.
+  settings?: (ctx: FunctionContext) => void;
   run: (ctx: FunctionContext) => void | Promise<void>;
 }
 
@@ -327,6 +331,8 @@ export class ScriptManager {
           needsEditor: fn.needsEditor === true,
           ...(fn.button === false ? { button: false } : {}),
           available: () => this.isEnabled(owner) && (fn.available ? fn.available() : true),
+          ...(fn.active ? { active: (ctx: FunctionContext) => fn.active!(ctx) } : {}),
+          ...(fn.settings ? { settings: (ctx: FunctionContext) => fn.settings!(ctx) } : {}),
           run: (ctx) => fn.run(ctx),
         });
       },

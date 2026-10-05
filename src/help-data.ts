@@ -157,6 +157,15 @@ export const PLUGIN_HELP: HelpEntry[] = [
     keywords: { fr: `formule mathematique latex mathjax equation`, en: `formula math latex mathjax equation` },
   },
   {
+    id: `page-layout`,
+    title: { fr: `En-tête, pied de page et numérotation`, en: `Header, footer and numbering` },
+    text: {
+      fr: `Le script Mise en page, désactivé par défaut (bouton bigorneau du panneau), ajoute trois boutons : En-tête, Pied de page et Numérotation des pages. Un clic active ou désactive la fonction pour la note ouverte, le bouton est alors plus contrasté ; Ctrl ou Cmd avec le clic ouvre les réglages, qui existent aussi dans la palette de commandes. Les réglages sont propres à chaque note et écrits dans une ligne de commentaire sous les propriétés ('%% mmw-page {...} %%', masquée dans l'aperçu en direct). L'en-tête et le pied de page ont trois zones (gauche, centre, droite) écrites avec un balisage simple : '**gras**', '*italique*', '{xs}' '{s}' '{m}' '{l}' pour la taille, '{document}' '{chapter}' '{section}' '{author}' '{date}' '{page}' '{pages}' pour les valeurs variables et '![[image.png|14]]' pour une image ou un dessin Excalidraw (son export image est utilisé). Les pages de gauche peuvent différer de celles de droite ; sinon les zones gauche et droite sont échangées d'une page à l'autre. La numérotation se place dans l'en-tête, le pied de page ou sur le bord extérieur de la page, avec une forme (rond, carré, carré aux coins arrondis) et des couleurs ; le numéro est dessiné au premier plan. Un réglage supprime l'en-tête, le pied de page et le numéro de la première page.`,
+      en: `The Page layout script, off by default (bigorneau button of the panel), adds three buttons: Header, Footer and Page numbering. A click turns the function on or off for the open note, and the button becomes more contrasted; Ctrl or Cmd with the click opens the settings, which are also in the command palette. Settings belong to each note and are written in a comment line under the properties ('%% mmw-page {...} %%', hidden in live preview). The header and footer have three zones (left, centre, right) written with simple markup: '**bold**', '*italic*', '{xs}' '{s}' '{m}' '{l}' for the size, '{document}' '{chapter}' '{section}' '{author}' '{date}' '{page}' '{pages}' for variable values and '![[image.png|14]]' for an image or an Excalidraw drawing (its image export is used). Left pages may differ from right pages; otherwise the left and right zones are swapped from one page to the next. Numbering goes in the header, the footer or on the outer edge of the page, with a shape (round, square, rounded square) and colours; the number is drawn in the foreground. One setting removes the header, footer and number from the first page.`,
+    },
+    keywords: { fr: `en-tete pied page numerotation numero pagination script zones image excalidraw`, en: `header footer page numbering number pagination script zones image excalidraw` },
+  },
+  {
     id: `scripts`,
     title: { fr: `Scripts`, en: `Scripts` },
     text: {

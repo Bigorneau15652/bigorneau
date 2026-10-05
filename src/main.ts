@@ -15,6 +15,7 @@ import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
 import { runScript } from "./script-runner";
 import { FORMULAS_SCRIPT } from "./script-formulas";
+import { PAGE_SCRIPT } from "./script-page";
 import { buildExternal, ExternalScript, ScriptManager } from "./scripts";
 import { ScriptStore } from "./script-store";
 import { ScriptsModal } from "./scripts-modal";
@@ -55,7 +56,7 @@ export default class MindmapWritingPlugin extends Plugin {
       saveState: () => void this.saveSettings(false),
     },
     { enabled: {}, approved: {} },
-    [FORMULAS_SCRIPT]
+    [FORMULAS_SCRIPT, PAGE_SCRIPT]
   );
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
@@ -174,6 +175,8 @@ export default class MindmapWritingPlugin extends Plugin {
     this.helpEntries.add(PLUGIN_HELP);
     this.app.workspace.onLayoutReady(() => void this.startScripts());
     this.registerEvent(this.app.workspace.on(`layout-change`, () => this.panel.sync()));
+    const syncPanelLater = debounce(() => this.panel.sync(), 400, true);
+    this.registerEvent(this.app.workspace.on(`editor-change`, () => syncPanelLater()));
     this.registerEvent(this.app.workspace.on(`active-leaf-change`, () => this.panel.sync()));
     this.app.workspace.onLayoutReady(() => this.panel.sync());
     this.register(() => this.panel.detachAll());

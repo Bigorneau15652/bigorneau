@@ -3,17 +3,21 @@
 // main. Utilise uniquement CodeMirror.
 import { Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
+import { parsePageMarker } from "./page-config";
 import { parseTableMarker } from "./table-marker";
 
 const markerLine = Decoration.line({ class: `mmw-marker-line` });
 
+// Ligne de repere de style de tableau, ou de reglages de page (en-tete, pied de page, numerotation).
+const isMarker = (line: string): boolean => (line.includes(`mmw-table`) && parseTableMarker(line) !== null) || (line.includes(`mmw-page`) && parsePageMarker(line) !== null);
+
 // Positions (debut de ligne) des lignes de repere de style de tableau d'un texte.
 export function markerLineStarts(text: string): number[] {
-  if (!text.includes(`mmw-table`)) return [];
+  if (!text.includes(`mmw-table`) && !text.includes(`mmw-page`)) return [];
   const out: number[] = [];
   let pos = 0;
   for (const line of text.split(`\n`)) {
-    if (line.includes(`mmw-table`) && parseTableMarker(line) !== null) out.push(pos);
+    if (isMarker(line)) out.push(pos);
     pos += line.length + 1;
   }
   return out;
@@ -26,7 +30,7 @@ function build(view: EditorView): DecorationSet {
     let pos = range.from;
     while (pos <= range.to) {
       const line = doc.lineAt(pos);
-      if (line.text.includes(`mmw-table`) && parseTableMarker(line.text) !== null) builder.add(line.from, line.from, markerLine);
+      if (isMarker(line.text)) builder.add(line.from, line.from, markerLine);
       pos = line.to + 1;
     }
   }
