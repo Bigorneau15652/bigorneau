@@ -4,6 +4,7 @@
 import { App, Editor, getIconIds, MarkdownView, Notice, Platform, setIcon, setTooltip } from "obsidian";
 import { FunctionRegistry, moveId, panelOrder, PanelFunction, reorderVisible, visibleIds } from "./functions";
 import { currentLang, t } from "./i18n";
+import { SNAIL_ICON } from "./snail-icon";
 import type { MmSettings } from "./settings";
 
 // Ce qu'une fonction recoit quand on l'appelle : l'application, et l'editeur de la note quand la fonction ecrit dans la note.
@@ -104,7 +105,7 @@ export class ButtonPanel {
 
     const scripts = panel.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
     scripts.type = `button`;
-    setIcon(scripts, pickIcon([`shell`, `puzzle`, `blocks`, `package`]));
+    scripts.createEl(`img`, { cls: `mmw-panel-snail`, attr: { src: SNAIL_ICON, alt: `` } });
     scripts.setAttr(`aria-label`, t(`Scripts de Bigorneau`));
     setTooltip(scripts, t(`Scripts de Bigorneau`), { placement: `left` });
     scripts.addEventListener(`click`, () => this.host.openScripts());
@@ -126,29 +127,20 @@ export class ButtonPanel {
       setIcon(btn, pickIcon(fn.icons));
       btn.setAttr(`aria-label`, fn.name());
       setTooltip(btn, fn.name(), { placement: `left` });
-      btn.addEventListener(`click`, (e) => {
+      btn.addEventListener(`click`, () => {
         if (this.suppressClick) return;
-        // Ctrl + clic (Cmd sur Mac) : les reglages de la fonction, quand elle en a.
-        if ((e.ctrlKey || e.metaKey) && fn.settings) {
-          this.run(fn, view, true);
-          return;
-        }
         this.run(fn, view);
       });
       this.makeDraggable(btn, list, functions.map((f) => f.id), shown);
     }
   }
 
-  private run(fn: PanelFunction<FunctionContext>, view: MarkdownView, settings = false): void {
+  private run(fn: PanelFunction<FunctionContext>, view: MarkdownView): void {
     if (fn.needsEditor && view.getMode() !== `source`) {
       new Notice(t(`Passez la note en mode édition pour utiliser cette fonction.`));
       return;
     }
     const ctx = { app: this.host.app, view, ...(fn.needsEditor ? { editor: view.editor } : {}) };
-    if (settings && fn.settings) {
-      fn.settings(ctx);
-      return;
-    }
     void Promise.resolve(fn.run(ctx)).then(() => window.setTimeout(() => this.sync(), 0));
   }
 

@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { configImages, defaultConfig, findPageConfig, formatPageMarker, mirrorZones, parsePageMarker, parseZone, sameConfig, sanitizeConfig, writePageConfig } from "../src/page-config";
+import { bandUsed, configImages, defaultConfig, findPageConfig, formatPageMarker, mirrorZones, parsePageMarker, parseZone, sameConfig, sanitizeConfig, writePageConfig } from "../src/page-config";
 
 const withFooter = () => {
   const c = defaultConfig();
-  c.footer.enabled = true;
   c.footer.zones = { left: `**{document}**`, center: `Page {page} sur {pages}`, right: `![[logo.png|16]]` };
   return c;
 };
@@ -26,8 +25,8 @@ test(`les reglages se relisent tels qu'ils ont ete ecrits, sur une seule ligne`,
 
 test(`des reglages abimes ou incomplets sont completes par les valeurs par defaut`, () => {
   assert.deepEqual(sanitizeConfig(null), defaultConfig());
-  const c = sanitizeConfig({ footer: { enabled: true, zones: { center: 12, left: `a` } }, numbering: { shape: `triangle`, fill: `rouge`, size: `xl`, enabled: true }, skipFirst: `oui` });
-  assert.equal(c.footer.enabled, true);
+  const c = sanitizeConfig({ footer: { zones: { center: 12, left: `a` } }, numbering: { shape: `triangle`, fill: `rouge`, size: `xl`, enabled: true }, skipFirst: `oui` });
+  assert.equal(bandUsed(c.footer), true);
   assert.deepEqual(c.footer.zones, { left: `a`, center: ``, right: `` });
   assert.equal(c.numbering.shape, `none`);
   assert.equal(c.numbering.fill, defaultConfig().numbering.fill);
@@ -45,10 +44,9 @@ test(`le repere s'ecrit sous les proprietes, se remplace et disparait quand les 
   assert.ok(once.endsWith(`\n\n# Titre\n\nTexte.`));
   assert.deepEqual(findPageConfig(once)?.config, c);
   // Remplacement : toujours un seul repere.
-  c.header.enabled = true;
   const twice = writePageConfig(once, c);
   assert.equal(twice.split(`mmw-page`).length, 2);
-  assert.equal(findPageConfig(twice)?.config.header.enabled, true);
+  assert.equal(bandUsed(findPageConfig(twice)?.config.footer ?? defaultConfig().footer), true);
   // Retour aux reglages par defaut : la ligne disparait, et la note redevient identique.
   assert.equal(writePageConfig(twice, defaultConfig()), note);
   // Note sans proprietes : en tete de note. Fins de ligne Windows conservees.
@@ -64,7 +62,7 @@ test(`le balisage d'une zone donne du texte, des valeurs variables et des images
   assert.deepEqual(t[1], { kind: `text`, text: ` `, bold: false, italic: false, size: `m` });
   assert.deepEqual(t[2], { kind: `text`, text: `annuel`, bold: false, italic: true, size: `s` });
   assert.deepEqual(t[4], { kind: `variable`, name: `page`, bold: false, italic: false, size: `s` });
-  assert.deepEqual(t[t.length - 1], { kind: `image`, target: `logo.png`, height: 20 });
+  assert.deepEqual(t[t.length - 1], { kind: `image`, target: `logo.png`, width: 20 });
   assert.deepEqual(parseZone(`{document}`, `l`), [{ kind: `variable`, name: `document`, bold: false, italic: false, size: `l` }]);
   assert.deepEqual(parseZone(`{inconnu} 2 * 3`).map((x) => (x.kind === `text` ? x.text : x.kind)), [`{inconnu} 2 `, ` 3`]);
   assert.deepEqual(parseZone(``), []);
@@ -73,7 +71,27 @@ test(`le balisage d'une zone donne du texte, des valeurs variables et des images
 test(`les images des zones sont listees, et les zones se reflechissent`, () => {
   const c = withFooter();
   c.header.verso.right = `![[a.png]]`;
-  assert.deepEqual(configImages(c), [{ target: `a.png`, height: 14 }, { target: `logo.png`, height: 16 }]);
+  assert.deepEqual(configImages(c), [{ target: `a.png`, width: undefined }, { target: `logo.png`, width: 16 }]);
   assert.deepEqual(mirrorZones({ left: `a`, center: `b`, right: `c` }), { left: `c`, center: `b`, right: `a` });
   assert.equal(sameConfig(defaultConfig(), defaultConfig()), true);
+});
+
+test(`une bande existe des qu'une de ses zones est remplie, sans interrupteur`, () => {
+  const c = defaultConfig();
+  assert.equal(bandUsed(c.header), false);
+  c.header.zones.center = `   `;
+  assert.equal(bandUsed(c.header), false);
+  c.header.zones.center = `Titre`;
+  assert.equal(bandUsed(c.header), true);
+  // Les zones des pages de gauche ne comptent que si elles sont differentes.
+  c.footer.verso.left = `x`;
+  assert.equal(bandUsed(c.footer), false);
+  c.footer.mirror = true;
+  assert.equal(bandUsed(c.footer), true);
+});
+
+test(`une image se redimensionne avec |largeur comme dans Obsidian`, () => {
+  const t = parseZone(`![[logo.png|200]] ![[fond.png]]`);
+  assert.deepEqual(t[0], { kind: `image`, target: `logo.png`, width: 200 });
+  assert.deepEqual(t[2], { kind: `image`, target: `fond.png`, width: undefined });
 });

@@ -632,8 +632,6 @@ const PAIRS: [string, string][] = [
   [`Pas d'en-tête, de pied de page ni de numéro sur la première page`, `No header, footer or number on the first page`],
   [`Pour une page de garde.`, `For a cover page.`],
   [`Réinitialiser tous les réglages de page`, `Reset all page settings`],
-  [`Afficher l'en-tête`, `Show the header`],
-  [`Afficher le pied de page`, `Show the footer`],
   [`Filet fin entre le texte et la page`, `Thin rule between the text and the page`],
   [`Pages de gauche différentes de celles de droite`, `Left pages different from right pages`],
   [`Quand elles sont identiques, les zones gauche et droite sont échangées d'une page à l'autre.`, `When they are the same, the left and right zones are swapped from one page to the next.`],
@@ -671,6 +669,10 @@ const PAIRS: [string, string][] = [
   [`Couleur du contour de la forme`, `Shape outline colour`],
   [`Couleur du numéro`, `Number colour`],
   [`Le numéro est dessiné au premier plan : il peut recouvrir le texte de l'en-tête ou du pied de page.`, `The number is drawn in the foreground: it may cover the header or footer text.`],
+  [`Rechercher dans le coffre`, `Search the vault`],
+  [`affinez la recherche pour voir les autres.`, `refine the search to see the others.`],
+  [`L'en-tête apparaît dès qu'une zone est remplie.`, `The header appears as soon as a zone is filled in.`],
+  [`Le pied de page apparaît dès qu'une zone est remplie.`, `The footer appears as soon as a zone is filled in.`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

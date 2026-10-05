@@ -5,7 +5,8 @@ import { measureText, FontStyle } from "./font-metrics";
 import type { ImageAsset } from "./image";
 import type { Page } from "./paginate";
 import type { PageSetup } from "./typeset";
-import { Band, PageConfig, PageValues, parseZone, SIZE_POINTS, SizeCode, valueOf, Zones } from "../page-config";
+import { displaySize } from "./image";
+import { Band, bandUsed, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, PageConfig, PageValues, parseZone, SIZE_POINTS, SizeCode, valueOf, ZONE_MAX_LINES, Zones } from "../page-config";
 
 export type DecorItem =
   | { kind: `text`; x: number; baseline: number; size: number; style: FontStyle; text: string; color: string }
@@ -68,8 +69,9 @@ function pieces(source: string, values: PageValues, ctx: DecorContext, missing: 
         missing.add(t.target);
         continue;
       }
-      const width = (t.height * asset.naturalWidth) / asset.naturalHeight;
-      out.push({ width, item: (x, baseline) => ({ kind: `image`, target: t.target, x, y: baseline + 2 - t.height, width, height: t.height }) });
+      // Largeur demandee en pixels comme dans Obsidian (|200), taille naturelle sinon, ramenee au maximum permis.
+      const { width, height } = displaySize(asset.naturalWidth, asset.naturalHeight, t.width, IMAGE_MAX_WIDTH_PX * 0.75, IMAGE_MAX_HEIGHT_PX * 0.75);
+      out.push({ width, item: (x, baseline) => ({ kind: `image`, target: t.target, x, y: baseline + 2 - height, width, height }) });
       continue;
     }
     const text = t.kind === `text` ? t.text : valueOf(t.name, values);
@@ -91,13 +93,20 @@ function placeZone(source: string, align: `left` | `center` | `right`, left: num
   }
 }
 
-function bandItems(band: Band, odd: boolean, baseline: number, ruleY: number, values: PageValues, ctx: DecorContext, missing: Set<string>, out: DecorItem[]): void {
+// Interligne des zones sur plusieurs lignes, en points. L'en-tete grandit vers le haut et le pied de page vers le bas.
+const ZONE_LINE_HEIGHT = 12;
+
+function bandItems(band: Band, odd: boolean, baseline: number, grow: -1 | 1, ruleY: number, values: PageValues, ctx: DecorContext, missing: Set<string>, out: DecorItem[]): void {
   const zones: Zones = band.mirror && !odd ? band.verso : band.zones;
   const left = ctx.setup.marginLeft;
   const right = ctx.setup.width - ctx.setup.marginRight;
-  placeZone(zones.left, `left`, left, right, baseline, values, ctx, missing, out);
-  placeZone(zones.center, `center`, left, right, baseline, values, ctx, missing, out);
-  placeZone(zones.right, `right`, left, right, baseline, values, ctx, missing, out);
+  const lines = (s: string): string[] => s.split(/\r?\n/).slice(0, ZONE_MAX_LINES);
+  const rows = Math.max(lines(zones.left).length, lines(zones.center).length, lines(zones.right).length);
+  // L'en-tete garde sa derniere ligne a la place habituelle, le pied de page sa premiere.
+  const rowBaseline = (i: number): number => (grow === -1 ? baseline - (rows - 1 - i) * ZONE_LINE_HEIGHT : baseline + i * ZONE_LINE_HEIGHT);
+  for (const [key, align] of [[`left`, `left`], [`center`, `center`], [`right`, `right`]] as const) {
+    lines(zones[key]).forEach((line, i) => placeZone(line, align, left, right, rowBaseline(i), values, ctx, missing, out));
+  }
   if (band.rule) out.push({ kind: `rule`, x1: left, x2: right, y: ruleY });
 }
 
@@ -140,13 +149,13 @@ export function layoutDecor(config: PageConfig, pages: Page[], ctx: DecorContext
     if (index === 0 && config.skipFirst) return out;
     const values: PageValues = { document: ctx.title, chapter: titles[index].chapter, section: titles[index].section, author: ctx.author, date: ctx.date, page: page.number, pages: pages.length };
     const odd = page.number % 2 === 1;
-    if (config.header.enabled) {
+    if (bandUsed(config.header)) {
       const baseline = ctx.setup.marginTop - HEADER_BASELINE_OFFSET;
-      bandItems(config.header, odd, baseline, baseline + RULE_GAP + 3, values, ctx, missing, out);
+      bandItems(config.header, odd, baseline, -1, baseline + RULE_GAP + 3, values, ctx, missing, out);
     }
-    if (config.footer.enabled) {
+    if (bandUsed(config.footer)) {
       const baseline = ctx.setup.height - FOOTER_BASELINE_OFFSET;
-      bandItems(config.footer, odd, baseline, baseline - 14, values, ctx, missing, out);
+      bandItems(config.footer, odd, baseline, 1, baseline - 14, values, ctx, missing, out);
     }
     if (config.numbering.enabled) numberItems(config, page.number, odd, ctx, out);
     return out;
