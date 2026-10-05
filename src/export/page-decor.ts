@@ -72,6 +72,9 @@ function runningTitles(pages: Page[]): { chapter: string; section: string }[] {
 interface Piece {
   width: number;
   size: number;
+  // Hauteur au-dessus et au-dessous de la ligne de base (pour dimensionner un cadre).
+  above: number;
+  below: number;
   // Vrai : le numero de page reste droit dans une bande tournee (il est pose a part, sans rotation).
   upright?: boolean;
   item: (x: number, baseline: number) => DecorLeaf[];
@@ -89,7 +92,7 @@ function pieces(source: string, band: Band, rotated: boolean, textColor: string,
       }
       // Largeur demandee en pixels comme dans Obsidian (|200), taille naturelle sinon, ramenee au maximum permis.
       const { width, height } = displaySize(asset.naturalWidth, asset.naturalHeight, t.width, IMAGE_MAX_WIDTH_PX * 0.75, IMAGE_MAX_HEIGHT_PX * 0.75);
-      out.push({ width, size: height, item: (x, baseline) => [{ kind: `image`, target: t.target, x, y: baseline + 2 - height, width, height }] });
+      out.push({ width, size: height, above: height - 2, below: 2, item: (x, baseline) => [{ kind: `image`, target: t.target, x, y: baseline + 2 - height, width, height }] });
       continue;
     }
     const text = t.kind === `text` ? t.text : valueOf(t.name, values);
@@ -106,6 +109,8 @@ function pieces(source: string, band: Band, rotated: boolean, textColor: string,
       out.push({
         width,
         size,
+        above: Math.max(size * ASCENT, box / 2 + size * 0.33),
+        below: Math.max(size * DESCENT, box / 2 - size * 0.33),
         ...(upright ? { upright: true } : {}),
         item: (x, baseline) => {
           const cx = x + width / 2;
@@ -117,7 +122,7 @@ function pieces(source: string, band: Band, rotated: boolean, textColor: string,
       });
       continue;
     }
-    out.push({ width: w, size, item: (x, baseline) => [{ kind: `text`, x, baseline, size, style, text, color: textColor }] });
+    out.push({ width: w, size, above: size * ASCENT, below: size * DESCENT, item: (x, baseline) => [{ kind: `text`, x, baseline, size, style, text, color: textColor }] });
   }
   return out;
 }
@@ -130,72 +135,86 @@ const DESCENT = 0.25;
 
 const zoneLines = (s: string): string[] => s.split(/\r?\n/).slice(0, ZONE_MAX_LINES);
 
-// Une zone : ses lignes (ligne de base donnee pour chacune), puis son cadre s'il y en a un, dessine derriere le texte.
-function placeZone(source: string, band: Band, frame: ZoneFrame, rotated: boolean, align: `left` | `center` | `right`, left: number, right: number, baselineOf: (i: number) => number, values: PageValues, ctx: DecorContext, missing: Set<string>, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
-  const textColor = frame.color !== `` ? frame.color : TEXT_COLOR;
+// Pieces de chaque ligne de chaque zone d'une bande, et mesures de la bande : hauteur au-dessus de la premiere ligne de base, au-dessous
+// de la derniere (images comprises), nombre de lignes et plus grande marge de cadre.
+interface BandLayout {
+  lists: Record<`left` | `center` | `right`, Piece[][]>;
+  above: number;
+  below: number;
+  rows: number;
+  pad: number;
+}
+
+function layoutBand(band: Band, zones: Zones, rotated: boolean, values: PageValues, ctx: DecorContext, missing: Set<string>): BandLayout {
+  const lists = { left: [] as Piece[][], center: [] as Piece[][], right: [] as Piece[][] };
+  let rows = 1;
+  let pad = 0;
+  for (const key of KEYS) {
+    const frame = band.frames[key];
+    const textColor = frame.color !== `` ? frame.color : TEXT_COLOR;
+    lists[key] = zoneLines(zones[key]).map((line) => pieces(line, band, rotated, textColor, values, ctx, missing));
+    if (lists[key].some((l) => l.length > 0)) {
+      rows = Math.max(rows, lists[key].length);
+      if (frame.shape !== `none`) pad = Math.max(pad, frame.padding);
+    }
+  }
+  let above = 10 * ASCENT;
+  let below = 10 * DESCENT;
+  for (const key of KEYS) {
+    const first = lists[key][0] ?? [];
+    const last = lists[key][lists[key].length - 1] ?? [];
+    for (const p of first) above = Math.max(above, p.above);
+    for (const p of last) below = Math.max(below, p.below);
+  }
+  return { lists, above, below, rows, pad };
+}
+
+// Une zone : ses lignes (ligne de base donnee pour chacune), puis son cadre s'il y en a un, dessine derriere le texte. Tous les cadres
+// d'une bande ont la meme hauteur (images comprises), pour que les onglets restent alignes.
+function placeZone(lines: Piece[][], frame: ZoneFrame, m: BandLayout, align: `left` | `center` | `right`, left: number, right: number, baselineOf: (i: number) => number, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
   const mine: DecorLeaf[] = [];
   let minX = Infinity;
   let maxX = -Infinity;
-  let size = 0;
-  let first = Infinity;
-  let last = -Infinity;
-  zoneLines(source).forEach((line, i) => {
-    const list = pieces(line, band, rotated, textColor, values, ctx, missing);
+  lines.forEach((list, i) => {
     if (list.length === 0) return;
     const total = list.reduce((a, p) => a + p.width, 0);
     let x = align === `left` ? left : align === `right` ? right - total : (left + right) / 2 - total / 2;
     const baseline = baselineOf(i);
     minX = Math.min(minX, x);
     maxX = Math.max(maxX, x + total);
-    first = Math.min(first, baseline);
-    last = Math.max(last, baseline);
     for (const p of list) {
-      size = Math.max(size, p.size);
       (p.upright ? upright : mine).push(...p.item(x, baseline));
       x += p.width;
     }
   });
   if (frame.shape !== `none` && minX <= maxX) {
     const pad = frame.padding;
-    out.push({ kind: `shape`, shape: frame.shape, x: minX - pad, y: first - size * ASCENT - pad, width: maxX - minX + 2 * pad, height: last - first + size * (ASCENT + DESCENT) + 2 * pad, fill: frame.fill, stroke: frame.stroke });
+    const top = baselineOf(0) - m.above - pad;
+    const bottom = baselineOf(m.rows - 1) + m.below + pad;
+    out.push({ kind: `shape`, shape: frame.shape, x: minX - pad, y: top, width: maxX - minX + 2 * pad, height: bottom - top, fill: frame.fill, stroke: frame.stroke });
   }
   out.push(...mine);
 }
 
 const KEYS = [`left`, `center`, `right`] as const;
 
-// Corps le plus grand ecrit dans les zones d'une bande (10 points par defaut) et plus grande marge de cadre.
-function bandMetrics(band: Band, zones: Zones): { size: number; pad: number; rows: number } {
-  let size = 10;
-  let pad = 0;
-  let rows = 1;
-  for (const key of KEYS) {
-    const lines = zoneLines(zones[key]);
-    if (lines.every((l) => l.trim() === ``)) continue;
-    rows = Math.max(rows, lines.length);
-    for (const line of lines) for (const t of parseZone(line)) if (t.kind !== `image`) size = Math.max(size, SIZE_POINTS[t.size]);
-    if (band.frames[key].shape !== `none`) pad = Math.max(pad, band.frames[key].padding);
-  }
-  return { size, pad, rows };
-}
-
 function bandItems(band: Band, odd: boolean, edge: `header` | `footer`, values: PageValues, ctx: DecorContext, missing: Set<string>, out: DecorItem[]): void {
   const zones: Zones = band.mirror && !odd ? band.verso : band.zones;
   const { setup } = ctx;
   const left = setup.marginLeft;
   const right = setup.width - setup.marginRight;
-  const m = bandMetrics(band, zones);
+  const m = layoutBand(band, zones, false, values, ctx, missing);
   const d = band.distance === null ? null : band.distance * POINTS_PER_MM;
-  // Ligne de base de la premiere et de la derniere ligne. Sans distance, l'en-tete garde sa derniere ligne et le pied de page sa
-  // premiere a la place habituelle ; avec une distance, c'est le bord exterieur de la bande (cadre compris) qui est a cette distance.
+  // Ligne de base de la premiere ligne. Sans distance, l'en-tete garde sa derniere ligne et le pied de page sa premiere a la place
+  // habituelle ; avec une distance, c'est le bord exterieur de la bande (cadre compris) qui est a cette distance.
   let firstBase: number;
-  if (edge === `header`) firstBase = d === null ? setup.marginTop - HEADER_BASELINE_OFFSET - (m.rows - 1) * ZONE_LINE_HEIGHT : d + m.pad + m.size * ASCENT;
-  else firstBase = d === null ? setup.height - FOOTER_BASELINE_OFFSET : setup.height - d - m.pad - m.size * DESCENT - (m.rows - 1) * ZONE_LINE_HEIGHT;
+  if (edge === `header`) firstBase = d === null ? setup.marginTop - HEADER_BASELINE_OFFSET - (m.rows - 1) * ZONE_LINE_HEIGHT : d + m.pad + m.above;
+  else firstBase = d === null ? setup.height - FOOTER_BASELINE_OFFSET : setup.height - d - m.pad - m.below - (m.rows - 1) * ZONE_LINE_HEIGHT;
   const baselineOf = (i: number): number => firstBase + i * ZONE_LINE_HEIGHT;
-  for (const key of KEYS) placeZone(zones[key], band, band.frames[key], false, key, left, right, baselineOf, values, ctx, missing, out as DecorLeaf[]);
+  for (const key of KEYS) placeZone(m.lists[key], band.frames[key], m, key, left, right, baselineOf, out as DecorLeaf[]);
   if (band.rule) {
     const lastBase = baselineOf(m.rows - 1);
-    const y = edge === `header` ? lastBase + RULE_GAP + 3 + m.pad : d === null ? firstBase - 14 : firstBase - m.size * ASCENT - m.pad - RULE_GAP;
+    const y = edge === `header` ? lastBase + RULE_GAP + 3 + m.pad : d === null ? firstBase - 14 : firstBase - m.above - m.pad - RULE_GAP;
     out.push({ kind: `rule`, x1: left, x2: right, y });
   }
 }
@@ -206,18 +225,18 @@ function edgeItems(band: Band, odd: boolean, values: PageValues, ctx: DecorConte
   const { setup } = ctx;
   const zones: Zones = band.mirror && !odd ? band.verso : band.zones;
   const length = setup.height - setup.marginTop - setup.marginBottom;
-  const m = bandMetrics(band, zones);
+  const m = layoutBand(band, zones, true, values, ctx, missing);
   // Le bloc de lignes est centre sur la ligne de base 0 (a une demi-hauteur de lettre pres).
   const baselineOf = (i: number): number => (i - (m.rows - 1) / 2) * ZONE_LINE_HEIGHT;
   const leaves: DecorLeaf[] = [];
   const uprights: DecorLeaf[] = [];
   // Sur les pages de gauche le texte monte : le haut de la page est la fin de la ligne.
   const alignOf: Record<`left` | `center` | `right`, `left` | `center` | `right`> = odd ? { left: `left`, center: `center`, right: `right` } : { left: `right`, center: `center`, right: `left` };
-  for (const key of KEYS) placeZone(zones[key], band, band.frames[key], true, alignOf[key], 0, length, baselineOf, values, ctx, missing, leaves, uprights);
-  // Le centre du bloc (hauteur de ligne, cadre compris) est a (ASCENT - DESCENT) / 2 corps au-dessus de la ligne de base.
-  const glyphHalf = (m.size * (ASCENT - DESCENT)) / 2;
+  for (const key of KEYS) placeZone(m.lists[key], band.frames[key], m, alignOf[key], 0, length, baselineOf, leaves, uprights);
+  // Le centre du bloc (hauteur de ligne, cadre compris) est a (above - below) / 2 au-dessus de la ligne de base.
+  const glyphHalf = (m.above - m.below) / 2;
   // Epaisseur du bloc, cadres compris.
-  const thickness = (m.rows - 1) * ZONE_LINE_HEIGHT + m.size * (ASCENT + DESCENT) + 2 * m.pad;
+  const thickness = (m.rows - 1) * ZONE_LINE_HEIGHT + m.above + m.below + 2 * m.pad;
   const d = band.distance === null ? null : band.distance * POINTS_PER_MM;
   const cx = d !== null ? (odd ? setup.width - d - thickness / 2 : d + thickness / 2) : odd ? setup.width - setup.marginRight / 2 : setup.marginLeft / 2;
   const qx = odd ? cx - glyphHalf : cx + glyphHalf;
