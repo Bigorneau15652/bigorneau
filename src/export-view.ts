@@ -4,6 +4,7 @@ import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { composeNote } from "./export/compose";
 import type { ImageAsset } from "./export/image";
 import type { MathAsset } from "./export/math";
+import type { DecorItem } from "./export/page-decor";
 import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, Row } from "./export/typeset";
@@ -115,6 +116,43 @@ export class ExportPreviewView extends ItemView {
   private goTo(anchor: string) {
     const target = Array.from(this.contentEl.querySelectorAll<HTMLElement>(`[data-anchor]`)).find((e) => e.dataset.anchor === anchor);
     target?.scrollIntoView({ block: `center`, behavior: `smooth` });
+  }
+
+  // Element de l'en-tete, du pied de page ou du numero (reglages de la note), place en points sur la page.
+  private renderDecor(page: HTMLElement, item: DecorItem): void {
+    if (item.kind === `text`) {
+      const el = page.createDiv({ cls: `mmw-decor mmw-decor-text`, text: item.text });
+      el.style.left = `${item.x}pt`;
+      el.style.top = `${item.baseline - item.size * 0.894}pt`;
+      el.style.fontSize = `${item.size}pt`;
+      el.style.lineHeight = `${item.size * 1.14}pt`;
+      el.style.color = item.color;
+      if (item.style.startsWith(`bold`)) el.style.fontWeight = `700`;
+      if (item.style.endsWith(`talic`)) el.style.fontStyle = `italic`;
+    } else if (item.kind === `image`) {
+      const url = this.images.get(item.target)?.previewUrl;
+      if (!url) return;
+      const img = page.createEl(`img`, { cls: `mmw-decor` });
+      img.src = url;
+      img.style.left = `${item.x}pt`;
+      img.style.top = `${item.y}pt`;
+      img.style.width = `${item.width}pt`;
+      img.style.height = `${item.height}pt`;
+    } else if (item.kind === `rule`) {
+      const el = page.createDiv({ cls: `mmw-decor mmw-decor-rule` });
+      el.style.left = `${item.x1}pt`;
+      el.style.top = `${item.y}pt`;
+      el.style.width = `${item.x2 - item.x1}pt`;
+    } else {
+      const el = page.createDiv({ cls: `mmw-decor mmw-decor-shape` });
+      el.style.left = `${item.x}pt`;
+      el.style.top = `${item.y}pt`;
+      el.style.width = `${item.width}pt`;
+      el.style.height = `${item.height}pt`;
+      el.style.background = item.fill;
+      el.style.border = `0.8pt solid ${item.stroke}`;
+      el.style.borderRadius = item.shape === `circle` ? `50%` : item.shape === `rounded` ? `22%` : `0`;
+    }
   }
 
   private renderRow(parent: HTMLElement, row: Row) {
@@ -305,6 +343,7 @@ export class ExportPreviewView extends ItemView {
         for (const row of pg.bottomFloats) this.renderRow(floats, row);
       }
       if (pg.footer) page.createDiv({ cls: `mmw-export-number`, text: pg.footer });
+      for (const item of pg.decor ?? []) this.renderDecor(page, item);
       this.sheets.push(sheet);
     });
     this.applyScale();

@@ -5,6 +5,7 @@ import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
+import { configImages, findPageConfig } from "./page-config";
 import type { MathRenderer } from "./script-formulas";
 import type { MmSettings } from "./settings";
 
@@ -66,6 +67,27 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
       if (asset) images.set(target, asset);
     } catch {
       // Image illisible : traitee comme absente.
+    }
+  }
+  // Images de l'en-tete et du pied de page. Un dessin Excalidraw est lu par son export image (.excalidraw.svg ou .excalidraw.png).
+  const found = findPageConfig(text);
+  if (found) {
+    for (const { target, height } of configImages(found.config)) {
+      if (images.has(target) || isWebTarget(target)) continue;
+      const candidates = /\.excalidraw$/i.test(target) ? [`${target}.svg`, `${target}.png`] : [target];
+      for (const name of candidates) {
+        const file = fileFor(app, name, sourcePath);
+        if (!file || !isImageTarget(file.name)) continue;
+        try {
+          const asset = await loadOne(app, file, undefined, { maxWidth: height * 40, maxHeight: height * 4 }, urls);
+          if (asset) {
+            images.set(target, asset);
+            break;
+          }
+        } catch {
+          // Image illisible : traitee comme absente.
+        }
+      }
     }
   }
   return { images, formulas, urls };
