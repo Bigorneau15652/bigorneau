@@ -1536,6 +1536,12 @@
   top: -0.3em;
 }
 
+.mmw-row-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
 .mmw-row-rule {
   position: absolute;
   height: 0.6pt;
@@ -1958,4 +1964,115 @@
 .mmw-course-svg g[fill="red"] {
   fill: var(--interactive-accent);
   stroke: var(--interactive-accent);
+}
+
+/* Tableaux : style choisi (en-tete fonce, alternance de lignes, colonnes egales), dans l'apercu en direct et en lecture. */
+.mmw-t-host {
+  position: relative;
+}
+
+.mmw-t-host.mmw-t-header table th,
+table.mmw-t-header th {
+  background: #3b3f45;
+  color: #fff;
+}
+
+.mmw-t-host.mmw-t-stripes table tbody tr:nth-child(even) td,
+table.mmw-t-stripes tbody tr:nth-child(even) td {
+  background: var(--background-modifier-hover);
+}
+
+.mmw-t-host.mmw-t-equal table,
+table.mmw-t-equal {
+  width: 100%;
+  max-width: var(--file-line-width, 60em);
+  table-layout: fixed;
+}
+
+.mmw-t-host.mmw-t-equal table th,
+.mmw-t-host.mmw-t-equal table td,
+table.mmw-t-equal th,
+table.mmw-t-equal td {
+  overflow-wrap: anywhere;
+}
+
+/* Triangles d'ajout d'une colonne (a droite) et d'une ligne (en bas), visibles au survol du tableau. */
+.mmw-t-arrows {
+  display: none;
+}
+
+.mmw-t-host:hover .mmw-t-arrows {
+  display: block;
+}
+
+.mmw-t-arrow {
+  position: absolute;
+  z-index: 5;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.mmw-t-arrow:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.mmw-t-arrow::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-style: solid;
+  border-color: transparent;
+}
+
+.mmw-t-arrow-col::after {
+  margin: -5px 0 0 -3px;
+  border-width: 5px 0 5px 7px;
+  border-left-color: currentColor;
+}
+
+.mmw-t-arrow-row::after {
+  margin: -3px 0 0 -5px;
+  border-width: 7px 5px 0 5px;
+  border-top-color: currentColor;
+}
+
+/* Fenetre de creation d'un tableau. */
+.mmw-tmodal-label {
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+
+.mmw-tgrid {
+  display: grid;
+  grid-template-columns: repeat(9, 22px);
+  gap: 3px;
+  width: max-content;
+  outline: none;
+}
+
+.mmw-tcell {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  background: var(--background-primary);
+  cursor: pointer;
+}
+
+.mmw-tcell.is-on {
+  border-color: var(--interactive-accent);
+  background: var(--interactive-accent);
+  opacity: 0.75;
+}
+
+.mmw-tmodal-hint {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }

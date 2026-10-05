@@ -183,6 +183,10 @@ export interface MmSettings {
   panelOnMobile: boolean;
   panelOrder: string[];
   panelHidden: string[];
+  // Fenetre de creation d'un tableau : choix gardes d'une fois a l'autre (en-tete fonce, alternance de lignes, nom du tableau).
+  tableHeader: boolean;
+  tableStripes: boolean;
+  tableCaption: boolean;
   // Scripts : etat d'activation (identifiant -> actif) et empreinte confirmee de chaque script ajoute a la main.
   scriptsEnabled: Record<string, boolean>;
   scriptsApproved: Record<string, string>;
@@ -271,6 +275,9 @@ export const DEFAULT_SETTINGS: MmSettings = {
   panelOnMobile: false,
   panelOrder: [],
   panelHidden: [],
+  tableHeader: true,
+  tableStripes: false,
+  tableCaption: true,
   scriptsEnabled: {},
   scriptsApproved: {},
   iconExternal: `chain`,
@@ -361,6 +368,9 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.exportChapterToc = merged.exportChapterToc === true;
   merged.panelVisible = merged.panelVisible !== false;
   merged.panelOnMobile = merged.panelOnMobile === true;
+  merged.tableHeader = merged.tableHeader !== false;
+  merged.tableStripes = merged.tableStripes === true;
+  merged.tableCaption = merged.tableCaption !== false;
   for (const k of [`panelOrder`, `panelHidden`] as const) {
     merged[k] = Array.isArray(data[k]) ? (data[k] as unknown[]).filter((x): x is string => typeof x === `string`) : [];
   }

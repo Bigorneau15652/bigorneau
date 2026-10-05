@@ -162,6 +162,8 @@ export interface Row {
   cells?: RowCell[];
   inset?: { top: number; bottom: number };
   rules?: { top?: boolean; bottom?: boolean };
+  // Fond de la ligne (gris, 0 noir et 1 blanc) et, pour un fond fonce, ecriture blanche.
+  shade?: { fill: number; text?: `white` };
   table?: { id: number; header: Row[] };
   // Image d'une figure, centree dans la ligne.
   image?: { target: string; width: number; height: number };
@@ -706,7 +708,8 @@ class Typesetter {
           return r;
         },
       },
-      id
+      id,
+      b.style ?? {}
     );
     const block = this.collect(() => {
       if (label) {
