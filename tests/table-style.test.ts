@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildExportDoc } from "../src/export/doc-tree";
 import { composeNote, composeToPdf } from "../src/export/compose";
 import { A4_SETUP, DEFAULT_PAGE_STYLE, typesetDoc } from "../src/export/typeset";
-import { equalWidths } from "../src/export/table";
+import { equalWidths, HEADER_FILL } from "../src/export/table";
 import { formatTableMarker, markTableMarkers, parseTableMarker } from "../src/table-marker";
 
 const INLINE = { ...DEFAULT_PAGE_STYLE, floats: `inline` as const };
@@ -47,7 +47,7 @@ test(`en-tete fonce, alternance et colonnes egales dans la mise en page`, () => 
   const t = typesetDoc(buildExportDoc(note, `A.md`), A4_SETUP, undefined, INLINE);
   const rows = t.rows.filter((r) => r.kind === `table`);
   assert.equal(rows.length, 5);
-  assert.deepEqual(rows[0].shade, { fill: 0.2, text: `white` });
+  assert.deepEqual(rows[0].shade, { fill: HEADER_FILL, text: `white` });
   assert.equal(rows[1].shade, undefined);
   assert.deepEqual(rows[2].shade, { fill: 0.93 });
   assert.equal(rows[3].shade, undefined);

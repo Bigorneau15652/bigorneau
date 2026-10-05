@@ -48,7 +48,7 @@ export function columnWidths(natural: number[], min: number[], available: number
 }
 
 // Gris de l'en-tete fonce et d'une ligne sur deux (0 : noir, 1 : blanc).
-export const HEADER_FILL = 0.2;
+export const HEADER_FILL = 0.4;
 export const STRIPE_FILL = 0.93;
 
 // Colonnes de meme largeur : la place disponible est partagee a parts egales, sauf si un mot plus long que cette part l'interdit
