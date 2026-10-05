@@ -1,4 +1,5 @@
 // Messages du compte rendu d'export, d'apres les signalements de la composition. Ce module ne depend pas d'Obsidian.
+import { isExcalidrawTarget } from "./export/image";
 import { t } from "./i18n";
 
 export interface ReportOptions {
@@ -12,7 +13,11 @@ export function warningLines(warnings: string[], opts: ReportOptions = { formula
   let formulas = false;
   for (const w of warnings) {
     if (w.startsWith(`note:`)) out.push(t(`Note de bas de page sans définition : {0}`, w.slice(5)));
-    else if (w.startsWith(`image:`)) out.push(t(`Image introuvable : {0}`, w.slice(6)));
+    else if (w.startsWith(`image:`)) {
+      const target = w.slice(6);
+      if (isExcalidrawTarget(target)) out.push(t(`Dessin Excalidraw sans export image : {0}. Dans les réglages d'Excalidraw, activez l'export automatique en SVG ou en PNG, puis ouvrez et refermez le dessin.`, target));
+      else out.push(t(`Image introuvable : {0}`, target));
+    }
     else if (w.startsWith(`webimage:`)) out.push(t(`Image du web non téléchargée, remplacée par son adresse : {0}`, w.slice(9)));
     else if (w.startsWith(`renvoi:`)) out.push(t(`Renvoi sans cible dans la note : {0}`, w.slice(7)));
     else if (w.startsWith(`formule:`)) {

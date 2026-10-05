@@ -18,11 +18,26 @@ export interface ImageAsset {
   previewUrl?: string;
 }
 
-const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg|bmp|avif)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg|bmp|avif|excalidraw(\.md)?)$/i;
+const EXCALIDRAW_EXT = /\.excalidraw(\.md)?$/i;
 
 // Vrai si la cible d'une figure est un fichier image (les autres medias sont traites a la phase 6).
 export function isImageTarget(target: string): boolean {
   return IMAGE_EXT.test(target.split(/[?#]/)[0]);
+}
+
+// Dessin Excalidraw (![[dessin.excalidraw]]) : il s'imprime par son export image, .excalidraw.svg ou .excalidraw.png, que le plugin
+// Excalidraw ecrit a cote du dessin quand son export automatique est active.
+export function isExcalidrawTarget(target: string): boolean {
+  return EXCALIDRAW_EXT.test(target.split(/[?#]/)[0]);
+}
+
+// Noms de fichier a essayer, dans l'ordre, pour une cible de figure : l'export image d'un dessin Excalidraw, sinon la cible elle-meme.
+export function imageCandidates(target: string): string[] {
+  const clean = target.split(`#`)[0];
+  if (!isExcalidrawTarget(clean)) return [clean];
+  const base = clean.replace(/\.md$/i, ``);
+  return [`${base}.svg`, `${base}.png`];
 }
 
 export function isWebTarget(target: string): boolean {

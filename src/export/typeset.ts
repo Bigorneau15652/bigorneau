@@ -59,6 +59,8 @@ export interface PageStyle {
   // Figures et tableaux : flottants (en haut ou en bas de la page ou ils tiennent, comme en LaTeX) ou places la ou ils sont
   // ecrits.
   floats: `float` | `inline`;
+  // Legende des figures : sous l'image ou au-dessus.
+  figureCaption: `below` | `above`;
   // Renvois vers un titre, une figure ou un tableau : ajoutent « (page N) » apres le texte du renvoi.
   pageRefs: boolean;
   // Medias (video, son, contenu integre) : un cadre avec le titre et l'adresse, ou une simple ligne de texte.
@@ -82,6 +84,7 @@ export const DEFAULT_PAGE_STYLE: PageStyle = {
   chapterBreak: `none`,
   footnoteNumbering: `continuous`,
   floats: `float`,
+  figureCaption: `below`,
   pageRefs: false,
   media: `frame`,
   protrusion: true,
@@ -244,7 +247,8 @@ function collectAnchors(doc: ExportDoc, language: LanguageCode): Anchors {
   const blocks = (list: DocBlock[]): void => {
     for (const b of list) {
       let label: string | undefined;
-      if (b.type === `figure` && (isImageTarget(b.target) || isWebTarget(b.target))) label = `${words.figure} ${++figures}`;
+      // Une figure sans nom n'a ni numero ni legende : elle n'est pas referencee.
+      if (b.type === `figure` && b.caption.trim() !== `` && (isImageTarget(b.target) || isWebTarget(b.target))) label = `${words.figure} ${++figures}`;
       else if (b.type === `table` && b.caption) label = `${words.table} ${++tables}`;
       if (label) a.labels.set(b, label);
       if ((b.type === `paragraph` || b.type === `quote` || b.type === `table` || b.type === `figure` || b.type === `math` || b.type === `media`) && b.id) a.blocks.set(b.id, { anchor: `b:${b.id}`, ...(label ? { label } : {}) });
@@ -655,8 +659,14 @@ class Typesetter {
     const image = isImageTarget(b.target) || isWebTarget(b.target);
     const asset = this.opts.images?.get(b.target);
     const caption = plainOf(parseInline(b.caption).text);
+    const above = label !== undefined && this.style.figureCaption === `above`;
     const block = this.collect(() => {
       this.stats.lines++;
+      if (above) {
+        this.caption(label as string, caption);
+        this.space(lead * 0.4);
+        this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+      }
       if (image && asset && !isWebTarget(b.target)) {
         const bounds = figureBounds(this.setup);
         const d = displaySize(asset.naturalWidth, asset.naturalHeight, b.width, bounds.maxWidth, bounds.maxHeight);
@@ -675,7 +685,7 @@ class Typesetter {
         }
         this.push({ kind: `figure`, text, x: 0, width: this.textWidth, fontSize: size, height: lead * 1.5, wordSpacing: 0, align: `center`, runs: [{ text, style: `regular` }], breakAfter: label ? INF_PENALTY : 0 });
       }
-      if (label) {
+      if (label && !above) {
         this.space(lead * 0.4);
         this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
         this.caption(label, caption);
