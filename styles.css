@@ -2353,3 +2353,10 @@ table.mmw-t-equal td {
 .mmw-xup {
   font-style: italic;
 }
+
+/* Apercu : cadre d'une zone. */
+.mmw-ppreview-box {
+  display: inline-block;
+  max-width: 100%;
+  text-align: inherit;
+}

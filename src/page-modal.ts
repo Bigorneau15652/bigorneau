@@ -3,7 +3,7 @@
 // montre dans la ligne de formule : **gras**, *italique*, {xs} {s} {m} {l}, {page}, ![[image.png|hauteur]].
 import { App, ColorComponent, Modal, Setting, TextComponent, TFile } from "obsidian";
 import { t } from "./i18n";
-import { Band, defaultConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
+import { Band, defaultConfig, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
 
 export type PageTab = `header` | `footer` | `edge`;
 
@@ -89,6 +89,8 @@ export class PageModal extends Modal {
   private config: PageConfig;
   private tab: PageTab;
   private lastInput: HTMLTextAreaElement | null = null;
+  // Redessin des apercus quand un cadre ou une couleur change.
+  private repaints: (() => void)[] = [];
 
   constructor(app: App, private host: PageModalHost, tab: PageTab = `header`) {
     super(app);
@@ -109,6 +111,7 @@ export class PageModal extends Modal {
   private render(): void {
     const { contentEl } = this;
     contentEl.empty();
+    this.repaints = [];
     const tabs = contentEl.createDiv({ cls: `mmw-ptabs` });
     const names: [PageTab, string][] = [
       [`header`, t(`En-tête`)],
@@ -183,9 +186,11 @@ export class PageModal extends Modal {
       );
     this.toolbar(parent);
     parent.createDiv({ cls: `mmw-pnote`, text: t(`Image : ![[nom.png|200]] fixe la largeur en pixels. Taille maximale : 300 pixels de large et 60 pixels de haut, les proportions sont conservées.`) });
-    this.zones(parent, band.mirror ? t(`Pages de droite`) : t(`Toutes les pages`), band.zones, which === `edge`);
-    if (band.mirror) this.zones(parent, t(`Pages de gauche`), band.verso, which === `edge`);
+    this.zones(parent, band.mirror ? t(`Pages de droite`) : t(`Toutes les pages`), band.zones, which === `edge`, band);
+    if (band.mirror) this.zones(parent, t(`Pages de gauche`), band.verso, which === `edge`, band);
+    this.frameSettings(parent, band, which);
     this.shapeSettings(parent, band, which);
+    this.distanceSetting(parent, band, which);
   }
 
   // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande : un chapitre a deplier.
@@ -220,7 +225,7 @@ export class PageModal extends Modal {
   }
 
   // Couleur choisie avec le sélecteur ou écrite en hexadécimal (#rrggbb) ; le bouton Aucune retire le remplissage ou le contour.
-  private colorSetting(parent: HTMLElement, name: string, shape: PageShape, key: `fill` | `stroke` | `color`, allowNone: boolean): void {
+  private colorSetting(parent: HTMLElement, name: string, shape: PageShape | ZoneFrame, key: `fill` | `stroke` | `color`, allowNone: boolean): void {
     const setting = new Setting(parent).setName(name);
     let picker: ColorComponent | null = null;
     let field: TextComponent | null = null;
@@ -231,6 +236,7 @@ export class PageModal extends Modal {
     const apply = (v: string): void => {
       shape[key] = v;
       this.save();
+      this.repaints.forEach((f) => f());
       show();
     };
     setting.addColorPicker((c) => {
@@ -246,11 +252,77 @@ export class PageModal extends Modal {
         if (hex !== null && (hex !== `` || allowNone)) {
           shape[key] = hex;
           this.save();
+          this.repaints.forEach((f) => f());
           if (hex !== ``) picker?.setValue(hex);
         }
       });
     });
     if (allowNone) setting.addButton((b) => b.setButtonText(t(`Aucun`)).onClick(() => apply(``)));
+  }
+
+  // Cadres de couleur derriere le texte de chaque zone : un chapitre a deplier.
+  private frameSettings(parent: HTMLElement, band: Band, which: PageTab): void {
+    const details = parent.createEl(`details`, { cls: `mmw-pdetails` });
+    details.createEl(`summary`, { text: t(`Cadre de couleur derrière le texte`) });
+    details.createDiv({ cls: `mmw-pnote`, text: t(`Chaque zone peut avoir son cadre, ajusté à son texte. Le texte de la couleur choisie remplace la couleur habituelle ; vide : couleur habituelle.`) });
+    const labels: Record<`left` | `center` | `right`, string> = which === `edge` ? { left: t(`Haut`), center: t(`Milieu`), right: t(`Bas`) } : { left: t(`Gauche`), center: t(`Centre`), right: t(`Droite`) };
+    for (const key of [`left`, `center`, `right`] as const) {
+      const frame: ZoneFrame = band.frames[key];
+      details.createDiv({ cls: `mmw-pzone-title`, text: labels[key] });
+      new Setting(details).setName(t(`Forme du cadre`)).addDropdown((d) =>
+        d
+          .addOptions({ none: t(`Aucun cadre`), square: t(`Carré`), rounded: t(`Carré aux coins arrondis`), circle: t(`Rond (ovale)`) })
+          .setValue(frame.shape)
+          .onChange((v) => {
+            frame.shape = v as NumberShape;
+            this.save();
+            this.repaints.forEach((f) => f());
+          })
+      );
+      this.colorSetting(details, t(`Remplissage du cadre`), frame, `fill`, true);
+      this.colorSetting(details, t(`Contour du cadre`), frame, `stroke`, true);
+      this.colorSetting(details, t(`Couleur du texte`), frame, `color`, true);
+      new Setting(details)
+        .setName(t(`Marge entre le texte et le cadre (points)`))
+        .setDesc(t(`De 0 à {0}.`, FRAME_MAX_PADDING))
+        .addSlider((x) =>
+          x
+            .setLimits(0, FRAME_MAX_PADDING, 1)
+            .setValue(frame.padding)
+            .setDynamicTooltip()
+            .onChange((v) => {
+              frame.padding = v;
+              this.save();
+              this.repaints.forEach((f) => f());
+            })
+        );
+    }
+  }
+
+  // Distance entre le bord de la page et la bande : vide, la place habituelle.
+  private distanceSetting(parent: HTMLElement, band: Band, which: PageTab): void {
+    const desc: Record<PageTab, string> = {
+      header: t(`Distance entre le haut de la page et l'en-tête (cadre compris). Vide : place habituelle.`),
+      footer: t(`Distance entre le bas de la page et le pied de page (cadre compris). Vide : place habituelle.`),
+      edge: t(`Distance entre le bord de la page et le texte du côté (cadre compris) : 0 colle le texte ou son cadre au bord. Vide : place habituelle.`),
+    };
+    new Setting(parent)
+      .setName(t(`Éloignement du bord de la page (millimètres)`))
+      .setDesc(`${desc[which]} ${t(`De 0 à {0}.`, DISTANCE_MAX_MM)}`)
+      .addText((x) => {
+        x.setPlaceholder(t(`automatique`)).setValue(band.distance === null ? `` : String(band.distance));
+        x.inputEl.type = `number`;
+        x.inputEl.min = `0`;
+        x.inputEl.max = String(DISTANCE_MAX_MM);
+        x.inputEl.step = `0.5`;
+        x.onChange((v) => {
+          const n = Number(v.replace(`,`, `.`));
+          if (v.trim() === ``) band.distance = null;
+          else if (Number.isFinite(n)) band.distance = Math.min(DISTANCE_MAX_MM, Math.max(0, n));
+          else return;
+          this.save();
+        });
+      });
   }
 
   // Barre de mise en forme : elle agit sur la derniere zone dans laquelle on a ecrit.
@@ -287,7 +359,7 @@ export class PageModal extends Modal {
     button(t(`Image`), t(`Insérer une image ou un dessin`), () => new ImagePicker(this.app, (target) => this.insert(`![[${target}]]`)).open());
   }
 
-  private zones(parent: HTMLElement, title: string, zones: Zones, edge = false): void {
+  private zones(parent: HTMLElement, title: string, zones: Zones, edge: boolean, band: Band): void {
     parent.createDiv({ cls: `mmw-pzone-title`, text: title });
     const grid = parent.createDiv({ cls: `mmw-pzones` });
     const preview = parent.createDiv({ cls: `mmw-ppreview` });
@@ -295,8 +367,18 @@ export class PageModal extends Modal {
       preview.empty();
       for (const key of [`left`, `center`, `right`] as const) {
         const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${key}` });
+        // Cadre de la zone : meme rendu que l'export (forme, remplissage, contour, marge, couleur du texte).
+        const frame = band.frames[key];
+        const box = cell.createDiv({ cls: `mmw-ppreview-box` });
+        if (frame.shape !== `none` && zones[key].trim() !== ``) {
+          box.style.background = frame.fill === `` ? `transparent` : frame.fill;
+          box.style.border = frame.stroke === `` ? `none` : `1px solid ${frame.stroke}`;
+          box.style.padding = `${frame.padding}px`;
+          box.style.borderRadius = frame.shape === `square` ? `0` : frame.shape === `rounded` ? `22%` : `999px`;
+        }
+        if (frame.color !== ``) box.style.color = frame.color;
         for (const line of zones[key].split(/\r?\n/).slice(0, ZONE_MAX_LINES)) {
-          const row = cell.createDiv({ cls: `mmw-ppreview-line` });
+          const row = box.createDiv({ cls: `mmw-ppreview-line` });
           for (const tok of parseZone(line)) {
             if (tok.kind === `image`) {
               const file = imageFile(this.app, tok.target);
@@ -342,6 +424,7 @@ export class PageModal extends Modal {
       });
     }
     paint();
+    this.repaints.push(paint);
   }
 
   private sample(name: string): string {

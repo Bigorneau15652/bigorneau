@@ -683,6 +683,20 @@ const PAIRS: [string, string][] = [
   [`Date du jour`, `Today's date`],
   [`Date de création de la note`, `Creation date of the note`],
   [`Date de dernière modification de la note`, `Last modification date of the note`],
+  [`Cadre de couleur derrière le texte`, `Coloured frame behind the text`],
+  [`Chaque zone peut avoir son cadre, ajusté à son texte. Le texte de la couleur choisie remplace la couleur habituelle ; vide : couleur habituelle.`, `Each zone can have its own frame, fitted to its text. The text colour chosen replaces the usual colour; empty: usual colour.`],
+  [`Forme du cadre`, `Frame shape`],
+  [`Aucun cadre`, `No frame`],
+  [`Rond (ovale)`, `Round (oval)`],
+  [`Remplissage du cadre`, `Frame fill`],
+  [`Contour du cadre`, `Frame outline`],
+  [`Marge entre le texte et le cadre (points)`, `Space between the text and the frame (points)`],
+  [`De 0 à {0}.`, `From 0 to {0}.`],
+  [`Distance entre le haut de la page et l'en-tête (cadre compris). Vide : place habituelle.`, `Distance between the top of the page and the header (frame included). Empty: usual place.`],
+  [`Distance entre le bas de la page et le pied de page (cadre compris). Vide : place habituelle.`, `Distance between the bottom of the page and the footer (frame included). Empty: usual place.`],
+  [`Distance entre le bord de la page et le texte du côté (cadre compris) : 0 colle le texte ou son cadre au bord. Vide : place habituelle.`, `Distance between the edge of the page and the side text (frame included): 0 puts the text or its frame against the edge. Empty: usual place.`],
+  [`Éloignement du bord de la page (millimètres)`, `Distance from the page edge (millimetres)`],
+  [`automatique`, `automatic`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

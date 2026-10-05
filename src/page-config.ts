@@ -26,6 +26,23 @@ export interface PageShape {
   color: string;
 }
 
+// Cadre derriere le texte d'une zone : meme forme, memes couleurs qu'un numero de page, avec une marge interieure en points entre le
+// texte et le bord du cadre. La forme `none` : pas de cadre. Couleur du texte vide : la couleur habituelle.
+export interface ZoneFrame extends PageShape {
+  padding: number;
+}
+
+export interface Frames {
+  left: ZoneFrame;
+  center: ZoneFrame;
+  right: ZoneFrame;
+}
+
+export const FRAME_MAX_PADDING = 20;
+// Eloignement maximal du bord de la page, en millimetres.
+export const DISTANCE_MAX_MM = 60;
+export const POINTS_PER_MM = 72 / 25.4;
+
 export interface Band {
   // Zones des pages de droite (recto), ou de toutes les pages.
   zones: Zones;
@@ -37,6 +54,10 @@ export interface Band {
   pageShape: PageShape;
   // Numero de page {page} droit (non tourne) quand la bande est tournee, c'est-a-dire sur le bord exterieur.
   pageUpright: boolean;
+  // Cadres derriere le texte de chaque zone (les memes sur les pages de gauche et de droite).
+  frames: Frames;
+  // Distance entre le bord de la page et le bord exterieur de la bande (cadre compris), en millimetres ; null : place habituelle.
+  distance: number | null;
 }
 
 export interface PageConfig {
@@ -58,8 +79,19 @@ const emptyZones = (): Zones => ({ left: ``, center: ``, right: `` });
 
 export const defaultShape = (): PageShape => ({ shape: `none`, fill: `#e9ecef`, stroke: `#495057`, color: `#212529` });
 
+export const defaultFrame = (): ZoneFrame => ({ shape: `none`, fill: `#fff3bf`, stroke: ``, color: ``, padding: 3 });
+
 export function defaultBand(): Band {
-  return { zones: emptyZones(), mirror: false, verso: emptyZones(), rule: false, pageShape: defaultShape(), pageUpright: true };
+  return {
+    zones: emptyZones(),
+    mirror: false,
+    verso: emptyZones(),
+    rule: false,
+    pageShape: defaultShape(),
+    pageUpright: true,
+    frames: { left: defaultFrame(), center: defaultFrame(), right: defaultFrame() },
+    distance: null,
+  };
 }
 
 export function defaultConfig(): PageConfig {
@@ -85,9 +117,31 @@ function shapeOf(v: unknown): PageShape {
   return { shape: pick(r.shape, [`none`, `circle`, `square`, `rounded`], d.shape), fill: colorOrNone(r.fill, d.fill), stroke: colorOrNone(r.stroke, d.stroke), color: color(r.color, d.color) };
 }
 
+function frameOf(v: unknown): ZoneFrame {
+  const r = isObject(v) ? v : {};
+  const d = defaultFrame();
+  const padding = typeof r.padding === `number` && Number.isFinite(r.padding) ? Math.min(FRAME_MAX_PADDING, Math.max(0, r.padding)) : d.padding;
+  return {
+    shape: pick(r.shape, [`none`, `circle`, `square`, `rounded`], d.shape),
+    fill: colorOrNone(r.fill, d.fill),
+    stroke: colorOrNone(r.stroke, d.stroke),
+    color: colorOrNone(r.color, d.color),
+    padding,
+  };
+}
+
+function framesOf(v: unknown): Frames {
+  const r = isObject(v) ? v : {};
+  return { left: frameOf(r.left), center: frameOf(r.center), right: frameOf(r.right) };
+}
+
 function bandOf(v: unknown): Band {
   const r = isObject(v) ? v : {};
-  return { zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false), pageShape: shapeOf(r.pageShape), pageUpright: flag(r.pageUpright, true) };
+  return { zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false), pageShape: shapeOf(r.pageShape),
+    pageUpright: flag(r.pageUpright, true),
+    frames: framesOf(r.frames),
+    distance: typeof r.distance === `number` && Number.isFinite(r.distance) ? Math.min(DISTANCE_MAX_MM, Math.max(0, r.distance)) : null,
+  };
 }
 
 // Reglages lus dans un objet JSON quelconque : tout ce qui est invalide est remplace par la valeur par defaut. L'ancienne
