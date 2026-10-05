@@ -2080,3 +2080,13 @@ table.mmw-t-equal td {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
+
+/* Ligne de style d'un tableau (%% mmw-table %%) : cachee dans l'apercu en direct, visible en mode Source. */
+.is-live-preview .cm-line.mmw-marker-line {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+}

@@ -22,6 +22,7 @@ import * as obsidianApi from "obsidian";
 import { columnAt, findTable, insertBlock, newTableBlock, tableContext } from "./table-edit";
 import { cellAtLine, MenuSpec, tableMenu } from "./table-menu";
 import { TableModal } from "./table-modal";
+import { tableMarkerHideExtension } from "./table-marker-hide";
 import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
@@ -334,6 +335,7 @@ export default class MindmapWritingPlugin extends Plugin {
       name: t(`Décrire les tableaux de la note (diagnostic)`),
       callback: () => this.describeTables(),
     });
+    this.registerEditorExtension(tableMarkerHideExtension());
     this.registerEditorExtension(tableWidgetExtension({ showMenu: (event, items, access) => this.showTableMenu(event, items, access) }));
     // Mode Source : clic droit dans un tableau.
     this.registerEvent(
