@@ -19,11 +19,29 @@ export type NumberShape = `none` | `circle` | `square` | `rounded`;
 // Forme dessinee derriere chaque {page} ecrit dans une bande, avec ses couleurs (#rrggbb).
 export interface PageShape {
   shape: NumberShape;
+  // Vide : pas de remplissage, pas de contour.
   fill: string;
   stroke: string;
   // Couleur du chiffre.
   color: string;
 }
+
+// Cadre derriere le texte d'une zone : meme forme, memes couleurs qu'un numero de page, avec une marge interieure en points entre le
+// texte et le bord du cadre. La forme `none` : pas de cadre. Couleur du texte vide : la couleur habituelle.
+export interface ZoneFrame extends PageShape {
+  padding: number;
+}
+
+export interface Frames {
+  left: ZoneFrame;
+  center: ZoneFrame;
+  right: ZoneFrame;
+}
+
+export const FRAME_MAX_PADDING = 20;
+// Eloignement maximal du bord de la page, en millimetres.
+export const DISTANCE_MAX_MM = 60;
+export const POINTS_PER_MM = 72 / 25.4;
 
 export interface Band {
   // Zones des pages de droite (recto), ou de toutes les pages.
@@ -34,6 +52,12 @@ export interface Band {
   // Filet fin entre le texte et la bande.
   rule: boolean;
   pageShape: PageShape;
+  // Numero de page {page} droit (non tourne) quand la bande est tournee, c'est-a-dire sur le bord exterieur.
+  pageUpright: boolean;
+  // Cadres derriere le texte de chaque zone (les memes sur les pages de gauche et de droite).
+  frames: Frames;
+  // Distance entre le bord de la page et le bord exterieur de la bande (cadre compris), en millimetres ; null : place habituelle.
+  distance: number | null;
 }
 
 export interface PageConfig {
@@ -46,15 +70,28 @@ export interface PageConfig {
   skipFirst: boolean;
 }
 
-export const VARIABLES = [`document`, `chapter`, `section`, `author`, `date`, `page`, `pages`] as const;
+export const VARIABLES = [`document`, `chapter`, `section`, `author`, `date`, `created`, `modified`, `page`, `pages`] as const;
 export type Variable = (typeof VARIABLES)[number];
+// Valeurs proposees dans la fenetre : {pages} reste reconnu dans les notes qui l'utilisent, mais n'est plus propose.
+export const OFFERED_VARIABLES: Variable[] = VARIABLES.filter((v) => v !== `pages`);
 
 const emptyZones = (): Zones => ({ left: ``, center: ``, right: `` });
 
 export const defaultShape = (): PageShape => ({ shape: `none`, fill: `#e9ecef`, stroke: `#495057`, color: `#212529` });
 
+export const defaultFrame = (): ZoneFrame => ({ shape: `none`, fill: `#fff3bf`, stroke: ``, color: ``, padding: 3 });
+
 export function defaultBand(): Band {
-  return { zones: emptyZones(), mirror: false, verso: emptyZones(), rule: false, pageShape: defaultShape() };
+  return {
+    zones: emptyZones(),
+    mirror: false,
+    verso: emptyZones(),
+    rule: false,
+    pageShape: defaultShape(),
+    pageUpright: true,
+    frames: { left: defaultFrame(), center: defaultFrame(), right: defaultFrame() },
+    distance: null,
+  };
 }
 
 export function defaultConfig(): PageConfig {
@@ -66,6 +103,8 @@ const text = (v: unknown): string => (typeof v === `string` ? v : ``);
 const flag = (v: unknown, fallback: boolean): boolean => (typeof v === `boolean` ? v : fallback);
 const pick = <T extends string>(v: unknown, allowed: T[], fallback: T): T => (typeof v === `string` && (allowed as string[]).includes(v) ? (v as T) : fallback);
 const color = (v: unknown, fallback: string): string => (typeof v === `string` && /^#[0-9a-fA-F]{6}$/.test(v) ? v.toLowerCase() : fallback);
+// Couleur ou chaine vide (aucune couleur).
+const colorOrNone = (v: unknown, fallback: string): string => (v === `` ? `` : color(v, fallback));
 
 function zonesOf(v: unknown): Zones {
   const r = isObject(v) ? v : {};
@@ -75,12 +114,34 @@ function zonesOf(v: unknown): Zones {
 function shapeOf(v: unknown): PageShape {
   const r = isObject(v) ? v : {};
   const d = defaultShape();
-  return { shape: pick(r.shape, [`none`, `circle`, `square`, `rounded`], d.shape), fill: color(r.fill, d.fill), stroke: color(r.stroke, d.stroke), color: color(r.color, d.color) };
+  return { shape: pick(r.shape, [`none`, `circle`, `square`, `rounded`], d.shape), fill: colorOrNone(r.fill, d.fill), stroke: colorOrNone(r.stroke, d.stroke), color: color(r.color, d.color) };
+}
+
+function frameOf(v: unknown): ZoneFrame {
+  const r = isObject(v) ? v : {};
+  const d = defaultFrame();
+  const padding = typeof r.padding === `number` && Number.isFinite(r.padding) ? Math.min(FRAME_MAX_PADDING, Math.max(0, r.padding)) : d.padding;
+  return {
+    shape: pick(r.shape, [`none`, `circle`, `square`, `rounded`], d.shape),
+    fill: colorOrNone(r.fill, d.fill),
+    stroke: colorOrNone(r.stroke, d.stroke),
+    color: colorOrNone(r.color, d.color),
+    padding,
+  };
+}
+
+function framesOf(v: unknown): Frames {
+  const r = isObject(v) ? v : {};
+  return { left: frameOf(r.left), center: frameOf(r.center), right: frameOf(r.right) };
 }
 
 function bandOf(v: unknown): Band {
   const r = isObject(v) ? v : {};
-  return { zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false), pageShape: shapeOf(r.pageShape) };
+  return { zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false), pageShape: shapeOf(r.pageShape),
+    pageUpright: flag(r.pageUpright, true),
+    frames: framesOf(r.frames),
+    distance: typeof r.distance === `number` && Number.isFinite(r.distance) ? Math.min(DISTANCE_MAX_MM, Math.max(0, r.distance)) : null,
+  };
 }
 
 // Reglages lus dans un objet JSON quelconque : tout ce qui est invalide est remplace par la valeur par defaut. L'ancienne
@@ -115,6 +176,15 @@ export const IMAGE_MAX_WIDTH_PX = 300;
 export const IMAGE_MAX_HEIGHT_PX = 60;
 // Nombre maximal de lignes d'une zone.
 export const ZONE_MAX_LINES = 3;
+
+// Couleur ecrite par l'utilisateur : #rrggbb ou #rgb (avec ou sans #), vide pour aucune ; null si elle n'est pas valide.
+export function normalizeHex(input: string): string | null {
+  const v = input.trim().replace(/^#/, ``).toLowerCase();
+  if (v === ``) return ``;
+  if (/^[0-9a-f]{6}$/.test(v)) return `#${v}`;
+  if (/^[0-9a-f]{3}$/.test(v)) return `#${v[0]}${v[0]}${v[1]}${v[1]}${v[2]}${v[2]}`;
+  return null;
+}
 
 export const sameConfig = (a: PageConfig, b: PageConfig): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -197,7 +267,7 @@ export type ZoneToken =
   | { kind: `variable`; name: Variable; bold: boolean; italic: boolean; size: SizeCode }
   | { kind: `image`; target: string; width: number | undefined };
 
-const TOKEN_RE = /!\[\[([^\]|]+)(?:\|(\d+(?:\.\d+)?))?\]\]|\*\*|\*|\{(xs|s|m|l)\}|\{(document|chapter|section|author|date|page|pages)\}/g;
+const TOKEN_RE = /!\[\[([^\]|]+)(?:\|(\d+(?:\.\d+)?))?\]\]|\*\*|\*|\{(xs|s|m|l)\}|\{(document|chapter|section|author|date|created|modified|page|pages)\}/g;
 
 // Decoupe le texte d'une zone en morceaux : texte, valeur variable ou image, avec leur mise en forme. `base` est la taille de depart.
 export function parseZone(source: string, base: SizeCode = `m`): ZoneToken[] {
@@ -238,6 +308,9 @@ export interface PageValues {
   section: string;
   author: string;
   date: string;
+  // Dates de creation et de derniere modification de la note, ecrites dans la langue du document.
+  created: string;
+  modified: string;
   page: number;
   pages: number;
 }

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { composeNote, composeToPdf } from "../src/export/compose";
-import { defaultConfig, formatPageMarker } from "../src/page-config";
+import { defaultConfig, formatPageMarker, parsePageMarker, sanitizeConfig } from "../src/page-config";
 
 const REQ = { creator: `Bigorneau`, created: new Date(`2026-10-01T15:00:00Z`) };
 
@@ -87,6 +87,7 @@ test(`le bord exterieur est ecrit a 90 degres : il descend a droite des pages de
   const text = noteWith((c) => {
     c.edge.zones.left = `{chapter}`;
     c.edge.zones.right = `{page}`;
+    c.edge.pageUpright = false;
     c.edge.pageShape.shape = `circle`;
   }, longBody());
   const pages = composeNote(text, `N.md`).pages;
@@ -113,4 +114,126 @@ test(`le numero de page peut se placer dans l'en-tete, avec la forme et les coul
   assert.ok(shape >= 0 && number > shape);
   const n = items[number];
   assert.ok(n.kind === `text` && n.color === `#ff0000` && n.style === `bold`);
+});
+
+test(`le numero de page du bord exterieur reste droit : forme et chiffre sont poses hors du groupe tourne`, () => {
+  const text = noteWith((c) => {
+    c.edge.zones.right = `{page}`;
+    c.edge.pageShape.shape = `circle`;
+  }, longBody());
+  const pages = composeNote(text, `N.md`).pages;
+  for (const [i, odd] of [[0, true], [1, false]] as const) {
+    const items = pages[i].decor ?? [];
+    const shape = items.find((x) => x.kind === `shape`);
+    const num = items.find((x) => x.kind === `text`);
+    assert.ok(shape && shape.kind === `shape` && num && num.kind === `text`);
+    if (shape && shape.kind === `shape`) {
+      const cx = shape.x + shape.width / 2;
+      // Dans la marge exterieure, au bas du texte (zone Bas).
+      assert.ok(odd ? cx > 595.28 - 72 : cx < 72);
+      assert.ok(shape.y > 841.89 / 2);
+    }
+  }
+});
+
+test(`la forme du numero peut etre sans remplissage et sans contour`, async () => {
+  const text = noteWith((c) => {
+    c.footer.zones.center = `{page}`;
+    c.footer.pageShape = { shape: `circle`, fill: ``, stroke: `#ff0000`, color: `#000000` };
+  }, `# Un\n\nTexte.`);
+  const items = composeNote(text, `N.md`).pages[0].decor ?? [];
+  const shape = items.find((i) => i.kind === `shape`);
+  assert.ok(shape && shape.kind === `shape` && shape.fill === `` && shape.stroke === `#ff0000`);
+  const pdf = Buffer.from(await composeToPdf(composeNote(text, `N.md`), REQ)).toString(`latin1`);
+  assert.ok(pdf.startsWith(`%PDF`));
+});
+
+test(`les dates de creation et de modification et l'auteur par defaut sont disponibles dans les zones`, () => {
+  const text = noteWith((c) => {
+    c.header.zones.left = `{created}`;
+    c.header.zones.center = `{modified}`;
+    c.header.zones.right = `{author}`;
+  }, `# Un\n\nTexte.`);
+  const texts = (composeNote(text, `N.md`, undefined, undefined, { created: Date.UTC(2026, 0, 5, 12), modified: Date.UTC(2026, 8, 30, 12), defaultAuthor: `Ada` }).pages[0].decor ?? []).flatMap((i) => (i.kind === `text` ? [i.text] : []));
+  assert.deepEqual(texts, [`5 janvier 2026`, `30 septembre 2026`, `Ada`]);
+});
+
+test(`le cadre d'une zone est dessine derriere son texte, ajuste a ce texte avec sa marge`, () => {
+  const text = noteWith((c) => {
+    c.header.zones.center = `Titre`;
+    c.header.frames.center = { shape: `rounded`, fill: `#ffd43b`, stroke: ``, color: `#112233`, padding: 4 };
+  }, `# Un\n\nTexte.`);
+  const items = composeNote(text, `N.md`).pages[0].decor ?? [];
+  const frame = items.findIndex((i) => i.kind === `shape`);
+  const label = items.findIndex((i) => i.kind === `text`);
+  assert.ok(frame >= 0 && label > frame);
+  const f = items[frame];
+  const l = items[label];
+  assert.ok(f.kind === `shape` && l.kind === `text`);
+  if (f.kind === `shape` && l.kind === `text`) {
+    assert.equal(l.color, `#112233`);
+    assert.ok(Math.abs(f.x - (l.x - 4)) < 1e-6);
+    assert.ok(f.y < l.baseline - 7 && f.y + f.height > l.baseline + 2);
+  }
+  // Une zone sans cadre n'en a pas, ni une zone voisine.
+  const other = noteWith((c) => {
+    c.header.zones.center = `Titre`;
+    c.header.zones.left = `Autre`;
+    c.header.frames.center.shape = `square`;
+  }, `# Un\n\nTexte.`);
+  const shapes = (composeNote(other, `N.md`).pages[0].decor ?? []).filter((i) => i.kind === `shape`);
+  assert.equal(shapes.length, 1);
+});
+
+test(`l'eloignement du bord place l'en-tete, le pied de page et le cote, cadre compris`, () => {
+  const mm = 72 / 25.4;
+  const header = noteWith((c) => {
+    c.header.zones.left = `Titre`;
+    c.header.frames.left = { shape: `square`, fill: `#ffd43b`, stroke: ``, color: ``, padding: 3 };
+    c.header.distance = 0;
+  }, `# Un\n\nTexte.`);
+  const h = (composeNote(header, `N.md`).pages[0].decor ?? []).find((i) => i.kind === `shape`);
+  assert.ok(h && h.kind === `shape` && Math.abs(h.y) < 1e-6);
+  const footer = noteWith((c) => {
+    c.footer.zones.left = `Pied`;
+    c.footer.frames.left = { shape: `square`, fill: `#ffd43b`, stroke: ``, color: ``, padding: 3 };
+    c.footer.distance = 5;
+  }, `# Un\n\nTexte.`);
+  const f = (composeNote(footer, `N.md`).pages[0].decor ?? []).find((i) => i.kind === `shape`);
+  assert.ok(f && f.kind === `shape` && Math.abs(841.89 - (f.y + f.height) - 5 * mm) < 1e-6);
+  // Cote : a distance 0, le cadre touche le bord droit des pages de droite et le bord gauche des pages de gauche.
+  const side = noteWith((c) => {
+    c.edge.zones.center = `Cote`;
+    c.edge.frames.center = { shape: `square`, fill: `#ffd43b`, stroke: ``, color: ``, padding: 3 };
+    c.edge.distance = 0;
+  }, longBody());
+  const pages = composeNote(side, `N.md`).pages;
+  for (const [i, odd] of [[0, true], [1, false]] as const) {
+    const g = (pages[i].decor ?? []).find((x) => x.kind === `group`);
+    assert.ok(g && g.kind === `group`);
+    if (g && g.kind === `group`) {
+      const box = g.items.find((x) => x.kind === `shape`);
+      assert.ok(box && box.kind === `shape`);
+      if (box && box.kind === `shape`) {
+        // Epaisseur du cadre = hauteur virtuelle ; son bord exterieur est a qx -/+ (y du cadre).
+        const outer = odd ? g.qx - box.y : g.qx + box.y;
+        assert.ok(odd ? Math.abs(outer - 595.28) < 1e-6 : Math.abs(outer) < 1e-6);
+      }
+    }
+  }
+});
+
+test(`les cadres et l'eloignement sont relus tels qu'ils ont ete ecrits, et bornes`, () => {
+  const c = defaultConfig();
+  c.edge.frames.right = { shape: `circle`, fill: ``, stroke: `#000000`, color: `#ffffff`, padding: 5 };
+  c.edge.distance = 7.5;
+  const back = parsePageMarker(formatPageMarker(c));
+  assert.deepEqual(back?.edge.frames.right, c.edge.frames.right);
+  assert.equal(back?.edge.distance, 7.5);
+  const bad = sanitizeConfig({ footer: { distance: 500, frames: { left: { padding: 99, shape: `x` } } }, header: { distance: -4 } });
+  assert.equal(bad.footer.distance, 60);
+  assert.equal(bad.header.distance, 0);
+  assert.equal(bad.footer.frames.left.padding, 20);
+  assert.equal(bad.footer.frames.left.shape, `none`);
+  assert.equal(sanitizeConfig({}).header.distance, null);
 });

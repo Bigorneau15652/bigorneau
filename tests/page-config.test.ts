@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bandUsed, configImages, defaultConfig, findPageConfig, formatPageMarker, mirrorZones, parsePageMarker, parseZone, sameConfig, sanitizeConfig, writePageConfig } from "../src/page-config";
+import { normalizeHex, OFFERED_VARIABLES, bandUsed, configImages, defaultConfig, findPageConfig, formatPageMarker, mirrorZones, parsePageMarker, parseZone, sameConfig, sanitizeConfig, writePageConfig } from "../src/page-config";
 
 const withFooter = () => {
   const c = defaultConfig();
@@ -96,4 +96,23 @@ test(`une image se redimensionne avec |largeur comme dans Obsidian`, () => {
   const t = parseZone(`![[logo.png|200]] ![[fond.png]]`);
   assert.deepEqual(t[0], { kind: `image`, target: `logo.png`, width: 200 });
   assert.deepEqual(t[2], { kind: `image`, target: `fond.png`, width: undefined });
+});
+
+test(`une couleur s'ecrit en hexadecimal, avec ou sans diese, sur trois ou six chiffres ; vide veut dire aucune`, () => {
+  assert.equal(normalizeHex(`#FFD43B`), `#ffd43b`);
+  assert.equal(normalizeHex(`ffd43b`), `#ffd43b`);
+  assert.equal(normalizeHex(`#f90`), `#ff9900`);
+  assert.equal(normalizeHex(`  `), ``);
+  assert.equal(normalizeHex(`rouge`), null);
+  assert.equal(normalizeHex(`#12345`), null);
+});
+
+test(`le remplissage et le contour de la forme peuvent etre vides, et {pages} n'est plus propose`, () => {
+  const c = sanitizeConfig({ footer: { pageShape: { shape: `square`, fill: ``, stroke: ``, color: `#112233` } } });
+  assert.equal(c.footer.pageShape.fill, ``);
+  assert.equal(c.footer.pageShape.stroke, ``);
+  assert.equal(c.footer.pageUpright, true);
+  assert.deepEqual(parsePageMarker(formatPageMarker(c))?.footer.pageShape, c.footer.pageShape);
+  assert.ok(!OFFERED_VARIABLES.includes(`pages`));
+  assert.ok(OFFERED_VARIABLES.includes(`created`) && OFFERED_VARIABLES.includes(`modified`));
 });

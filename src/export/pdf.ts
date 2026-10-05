@@ -362,7 +362,11 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       } else if (item.kind === `rule`) {
         ops.push(`q 0.6 G 0.4 w ${num(item.x1)} ${num(H - item.y)} m ${num(item.x2)} ${num(H - item.y)} l S Q`);
       } else {
-        ops.push(`q ${hexOperands(item.fill)} rg ${hexOperands(item.stroke)} RG 0.8 w ${shapePath(item.shape, item.x, H - item.y - item.height, item.width, item.height)} B Q`);
+        // Remplissage et contour facultatifs (couleur vide : rien n'est dessine).
+        const path = shapePath(item.shape, item.x, H - item.y - item.height, item.width, item.height);
+        const paint = item.fill !== `` && item.stroke !== `` ? `B` : item.fill !== `` ? `f` : item.stroke !== `` ? `S` : `n`;
+        const colors = `${item.fill !== `` ? `${hexOperands(item.fill)} rg ` : ``}${item.stroke !== `` ? `${hexOperands(item.stroke)} RG 0.8 w ` : ``}`;
+        if (paint !== `n`) ops.push(`q ${colors}${path} ${paint} Q`);
       }
     };
     for (const item of page.decor ?? []) {
