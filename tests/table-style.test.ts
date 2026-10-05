@@ -76,3 +76,10 @@ test(`le PDF d'un tableau avec fond et ecriture blanche se produit`, async () =>
   const pdf = await composeToPdf(composed, { creator: `Bigorneau`, created: new Date(`2026-10-01T15:00:00Z`) });
   assert.equal(Buffer.from(pdf.slice(0, 5)).toString(`latin1`), `%PDF-`);
 });
+
+test(`les lignes de repere de style d'un tableau sont reperees pour etre masquees`, async () => {
+  const { markerLineStarts } = await import(`../src/table-marker-hide`);
+  const text = `Avant\n%% mmw-table {"header":true} %%\n\nTableau : x\n\n| A |\n| --- |\n%% commentaire %%\n%% mmw-table %%`;
+  assert.deepEqual(markerLineStarts(text), [text.indexOf(`%% mmw-table {`), text.lastIndexOf(`%% mmw-table %%`)]);
+  assert.deepEqual(markerLineStarts(`Rien ici`), []);
+});
