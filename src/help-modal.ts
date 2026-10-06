@@ -12,7 +12,8 @@ export class HelpModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass(`mmw-help`);
+    // Pas la classe mmw-help : elle sert au bouton d'aide de la carte (position absolue en bas a droite).
+    contentEl.addClass(`mmw-help-dialog`);
     this.titleEl.setText(t(`Aide de Bigorneau`));
     const input = contentEl.createEl(`input`, { cls: `mmw-help-search`, attr: { type: `search`, placeholder: t(`Rechercher dans l'aide`) } });
     const results = contentEl.createDiv({ cls: `mmw-help-results` });
