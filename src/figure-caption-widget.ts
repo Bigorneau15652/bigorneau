@@ -2,9 +2,9 @@
 // la legende « Figure 3 : Nom » est affichee, comme a l'export. Obsidian dessine ces figures lui-meme (et le plugin Excalidraw les
 // siennes) : l'extension les reconnait dans le DOM de l'editeur, retrouve leur ligne dans la note et y ajoute la legende. Elle ne fait
 // rien quand elle ne trouve pas de figure. Utilise uniquement CodeMirror.
-import { Extension } from "@codemirror/state";
-import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
-import { figureLines } from "./figure-insert";
+import { Extension, RangeSetBuilder } from "@codemirror/state";
+import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from "@codemirror/view";
+import { figureLines, tableCaptionLines } from "./figure-insert";
 
 const CAPTION_CLASS = `mmw-figure-caption`;
 
@@ -93,4 +93,48 @@ class FigureCaptions {
 
 export function figureCaptionExtension(): Extension {
   return ViewPlugin.fromClass(FigureCaptions);
+}
+
+// Numero d'un tableau nomme : « Tableau : Nom » s'affiche « Tableau 1 : Nom », sans toucher au texte de la note. Le numero est celui de
+// l'export ; un tableau sans nom n'en a pas.
+class NumberWidget extends WidgetType {
+  constructor(private n: number) {
+    super();
+  }
+  eq(other: NumberWidget): boolean {
+    return other.n === this.n;
+  }
+  toDOM(): HTMLElement {
+    const el = document.createElement(`span`);
+    el.className = `mmw-table-number`;
+    el.textContent = ` ${this.n}`;
+    return el;
+  }
+}
+
+function tableNumbers(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const doc = view.state.doc;
+  const text = doc.toString();
+  if (!/^(Tableau|Table)/im.test(text)) return builder.finish();
+  for (const cap of tableCaptionLines(text)) {
+    const line = doc.line(cap.line + 1);
+    builder.add(line.from + cap.wordEnd, line.from + cap.wordEnd, Decoration.widget({ widget: new NumberWidget(cap.number), side: 1 }));
+  }
+  return builder.finish();
+}
+
+export function tableNumberExtension(): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(view: EditorView) {
+        this.decorations = tableNumbers(view);
+      }
+      update(u: ViewUpdate): void {
+        if (u.docChanged) this.decorations = tableNumbers(u.view);
+      }
+    },
+    { decorations: (v) => v.decorations }
+  );
 }

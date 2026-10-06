@@ -161,6 +161,9 @@ export interface MmSettings {
   exportFloats: `float` | `inline`;
   // Legende des figures : sous l'image ou au-dessus.
   exportFigureCaption: `below` | `above`;
+  // Bouton Lorem ipsum : dernieres tailles saisies, et ligne vide entre les paragraphes generes.
+  loremSpec: string;
+  loremBlankLine: boolean;
   // Renvois de l'export : ajouter le numero de page apres le texte cliquable.
   exportPageRefs: boolean;
   // Medias (video, son, contenu integre) : un cadre avec le titre et l'adresse, ou une simple ligne de texte.
@@ -262,6 +265,8 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportAuthor: ``,
   exportFloats: `float`,
   exportFigureCaption: `below`,
+  loremSpec: `6`,
+  loremBlankLine: false,
   exportPageRefs: false,
   exportMedia: `frame`,
   exportHeader: `chapter`,
@@ -359,6 +364,8 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.newNoteFolder = typeof merged.newNoteFolder === `string` ? merged.newNoteFolder.replace(/^\/+|\/+$/g, ``) : ``;
   merged.exportAuthor = typeof merged.exportAuthor === `string` ? merged.exportAuthor.trim() : ``;
   if (merged.exportFloats !== `float` && merged.exportFloats !== `inline`) merged.exportFloats = `float`;
+  merged.loremSpec = typeof merged.loremSpec === `string` && merged.loremSpec.trim() !== `` ? merged.loremSpec.slice(0, 80) : `6`;
+  merged.loremBlankLine = merged.loremBlankLine === true;
   if (merged.exportFigureCaption !== `below` && merged.exportFigureCaption !== `above`) merged.exportFigureCaption = `below`;
   merged.exportPageRefs = merged.exportPageRefs === true;
   if (merged.exportMedia !== `frame` && merged.exportMedia !== `text`) merged.exportMedia = `frame`;

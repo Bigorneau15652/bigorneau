@@ -468,7 +468,6 @@ const PAIRS: [string, string][] = [
   [`Ouvrir l'aide de Bigorneau`, `Open Bigorneau help`],
   [`Les réglages de l'ancien plugin Mindmap Note Writing ont été repris.`, `The settings of the former Mindmap Note Writing plugin were imported.`],
   [`Activer ou désactiver la table des matières de la note`, `Turn the table of contents of the note on or off`],
-  [`Insérer une légende de tableau`, `Insert a table caption`],
   [`La table des matières est activée pour cette note.`, `The table of contents is turned on for this note.`],
   [`La table des matières est désactivée pour cette note.`, `The table of contents is turned off for this note.`],
   [`Auteur du PDF`, `PDF author`],
@@ -719,6 +718,15 @@ const PAIRS: [string, string][] = [
   [`Un dessin ou une image écrit ![[dessin.excalidraw|Nom]] reçoit la légende « Figure 3 : Nom ». Sans nom, il n'a ni légende ni numéro.`, `A drawing or image written ![[drawing.excalidraw|Name]] gets the caption "Figure 3: Name". Without a name, it has no caption or number.`],
   [`Sous la figure`, `Below the figure`],
   [`Au-dessus de la figure`, `Above the figure`],
+  [`Texte Lorem ipsum`, `Lorem ipsum text`],
+  [`Saisissez au moins un nombre de lignes.`, `Enter at least one number of lines.`],
+  [`{0} paragraphe(s) : {1} ligne(s) au total, d'environ {2} caractères par ligne.`, `{0} paragraph(s): {1} line(s) in total, of about {2} characters per line.`],
+  [`Taille des paragraphes, en lignes`, `Size of the paragraphs, in lines`],
+  [`6 : un paragraphe de 6 lignes. 6,4,2 : trois paragraphes de 6, 4 et 2 lignes.`, `6: one paragraph of 6 lines. 6,4,2: three paragraphs of 6, 4 and 2 lines.`],
+  [`Ligne vide entre les paragraphes`, `Blank line between paragraphs`],
+  [`Sans elle, les paragraphes se suivent à la ligne. Avec elle, ils restent distincts dans l'export PDF.`, `Without it, the paragraphs follow each other on the next line. With it, they stay separate in the PDF export.`],
+  [`Générer du texte Lorem ipsum`, `Generate Lorem ipsum text`],
+  [`Insérer`, `Insert`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

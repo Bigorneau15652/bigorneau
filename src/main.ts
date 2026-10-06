@@ -5,7 +5,7 @@ import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
-import { captionWord, insertFootnote, insertTableCaption, toggleToc } from "./export/insert";
+import { captionWord, insertFootnote, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
 import { FunctionRegistry, PanelFunction } from "./functions";
 import { HelpRegistry } from "./help";
@@ -15,7 +15,9 @@ import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
 import { runScript } from "./script-runner";
 import { FORMULAS_SCRIPT } from "./script-formulas";
+import { ICON_FOOTNOTE, ICON_LOREM, registerCustomIcons } from "./custom-icons";
 import { drawFigure, insertNamedImage } from "./drawing";
+import { LoremModal } from "./lorem-dialog";
 import { createPageScript } from "./script-page";
 import { buildExternal, ExternalScript, ScriptManager } from "./scripts";
 import { ScriptStore } from "./script-store";
@@ -24,7 +26,7 @@ import * as obsidianApi from "obsidian";
 import { columnAt, findTable, insertBlock, newTableBlock, tableContext } from "./table-edit";
 import { cellAtLine, MenuSpec, tableMenu } from "./table-menu";
 import { TableModal } from "./table-modal";
-import { figureCaptionExtension } from "./figure-caption-widget";
+import { figureCaptionExtension, tableNumberExtension } from "./figure-caption-widget";
 import { tableMarkerHideExtension } from "./table-marker-hide";
 import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
@@ -77,6 +79,7 @@ export default class MindmapWritingPlugin extends Plugin {
     this.fixed = this.settings.fixedViews.map((entry) => ({ entry: { ...entry }, leaf: null }));
     this.addSettingTab(new MmSettingTab(this.app, this));
     this.applyBodySettings();
+    registerCustomIcons();
 
     // Extension d'editeur : grisage des chapitres inactifs, suivi du curseur, touches de navigation.
     const notifyMoved = debounce(
@@ -258,7 +261,7 @@ export default class MindmapWritingPlugin extends Plugin {
     this.addFunction({
       id: `insert-footnote`,
       name: () => t(`Insérer une note de bas de page`),
-      icons: [`superscript`, `asterisk`],
+      icons: [ICON_FOOTNOTE],
       needsEditor: true,
       run: ({ editor }) => applyInsert(editor as Editor, (text, from, to) => insertFootnote(text, from, to)),
     });
@@ -285,11 +288,11 @@ export default class MindmapWritingPlugin extends Plugin {
       run: ({ editor }) => this.openTableDialog(editor as Editor),
     });
     this.addFunction({
-      id: `insert-table-caption`,
-      name: () => t(`Insérer une légende de tableau`),
-      icons: [`captions`, `subtitles`, `table-2`],
+      id: `lorem-ipsum`,
+      name: () => t(`Générer du texte Lorem ipsum`),
+      icons: [ICON_LOREM],
       needsEditor: true,
-      run: ({ editor }) => applyInsert(editor as Editor, (text, from) => insertTableCaption(text, from)),
+      run: ({ editor }) => this.openLoremDialog(editor as Editor),
     });
     this.addFunction({
       id: `draw`,
@@ -356,6 +359,7 @@ export default class MindmapWritingPlugin extends Plugin {
     });
     this.registerEditorExtension(tableMarkerHideExtension());
     this.registerEditorExtension(figureCaptionExtension());
+    this.registerEditorExtension(tableNumberExtension());
     this.registerEditorExtension(tableWidgetExtension({ showMenu: (event, items, access) => this.showTableMenu(event, items, access) }));
     // Mode Source : clic droit dans un tableau.
     this.registerEvent(
@@ -660,6 +664,22 @@ export default class MindmapWritingPlugin extends Plugin {
         void this.saveSettings(false);
       }
     ).open();
+  }
+
+  // Fenetre Lorem ipsum : le texte est insere a la place du curseur, comme un bloc ; la derniere saisie est gardee.
+  private openLoremDialog(editor: Editor): void {
+    const s = this.settings;
+    new LoremModal(this.app, { spec: s.loremSpec, blankLine: s.loremBlankLine }, (choice, generated) => {
+      s.loremSpec = choice.spec;
+      s.loremBlankLine = choice.blankLine;
+      void this.saveSettings(false);
+      const text = editor.getValue();
+      const at = editor.posToOffset(editor.getCursor(`to`));
+      const r = insertBlock(text, at, { text: generated, cursor: generated.length });
+      editor.replaceRange(r.edit.insert, editor.offsetToPos(r.edit.from), editor.offsetToPos(r.edit.to));
+      editor.setCursor(editor.offsetToPos(r.cursor));
+      editor.focus();
+    }).open();
   }
 
   private editorAccess(editor: Editor): { text(): string; apply(text: string): void } {

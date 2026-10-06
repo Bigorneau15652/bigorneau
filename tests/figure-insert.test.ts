@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addedDrawing, cleanFigureName, drawingEmbeds, figureLines, figureMarkup, isolateFigure, nameDrawing, parseFigureLine } from "../src/figure-insert";
+import { addedDrawing, cleanFigureName, drawingEmbeds, figureLines, figureMarkup, isolateFigure, nameDrawing, parseFigureLine, tableCaptionLines } from "../src/figure-insert";
 import { composeNote } from "../src/export/compose";
 import { DEFAULT_PAGE_STYLE } from "../src/export/typeset";
 import { imageCandidates, isExcalidrawTarget, isImageTarget } from "../src/export/image";
@@ -77,4 +77,12 @@ test(`les figures nommees d'une note sont numerotees comme a l'export, les autre
   assert.equal(en[0].text, `Figure 1: Site plan`);
   assert.deepEqual(parseFigureLine(`![[x.png|300]]`), { target: `x.png`, caption: `` });
   assert.equal(parseFigureLine(`Texte ![[x.png|Nom]]`), null);
+});
+
+test(`les tableaux nommes sont numerotes comme a l'export : legende au-dessus, avec ou sans ligne de style`, () => {
+  const text = [`# T`, ``, `Tableau : Premier`, `%% mmw-table {"header":true} %%`, `| A | B |`, `|---|---|`, `| 1 | 2 |`, ``, `Tableau :`, `| X |`, `|---|`, `| 1 |`, ``, `| Y | Z |`, `| :-- | --: |`, `| 3 | 4 |`, ``, `Table: Deuxième`, ``, `| C | D |`, `|---|---|`, `| 5 | 6 |`, ``, "```", `Tableau : Dans un code`, `| E |`, `|---|`, "```"].join(`\n`);
+  const caps = tableCaptionLines(text);
+  assert.deepEqual(caps.map((c) => [c.line, c.number, c.wordEnd]), [[2, 1, 7], [17, 2, 5]]);
+  // Une ligne « Tableau : » collee au bout d'un paragraphe n'est pas une legende.
+  assert.deepEqual(tableCaptionLines(`Du texte\nTableau : Pas une legende\n| A |\n|---|`), []);
 });
