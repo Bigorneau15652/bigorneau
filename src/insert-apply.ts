@@ -10,4 +10,6 @@ export function applyInsert(editor: Editor, make: (text: string, from: number, t
   const r = make(text, from, to);
   for (const e of [...r.edits].sort((a, b) => b.from - a.from)) editor.replaceRange(e.insert, editor.offsetToPos(e.from), editor.offsetToPos(e.to));
   if (r.cursor !== undefined) editor.setCursor(editor.offsetToPos(r.cursor));
+  // Le clic sur un bouton du panneau a pris le focus : sans lui, on ne peut pas taper la suite sans cliquer dans la note.
+  editor.focus();
 }

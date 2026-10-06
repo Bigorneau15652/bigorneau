@@ -724,7 +724,7 @@ const PAIRS: [string, string][] = [
   [`Taille des paragraphes, en lignes`, `Size of the paragraphs, in lines`],
   [`6 : un paragraphe de 6 lignes. 6,4,2 : trois paragraphes de 6, 4 et 2 lignes.`, `6: one paragraph of 6 lines. 6,4,2: three paragraphs of 6, 4 and 2 lines.`],
   [`Ligne vide entre les paragraphes`, `Blank line between paragraphs`],
-  [`Sans elle, les paragraphes se suivent à la ligne. Avec elle, ils restent distincts dans l'export PDF.`, `Without it, the paragraphs follow each other on the next line. With it, they stay separate in the PDF export.`],
+  [`Seule la note change : l'export PDF donne la même mise en page avec ou sans ligne vide.`, `Only the note changes: the PDF export gives the same layout with or without a blank line.`],
   [`Générer du texte Lorem ipsum`, `Generate Lorem ipsum text`],
   [`Insérer`, `Insert`],
 ];

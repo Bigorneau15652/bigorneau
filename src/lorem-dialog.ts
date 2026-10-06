@@ -52,7 +52,7 @@ export class LoremModal extends Modal {
       });
     new Setting(contentEl)
       .setName(t(`Ligne vide entre les paragraphes`))
-      .setDesc(t(`Sans elle, les paragraphes se suivent à la ligne. Avec elle, ils restent distincts dans l'export PDF.`))
+      .setDesc(t(`Seule la note change : l'export PDF donne la même mise en page avec ou sans ligne vide.`))
       .addToggle((x) => x.setValue(this.blankLine).onChange((v) => (this.blankLine = v)));
     contentEl.appendChild(note);
     preview();
