@@ -8,6 +8,8 @@ import { anyDecor } from "./page-config";
 import { defaultLayout, sameLayout } from "./page-layout";
 import { PageModal, PageModalHost } from "./page-modal";
 import { ICON_PARAGRAPH } from "./custom-icons";
+import { PageZoneModal } from "./page-zone-modal";
+import { pageZoneAt, setPageZone } from "./page-zone";
 import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
 import { defaultParagraphSettings, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
 import type { OfficialScript } from "./scripts";
@@ -96,6 +98,26 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
       active: ({ editor }) => (editor ? paragraphMarkerAt(editor.getValue(), editor.posToOffset(editor.getCursor())) !== null : false),
       run: ({ editor }) => {
         if (editor) new ParagraphModal(api.app, paragraphHost(editor), `one`).open();
+      },
+    });
+    // Cinquieme bouton : le bloc du curseur (grand tableau, grande image) passe en paysage ou en portrait.
+    api.addFunction({
+      id: `page-zone`,
+      name: { fr: `Orientation de la page : paysage ou portrait pour un bloc`, en: `Page orientation: landscape or portrait for a block` },
+      icon: [`rectangle-horizontal`, `rotate-cw-square`, `file-text`],
+      needsEditor: true,
+      active: ({ editor }) => (editor ? pageZoneAt(editor.getValue(), editor.posToOffset(editor.getCursor())) !== null : false),
+      run: ({ editor }) => {
+        if (!editor) return;
+        const offset = () => editor.posToOffset(editor.getCursor());
+        new PageZoneModal(api.app, {
+          layout: () => readPageConfig(editor.getValue()).layout,
+          current: () => pageZoneAt(editor.getValue(), offset())?.zone ?? null,
+          set: (zone) => {
+            const change = setPageZone(editor.getValue(), offset(), zone);
+            editor.replaceRange(change.insert, editor.offsetToPos(change.from), editor.offsetToPos(change.to));
+          },
+        }).open();
       },
     });
   },

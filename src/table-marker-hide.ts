@@ -4,17 +4,18 @@
 import { Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { parsePageMarker } from "./page-config";
+import { readPageZone } from "./page-zone";
 import { PARAGRAPH_MARKER_RE } from "./paragraph-format";
 import { parseTableMarker } from "./table-marker";
 
 const markerLine = Decoration.line({ class: `mmw-marker-line` });
 
 // Ligne de repere de style de tableau, ou de reglages de page (en-tete, pied de page, numerotation).
-const isMarker = (line: string): boolean => (line.includes(`mmw-table`) && parseTableMarker(line) !== null) || (line.includes(`mmw-page`) && parsePageMarker(line) !== null);
+const isMarker = (line: string): boolean => (line.includes(`mmw-table`) && parseTableMarker(line) !== null) || (line.includes(`mmw-page`) && parsePageMarker(line) !== null) || (line.includes(`page`) && readPageZone(line) !== null);
 
 // Positions (debut de ligne) des lignes de repere de style de tableau d'un texte.
 export function markerLineStarts(text: string): number[] {
-  if (!text.includes(`mmw-table`) && !text.includes(`mmw-page`)) return [];
+  if (!text.includes(`mmw-table`) && !text.includes(`mmw-page`) && !/%%[ \t]*page[ \t]*:/.test(text)) return [];
   const out: number[] = [];
   let pos = 0;
   for (const line of text.split(`\n`)) {

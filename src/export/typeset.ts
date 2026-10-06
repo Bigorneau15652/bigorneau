@@ -11,6 +11,7 @@ import { InlineContext, InlineText, normalizeHeading, parseInline, plainOf } fro
 import type { MathAsset } from "./math";
 import { mathKey } from "./math";
 import { LineRun, typesetParagraph, TypesetLine } from "./paragraph";
+import type { PageZone } from "../page-zone";
 import { layoutTable } from "./table";
 import { DEFAULT_TEX_PARAMS, INF_PENALTY, TexParams } from "./tex-params";
 
@@ -181,6 +182,9 @@ export interface Row {
   math?: { asset: MathAsset; size: number };
   // Cadre d'un media : bords gauche et droit sur toute la largeur du texte, bord haut et bord bas sur la premiere et la derniere ligne.
   frame?: { width: number; top: boolean; bottom: boolean };
+  // Ligne sans hauteur qui marque le debut d'une zone d'une autre orientation (null : retour a la mise en page de la note). Elle sert a
+  // couper le texte en parties mises en pages separement, voir compose.ts.
+  zoneStart?: { zone: PageZone | null };
 }
 
 // Note de bas de page composee : ses lignes et leur hauteur totale.
@@ -226,6 +230,9 @@ export interface TypesetOptions {
   pageOf?: (anchor: string) => number | undefined;
   // Reglage des paragraphes de la note : retrait ou espace entre paragraphes, alignement (voir paragraph-format.ts).
   paragraphs?: ParagraphSettings;
+  // Reglages de composition (une colonne de texte et ses marges) d'une zone d'orientation differente ; null : la note. Absent : les
+  // etiquettes de zone sont ignorees (feuille imposee).
+  zoneSetup?: (zone: PageZone | null) => PageSetup;
 }
 
 // Repere des titres et des blocs, et numero des figures et tableaux, calcules avant la composition pour que les renvois
@@ -508,7 +515,40 @@ class Typesetter {
   // Vrai quand le bloc precedent etait un paragraphe de texte (pour l'espace entre paragraphes).
   private afterParagraph = false;
 
+  // Zone en cours (null : la mise en page de la note) et zone a retrouver apres le prochain bloc (etiquette « seulement »).
+  private zone: PageZone | null = null;
+  private restore: { zone: PageZone | null } | undefined;
+
+  // Passe a une autre feuille : un repere coupe le texte, la largeur de composition change.
+  private enterZone(zone: PageZone | null): void {
+    const next = this.opts.zoneSetup;
+    if (!next) return;
+    const setup = next(zone);
+    const same = setup.width === this.setup.width && setup.height === this.setup.height && setup.marginLeft === this.setup.marginLeft && setup.marginTop === this.setup.marginTop;
+    this.zone = zone;
+    if (same) return;
+    this.setup = setup;
+    this.textWidth = setup.width - setup.marginLeft - setup.marginRight;
+    this.push({ kind: `space`, text: ``, x: 0, width: this.textWidth, fontSize: setup.fontSize, height: 0, wordSpacing: 0, align: `left`, zoneStart: { zone } });
+  }
+
   block(b: DocBlock): void {
+    if (b.type === `zone`) {
+      if (this.restore === undefined || !b.zone.once) this.restore = b.zone.once ? { zone: this.zone } : undefined;
+      this.enterZone(b.zone);
+      this.afterParagraph = false;
+      return;
+    }
+    this.blockContent(b);
+    // Etiquette « seulement » : la feuille reprend son orientation apres le bloc.
+    if (this.restore !== undefined) {
+      const back = this.restore.zone;
+      this.restore = undefined;
+      this.enterZone(back);
+    }
+  }
+
+  private blockContent(b: DocBlock): void {
     let paragraphDone = false;
     const lead = this.setup.leading;
     const size = this.setup.fontSize;

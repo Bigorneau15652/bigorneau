@@ -24,6 +24,7 @@ export class ExportPreviewView extends ItemView {
   private sheets: HTMLElement[] = [];
   // Feuille de la note composee (dimensions et marges de sa mise en page).
   private setup: PageSetup = A4_SETUP;
+  private sheetSetups: PageSetup[] = [];
   private observer: ResizeObserver | null = null;
   // Adresses des images de l'apercu, a liberer quand il est recompose ou ferme.
   private urls: string[] = [];
@@ -68,15 +69,17 @@ export class ExportPreviewView extends ItemView {
   private applyScale() {
     const avail = this.contentEl.clientWidth - 32;
     if (avail <= 0) return;
-    const scale = Math.min(1, avail / (this.setup.width * PX_PER_PT));
-    for (const sheet of this.sheets) {
+    this.sheets.forEach((sheet, i) => {
+      // Une page en paysage dans un document en portrait (ou l'inverse) a sa propre feuille.
+      const own = this.sheetSetups[i] ?? this.setup;
+      const scale = Math.min(1, avail / (own.width * PX_PER_PT));
       const page = sheet.firstElementChild as HTMLElement | null;
-      if (!page) continue;
-      sheet.style.width = `${this.setup.width * PX_PER_PT * scale}px`;
-      sheet.style.height = `${this.setup.height * PX_PER_PT * scale}px`;
+      if (!page) return;
+      sheet.style.width = `${own.width * PX_PER_PT * scale}px`;
+      sheet.style.height = `${own.height * PX_PER_PT * scale}px`;
       // La page est dimensionnee en points (donc deja en pixels CSS) : seule la reduction s'applique.
       page.style.transform = `scale(${scale})`;
-    }
+    });
   }
 
   // Morceaux de ligne : chacun a sa police (gras, italique) ; les appels de notes de bas de page sont des numeros en exposant, a 70 %
@@ -321,9 +324,10 @@ export class ExportPreviewView extends ItemView {
 
     const host = root.createDiv({ cls: `mmw-export-pages` });
     this.sheets = [];
+    this.sheetSetups = [];
     this.setup = composed.setup;
-    const setup = composed.setup;
     pages.forEach((pg) => {
+      const setup = pg.setup ?? composed.setup;
       const sheet = host.createDiv({ cls: `mmw-export-sheet` });
       const page = sheet.createDiv({ cls: `mmw-export-page` });
       page.style.width = `${setup.width}pt`;
@@ -366,6 +370,7 @@ export class ExportPreviewView extends ItemView {
       if (pg.footer) page.createDiv({ cls: `mmw-export-number`, text: pg.footer });
       for (const item of pg.decor ?? []) this.renderDecor(page, item);
       this.sheets.push(sheet);
+      this.sheetSetups.push(setup);
     });
     this.applyScale();
   }
