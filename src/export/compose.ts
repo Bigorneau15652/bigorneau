@@ -3,15 +3,18 @@ import { layoutDecor } from "./page-decor";
 import { findPageConfig } from "../page-config";
 import { buildExportDoc } from "./doc-tree";
 import { languageOf } from "./typeset";
-import { anchorPages, paginate, Page } from "./paginate";
+import { anchorPages, groupColumns, paginate, Page } from "./paginate";
+import { columnSetupOf, columnWidthOf, COLUMN_GAP, defaultLayout, pageSetupOf } from "../page-layout";
 import { ImageAsset } from "./image";
 import { inlineMathOf, MathAsset } from "./math";
 import { buildPdf } from "./pdf";
-import { A4_SETUP, DEFAULT_PAGE_STYLE, PageSetup, PageStyle, tocPlan, typesetDoc, TypesetDoc } from "./typeset";
+import { DEFAULT_PAGE_STYLE, PageSetup, PageStyle, tocPlan, typesetDoc, TypesetDoc } from "./typeset";
 
 export interface Composed {
   typeset: TypesetDoc;
   pages: Page[];
+  // Feuille : dimensions et marges (celles de la mise en page de la note).
+  setup: PageSetup;
   language: string;
   author?: string;
   title: string;
@@ -89,27 +92,33 @@ export function imageTargets(text: string, fileName: string): { target: string; 
 }
 
 // Compose la note en pages (apercu et PDF partagent ce resultat, pour qu'ils soient identiques).
-export function composeNote(text: string, fileName: string, setup: PageSetup = A4_SETUP, style: PageStyle = DEFAULT_PAGE_STYLE, assets: ComposeAssets = {}): Composed {
+export function composeNote(text: string, fileName: string, explicitSetup: PageSetup | undefined = undefined, style: PageStyle = DEFAULT_PAGE_STYLE, assets: ComposeAssets = {}): Composed {
   const images = assets.images;
   const options = { ...(images ? { images } : {}), ...(assets.formulas ? { formulas: assets.formulas } : {}) };
   const doc = buildExportDoc(text, fileName);
+  // Mise en page de la note (format, orientation, marges, colonnes), sauf si une feuille est imposee : alors une seule colonne.
+  const found = findPageConfig(text);
+  const layout = explicitSetup ? defaultLayout() : (found?.config.layout ?? defaultLayout());
+  const setup = explicitSetup ?? pageSetupOf(layout);
+  const columnSetup = explicitSetup ?? columnSetupOf(layout);
+  const columnCount = layout.columns;
+  const arrange = (list: Page[]): Page[] => (columnCount > 1 ? groupColumns(list, columnCount, columnWidthOf(layout), COLUMN_GAP) : list);
   // Table des matieres et renvois avec numero de page : la mise en page depend des numeros de page, qui dependent de la mise
   // en page. On recompose avec les numeros de la composition precedente jusqu'a ce qu'ils ne changent plus (quatre fois au plus).
   const plan = tocPlan(doc, style);
   const needsPages = plan.general > 0 || plan.chapter > 0 || style.pageRefs;
   let known: Map<string, number> | undefined;
-  let typeset = typesetDoc(doc, setup, undefined, style, options);
-  let pages = paginate(typeset, setup, style);
+  let typeset = typesetDoc(doc, columnSetup, undefined, style, options);
+  let pages = arrange(paginate(typeset, columnSetup, style));
   for (let pass = 0; needsPages && pass < 4; pass++) {
     const found = anchorPages(pages);
     if (known && sameMap(known, found)) break;
     known = found;
     const pageOf = (a: string): number | undefined => found.get(a);
-    typeset = typesetDoc(doc, setup, undefined, style, { ...options, pageOf });
-    pages = paginate(typeset, setup, style);
+    typeset = typesetDoc(doc, columnSetup, undefined, style, { ...options, pageOf });
+    pages = arrange(paginate(typeset, columnSetup, style));
   }
   // En-tete, pied de page et numero d'apres les reglages ecrits dans la note : ils remplacent ceux d'origine.
-  const found = findPageConfig(text);
   if (found) {
     const english = languageOf(doc.language) === `en`;
     const format = new Intl.DateTimeFormat(english ? `en-GB` : `fr-FR`, { dateStyle: `long` });
@@ -125,6 +134,7 @@ export function composeNote(text: string, fileName: string, setup: PageSetup = A
   return {
     typeset,
     pages,
+    setup,
     language: languageOf(doc.language) === `en` ? `en-GB` : `fr-FR`,
     ...(doc.author ? { author: doc.author } : {}),
     title: doc.title,
@@ -146,7 +156,7 @@ export interface PdfRequest {
   deflate?: (data: Uint8Array) => Promise<Uint8Array>;
 }
 
-export async function composeToPdf(composed: Composed, req: PdfRequest, setup: PageSetup = A4_SETUP): Promise<Uint8Array> {
+export async function composeToPdf(composed: Composed, req: PdfRequest, setup: PageSetup = composed.setup): Promise<Uint8Array> {
   const author = composed.author ?? (req.defaultAuthor ? req.defaultAuthor : undefined);
   return buildPdf(composed.pages, setup, {
     title: composed.title,

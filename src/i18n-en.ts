@@ -727,6 +727,18 @@ const PAIRS: [string, string][] = [
   [`Seule la note change : l'export PDF donne la même mise en page avec ou sans ligne vide.`, `Only the note changes: the PDF export gives the same layout with or without a blank line.`],
   [`Générer du texte Lorem ipsum`, `Generate Lorem ipsum text`],
   [`Insérer`, `Insert`],
+  [`Format de la page`, `Page format`],
+  [`Format de la feuille`, `Sheet format`],
+  [`Orientation`, `Orientation`],
+  [`Portrait`, `Portrait`],
+  [`Paysage`, `Landscape`],
+  [`Marges`, `Margins`],
+  [`Étroites`, `Narrow`],
+  [`Normales`, `Normal`],
+  [`Larges`, `Wide`],
+  [`Colonnes`, `Columns`],
+  [`Jusqu'à {0} pour cette feuille : une colonne garde au moins {1} cm de large.`, `Up to {0} for this sheet: a column stays at least {1} cm wide.`],
+  [`Les notes de bas de page se placent au bas de leur colonne. Les figures et les tableaux ont la largeur d'une colonne.`, `Footnotes go at the bottom of their column. Figures and tables have the width of a column.`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

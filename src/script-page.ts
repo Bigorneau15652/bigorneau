@@ -2,7 +2,9 @@
 // bouton ouvre la fenetre de reglages (trois onglets) ; il est plus contraste quand au moins un des trois elements existe dans la note.
 // Desactive, il ne change rien : l'export reste celui d'avant, avec ses reglages generaux.
 import { applyPageConfig, readPageConfig } from "./page-apply";
+import { LayoutModal } from "./layout-modal";
 import { anyDecor } from "./page-config";
+import { defaultLayout, sameLayout } from "./page-layout";
 import { PageModal, PageModalHost } from "./page-modal";
 import type { OfficialScript } from "./scripts";
 
@@ -12,10 +14,10 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
   id: `page-layout`,
   name: { fr: `Mise en page`, en: `Page layout` },
   description: {
-    fr: `Ajoute un en-tête, un pied de page et un bord extérieur (texte à 90 degrés) à l'export PDF, réglés note par note : trois zones, mise en forme, images, pages de gauche et de droite, numéro de page dans une forme colorée.`,
-    en: `Adds a header, a footer and an outer edge (text at 90 degrees) to the PDF export, set note by note: three zones, formatting, images, left and right pages, page number inside a coloured shape.`,
+    fr: `Règle la page de l'export PDF note par note : format de la feuille, orientation, marges et colonnes, puis en-tête, pied de page et bord extérieur (texte à 90 degrés) avec trois zones, mise en forme, images, pages de gauche et de droite, numéro de page dans une forme colorée.`,
+    en: `Sets the page of the PDF export note by note: sheet format, orientation, margins and columns, then header, footer and outer edge (text at 90 degrees) with three zones, formatting, images, left and right pages, page number inside a coloured shape.`,
   },
-  version: `2.1.0`,
+  version: `3.0.0`,
   api: 1,
   requires: [],
   defaultEnabled: false,
@@ -44,6 +46,18 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
           };
         }
         new PageModal(api.app, host).open();
+      },
+    });
+    // Second bouton : format de la feuille, orientation, marges et colonnes. Plus contraste quand la note s'ecarte de l'A4 portrait.
+    api.addFunction({
+      id: `page-format`,
+      name: { fr: `Format de la page : feuille, orientation, marges et colonnes`, en: `Page format: sheet, orientation, margins and columns` },
+      icon: [`columns-2`, `layout-panel-left`, `ruler`],
+      needsEditor: true,
+      active: ({ editor }) => (editor ? !sameLayout(readPageConfig(editor.getValue()).layout, defaultLayout()) : false),
+      run: ({ editor }) => {
+        if (!editor) return;
+        new LayoutModal(api.app, { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) }).open();
       },
     });
   },

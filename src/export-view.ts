@@ -5,9 +5,9 @@ import { composeNote } from "./export/compose";
 import type { ImageAsset } from "./export/image";
 import type { MathAsset } from "./export/math";
 import type { DecorItem, DecorLeaf } from "./export/page-decor";
-import { FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
+import { columnsOf, FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
-import { A4_SETUP, Row } from "./export/typeset";
+import { A4_SETUP, PageSetup, Row } from "./export/typeset";
 import { loadAssets, pageStyleOf } from "./export-context";
 import { warningLines } from "./export-report";
 import { MATH_SERVICE, MathRenderer } from "./script-formulas";
@@ -22,6 +22,8 @@ const PX_PER_PT = 96 / 72;
 export class ExportPreviewView extends ItemView {
   private token = 0;
   private sheets: HTMLElement[] = [];
+  // Feuille de la note composee (dimensions et marges de sa mise en page).
+  private setup: PageSetup = A4_SETUP;
   private observer: ResizeObserver | null = null;
   // Adresses des images de l'apercu, a liberer quand il est recompose ou ferme.
   private urls: string[] = [];
@@ -66,12 +68,12 @@ export class ExportPreviewView extends ItemView {
   private applyScale() {
     const avail = this.contentEl.clientWidth - 32;
     if (avail <= 0) return;
-    const scale = Math.min(1, avail / (A4_SETUP.width * PX_PER_PT));
+    const scale = Math.min(1, avail / (this.setup.width * PX_PER_PT));
     for (const sheet of this.sheets) {
       const page = sheet.firstElementChild as HTMLElement | null;
       if (!page) continue;
-      sheet.style.width = `${A4_SETUP.width * PX_PER_PT * scale}px`;
-      sheet.style.height = `${A4_SETUP.height * PX_PER_PT * scale}px`;
+      sheet.style.width = `${this.setup.width * PX_PER_PT * scale}px`;
+      sheet.style.height = `${this.setup.height * PX_PER_PT * scale}px`;
       // La page est dimensionnee en points (donc deja en pixels CSS) : seule la reduction s'applique.
       page.style.transform = `scale(${scale})`;
     }
@@ -319,41 +321,47 @@ export class ExportPreviewView extends ItemView {
 
     const host = root.createDiv({ cls: `mmw-export-pages` });
     this.sheets = [];
+    this.setup = composed.setup;
+    const setup = composed.setup;
     pages.forEach((pg) => {
       const sheet = host.createDiv({ cls: `mmw-export-sheet` });
       const page = sheet.createDiv({ cls: `mmw-export-page` });
-      page.style.width = `${A4_SETUP.width}pt`;
-      page.style.height = `${A4_SETUP.height}pt`;
-      const textWidth = A4_SETUP.width - A4_SETUP.marginLeft - A4_SETUP.marginRight;
+      page.style.width = `${setup.width}pt`;
+      page.style.height = `${setup.height}pt`;
+      const textWidth = setup.width - setup.marginLeft - setup.marginRight;
       if (pg.header) {
         const h = page.createDiv({ cls: `mmw-export-header`, text: pg.header });
-        h.style.left = `${A4_SETUP.marginLeft}pt`;
-        h.style.top = `${A4_SETUP.marginTop - 34}pt`;
+        h.style.left = `${setup.marginLeft}pt`;
+        h.style.top = `${setup.marginTop - 34}pt`;
         h.style.width = `${textWidth}pt`;
       }
-      const body = page.createDiv({ cls: `mmw-export-body` });
-      body.style.left = `${A4_SETUP.marginLeft}pt`;
-      body.style.top = `${A4_SETUP.marginTop}pt`;
-      body.style.width = `${textWidth}pt`;
-      for (const row of pg.topFloats ?? []) this.renderRow(body, row);
-      for (const row of pg.rows) this.renderRow(body, row);
-      if (pg.footnotes.length > 0) {
-        const notes = page.createDiv({ cls: `mmw-export-notes` });
-        notes.style.left = `${A4_SETUP.marginLeft}pt`;
-        notes.style.bottom = `${A4_SETUP.marginBottom}pt`;
-        notes.style.width = `${textWidth}pt`;
-        const rule = notes.createDiv({ cls: `mmw-export-rule` });
-        rule.style.height = `${FOOTNOTE_RULE_HEIGHT}pt`;
-        for (const row of pg.footnotes) this.renderRow(notes, row);
-      }
-      if (pg.bottomFloats && pg.bottomFloats.length > 0) {
-        // Flottants du bas : juste au-dessus des notes de bas de page.
-        const noteArea = pg.footnotes.length > 0 ? FOOTNOTE_RULE_HEIGHT + pg.footnotes.reduce((a, r) => a + r.height, 0) : 0;
-        const floats = page.createDiv({ cls: `mmw-export-notes` });
-        floats.style.left = `${A4_SETUP.marginLeft}pt`;
-        floats.style.bottom = `${A4_SETUP.marginBottom + noteArea}pt`;
-        floats.style.width = `${textWidth}pt`;
-        for (const row of pg.bottomFloats) this.renderRow(floats, row);
+      // Chaque colonne : ses lignes depuis la marge haute, puis ses flottants du bas et ses notes en bas de la colonne.
+      for (const col of columnsOf(pg, textWidth)) {
+        const left = setup.marginLeft + col.x;
+        const body = page.createDiv({ cls: `mmw-export-body` });
+        body.style.left = `${left}pt`;
+        body.style.top = `${setup.marginTop}pt`;
+        body.style.width = `${col.width}pt`;
+        for (const row of col.topFloats ?? []) this.renderRow(body, row);
+        for (const row of col.rows) this.renderRow(body, row);
+        if (col.footnotes.length > 0) {
+          const notes = page.createDiv({ cls: `mmw-export-notes` });
+          notes.style.left = `${left}pt`;
+          notes.style.bottom = `${setup.marginBottom}pt`;
+          notes.style.width = `${col.width}pt`;
+          const rule = notes.createDiv({ cls: `mmw-export-rule` });
+          rule.style.height = `${FOOTNOTE_RULE_HEIGHT}pt`;
+          for (const row of col.footnotes) this.renderRow(notes, row);
+        }
+        if (col.bottomFloats && col.bottomFloats.length > 0) {
+          // Flottants du bas : juste au-dessus des notes de bas de page.
+          const noteArea = col.footnotes.length > 0 ? FOOTNOTE_RULE_HEIGHT + col.footnotes.reduce((a, r) => a + r.height, 0) : 0;
+          const floats = page.createDiv({ cls: `mmw-export-notes` });
+          floats.style.left = `${left}pt`;
+          floats.style.bottom = `${setup.marginBottom + noteArea}pt`;
+          floats.style.width = `${col.width}pt`;
+          for (const row of col.bottomFloats) this.renderRow(floats, row);
+        }
       }
       if (pg.footer) page.createDiv({ cls: `mmw-export-number`, text: pg.footer });
       for (const item of pg.decor ?? []) this.renderDecor(page, item);

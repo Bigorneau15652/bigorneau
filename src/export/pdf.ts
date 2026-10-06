@@ -7,7 +7,7 @@ import { ImageAsset } from "./image";
 import { OpenTypeFont } from "./font";
 import type { DecorLeaf } from "./page-decor";
 import { LineRun, SUP_SCALE } from "./paragraph";
-import { FOOTNOTE_RULE_HEIGHT, Page } from "./paginate";
+import { columnsOf, FOOTNOTE_RULE_HEIGHT, Page } from "./paginate";
 import { PageSetup, Row } from "./typeset";
 
 export interface PdfOptions {
@@ -309,33 +309,37 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
         links.push({ rect: [left + row.x, H - rowTop - row.height, right, H - rowTop], url: `#${row.toc.anchor}` });
       }
     };
-    for (const row of page.topFloats ?? []) {
-      drawRow(row, setup.marginLeft, top);
-      top += row.height;
-    }
-    for (const row of page.rows) {
-      drawRow(row, setup.marginLeft, top);
-      top += row.height;
-    }
-    // Flottants du bas : juste au-dessus des notes de bas de page.
-    if (page.bottomFloats && page.bottomFloats.length > 0) {
-      const noteArea = page.footnotes.length > 0 ? FOOTNOTE_RULE_HEIGHT + page.footnotes.reduce((a, r) => a + r.height, 0) : 0;
-      let by = H - setup.marginBottom - noteArea - page.bottomFloats.reduce((a, r) => a + r.height, 0);
-      for (const row of page.bottomFloats) {
-        drawRow(row, setup.marginLeft, by);
-        by += row.height;
+    // Chaque colonne se dessine a part : lignes depuis la marge haute, flottants du bas puis notes au bas de la colonne.
+    for (const col of columnsOf(page, textWidth)) {
+      const left = setup.marginLeft + col.x;
+      let y0 = setup.marginTop;
+      for (const row of col.topFloats ?? []) {
+        drawRow(row, left, y0);
+        y0 += row.height;
       }
-    }
-
-    // Notes de bas de page : en bas de la zone de texte, sous un filet.
-    if (page.footnotes.length > 0) {
-      const area = FOOTNOTE_RULE_HEIGHT + page.footnotes.reduce((a, r) => a + r.height, 0);
-      let y = H - setup.marginBottom - area;
-      ops.push(`q 0.267 G 0.4 w ${num(setup.marginLeft)} ${num(H - y)} m ${num(setup.marginLeft + textWidth * 0.33)} ${num(H - y)} l S Q`);
-      y += FOOTNOTE_RULE_HEIGHT;
-      for (const row of page.footnotes) {
-        drawRow(row, setup.marginLeft, y);
-        y += row.height;
+      for (const row of col.rows) {
+        drawRow(row, left, y0);
+        y0 += row.height;
+      }
+      // Flottants du bas : juste au-dessus des notes de bas de page.
+      if (col.bottomFloats && col.bottomFloats.length > 0) {
+        const noteArea = col.footnotes.length > 0 ? FOOTNOTE_RULE_HEIGHT + col.footnotes.reduce((a, r) => a + r.height, 0) : 0;
+        let by = H - setup.marginBottom - noteArea - col.bottomFloats.reduce((a, r) => a + r.height, 0);
+        for (const row of col.bottomFloats) {
+          drawRow(row, left, by);
+          by += row.height;
+        }
+      }
+      // Notes de bas de page : en bas de la colonne, sous un filet.
+      if (col.footnotes.length > 0) {
+        const area = FOOTNOTE_RULE_HEIGHT + col.footnotes.reduce((a, r) => a + r.height, 0);
+        let y = H - setup.marginBottom - area;
+        ops.push(`q 0.267 G 0.4 w ${num(left)} ${num(H - y)} m ${num(left + col.width * 0.33)} ${num(H - y)} l S Q`);
+        y += FOOTNOTE_RULE_HEIGHT;
+        for (const row of col.footnotes) {
+          drawRow(row, left, y);
+          y += row.height;
+        }
       }
     }
 
