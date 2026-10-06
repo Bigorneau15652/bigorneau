@@ -6,6 +6,8 @@ import { LayoutModal } from "./layout-modal";
 import { anyDecor } from "./page-config";
 import { defaultLayout, sameLayout } from "./page-layout";
 import { PageModal, PageModalHost } from "./page-modal";
+import { ParagraphModal } from "./paragraph-modal";
+import { defaultParagraphSettings, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
 import type { OfficialScript } from "./scripts";
 
 // `defaultAuthor` donne le reglage « Auteur du PDF » du plugin, propose quand la note n'a pas de propriete author.
@@ -58,6 +60,28 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
       run: ({ editor }) => {
         if (!editor) return;
         new LayoutModal(api.app, { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) }).open();
+      },
+    });
+    // Troisieme bouton : style des paragraphes de la note (retrait ou espace, alignement) et exception pour le paragraphe du curseur.
+    api.addFunction({
+      id: `page-paragraphs`,
+      name: { fr: `Paragraphes : retrait, espace et alignement`, en: `Paragraphs: indent, spacing and alignment` },
+      icon: [`pilcrow`, `align-justify`, `text`],
+      needsEditor: true,
+      active: ({ editor }) => (editor ? JSON.stringify(readPageConfig(editor.getValue()).paragraphs) !== JSON.stringify(defaultParagraphSettings()) : false),
+      run: ({ editor }) => {
+        if (!editor) return;
+        const offset = () => editor.posToOffset(editor.getCursor());
+        new ParagraphModal(api.app, {
+          read: () => readPageConfig(editor.getValue()),
+          write: (c) => applyPageConfig(editor, c),
+          current: () => paragraphMarkerAt(editor.getValue(), offset()),
+          setException: (format) => {
+            const text = editor.getValue();
+            const change = setParagraphMarker(text, offset(), format);
+            editor.replaceRange(change.insert, editor.offsetToPos(change.from), editor.offsetToPos(change.to));
+          },
+        }).open();
       },
     });
   },

@@ -79,3 +79,17 @@ test(`l'en-tete et le PDF suivent la feuille et ses colonnes`, async () => {
   assert.equal([...pdf.matchAll(/\/Type \/Page /g)].length, cols.pages.length);
   assert.ok(pdf.includes(`/MediaBox [0 0 841.89 595.28]`) || pdf.includes(`/MediaBox [0 0 841.89 595.28`));
 });
+
+test(`le schema de la feuille suit le format, l'orientation, les marges et les colonnes`, async () => {
+  const { layoutDiagram } = await import(`../src/layout-diagram`);
+  const a4 = layoutDiagram(defaultLayout());
+  assert.equal(a4.sheetMm.width, 210);
+  assert.equal(a4.sheetMm.height, 297);
+  assert.ok(a4.height > a4.width);
+  assert.equal(a4.columns.length, 1);
+  const land = layoutDiagram({ ...defaultLayout(), orientation: `landscape`, columns: 2 });
+  assert.ok(land.width > land.height);
+  assert.equal(land.columns.length, 2);
+  assert.ok(land.columns[1].x > land.columns[0].x + land.columns[0].width);
+  assert.ok(layoutDiagram({ ...defaultLayout(), margins: `wide` }).marginMm > a4.marginMm);
+});

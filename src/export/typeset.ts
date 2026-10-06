@@ -2,6 +2,7 @@
 // avec la feuille de style du premier gabarit (A4, recto simple). La repartition des lignes en pages est faite par paginate.ts.
 // Phase 3 : notes de bas de page, penalites de pagination (lignes veuves et orphelines, titres), chapitres courants. Les
 // tableaux, formules et figures sont encore des reperes provisoires.
+import { defaultParagraphSettings, PARAGRAPH_SPACE_POINTS, ParagraphSettings } from "../paragraph-format";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
 import { FontStyle, measureText } from "./font-metrics";
 import { LanguageCode } from "./hyphenate";
@@ -223,6 +224,8 @@ export interface TypesetOptions {
   formulas?: Map<string, MathAsset>;
   // Numero de page d'une ancre, connu apres une premiere mise en page (table des matieres, renvois avec page).
   pageOf?: (anchor: string) => number | undefined;
+  // Reglage des paragraphes de la note : retrait ou espace entre paragraphes, alignement (voir paragraph-format.ts).
+  paragraphs?: ParagraphSettings;
 }
 
 // Repere des titres et des blocs, et numero des figures et tableaux, calcules avant la composition pour que les renvois
@@ -345,7 +348,7 @@ class Typesetter {
     return p;
   }
 
-  private addLines(lines: TypesetLine[], kind: RowKind, x: number, width: number, fontSize: number, height: number, opts: { marker?: string; keep?: boolean } = {}): void {
+  private addLines(lines: TypesetLine[], kind: RowKind, x: number, width: number, fontSize: number, height: number, opts: { marker?: string; keep?: boolean; shift?: `right` | `center` } = {}): void {
     let prevHyphen = false;
     lines.forEach((l, i) => {
       this.stats.lines++;
@@ -360,11 +363,14 @@ class Typesetter {
       // Une formule plus haute que l'interligne agrandit la ligne.
       let lineHeight = height;
       for (const r of l.runs) if (r.math) lineHeight = Math.max(lineHeight, ((r.math.ascent + r.math.descent) * fontSize) / 1000 + 2);
+      // Texte a droite ou centre : la ligne, composee au fil de l'eau, est decalee de ce qui reste de la largeur.
+      const slack = Math.max(0, width - l.width);
+      const offset = opts.shift === `right` ? slack : opts.shift === `center` ? slack / 2 : l.offset;
       this.push({
         kind,
         text: l.text,
-        x: x + l.offset,
-        width: width - l.offset,
+        x: x + offset,
+        width: width - offset,
         fontSize,
         height: lineHeight,
         wordSpacing: l.wordSpacing,
@@ -442,7 +448,7 @@ class Typesetter {
   }
 
   // Compose un texte en lignes et les ajoute ; renvoie le nombre de lignes ajoutees.
-  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle }): number {
+  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle; shift?: `right` | `center` }): number {
     const r = typesetParagraph(opts.notes === false ? parseInline(text) : this.inline(text), {
       language: this.language,
       fontSize: opts.fontSize,
@@ -457,7 +463,7 @@ class Typesetter {
     this.missing.push(...r.missing);
     if (r.pass > 0) this.stats.passes[r.pass - 1]++;
     this.stats.paragraphs++;
-    this.addLines(r.lines, kind, x, width, opts.fontSize, this.setup.leading * (opts.fontSize / this.setup.fontSize), { marker: opts.marker, keep: opts.keep });
+    this.addLines(r.lines, kind, x, width, opts.fontSize, this.setup.leading * (opts.fontSize / this.setup.fontSize), { marker: opts.marker, keep: opts.keep, ...(opts.shift ? { shift: opts.shift } : {}) });
     return r.lines.length;
   }
 
@@ -499,15 +505,29 @@ class Typesetter {
     if (id !== undefined && this.sink[from]) this.sink[from].anchor = `b:${id}`;
   }
 
+  // Vrai quand le bloc precedent etait un paragraphe de texte (pour l'espace entre paragraphes).
+  private afterParagraph = false;
+
   block(b: DocBlock): void {
+    let paragraphDone = false;
     const lead = this.setup.leading;
     const size = this.setup.fontSize;
     const from = this.sink.length;
     switch (b.type) {
-      case `paragraph`:
-        this.paragraph(b.text, `text`, 0, this.textWidth, { indent: size * this.params.parIndent, justify: true, hyphenate: true, fontSize: size });
+      case `paragraph`: {
+        // Reglage du document, puis exception de ce paragraphe (%% p: ... %%) : alignement, retrait ou espace entre paragraphes.
+        const base = this.opts.paragraphs ?? defaultParagraphSettings();
+        const align = b.format?.align ?? base.align;
+        const mode = b.format?.mode ?? base.mode;
+        const gap = PARAGRAPH_SPACE_POINTS[b.format?.size ?? base.size];
+        if (mode === `space` && this.afterParagraph) this.space(gap);
+        // Le retrait n'a de sens que pour du texte a gauche ou justifie.
+        const indent = mode === `indent` && (align === `justify` || align === `left`) ? size * this.params.parIndent : 0;
+        this.paragraph(b.text, `text`, 0, this.textWidth, { indent, justify: align === `justify`, hyphenate: true, fontSize: size, ...(align === `right` || align === `center` ? { shift: align } : {}) });
         this.anchorFrom(from, b.id);
+        paragraphDone = true;
         break;
+      }
       case `list`: {
         const counters: number[] = [];
         for (const item of b.items) {
@@ -541,6 +561,7 @@ class Typesetter {
         this.media(b);
         break;
     }
+    this.afterParagraph = paragraphDone;
   }
 
   // Formule en bloc : centree, mise a l'echelle de la colonne si elle est trop large. Un dessin absent est remplace par le texte

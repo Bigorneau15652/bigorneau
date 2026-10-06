@@ -94,10 +94,11 @@ export function imageTargets(text: string, fileName: string): { target: string; 
 // Compose la note en pages (apercu et PDF partagent ce resultat, pour qu'ils soient identiques).
 export function composeNote(text: string, fileName: string, explicitSetup: PageSetup | undefined = undefined, style: PageStyle = DEFAULT_PAGE_STYLE, assets: ComposeAssets = {}): Composed {
   const images = assets.images;
-  const options = { ...(images ? { images } : {}), ...(assets.formulas ? { formulas: assets.formulas } : {}) };
+  const noteConfig = findPageConfig(text);
+  const options = { ...(images ? { images } : {}), ...(assets.formulas ? { formulas: assets.formulas } : {}), ...(noteConfig ? { paragraphs: noteConfig.config.paragraphs } : {}) };
   const doc = buildExportDoc(text, fileName);
   // Mise en page de la note (format, orientation, marges, colonnes), sauf si une feuille est imposee : alors une seule colonne.
-  const found = findPageConfig(text);
+  const found = noteConfig;
   const layout = explicitSetup ? defaultLayout() : (found?.config.layout ?? defaultLayout());
   const setup = explicitSetup ?? pageSetupOf(layout);
   const columnSetup = explicitSetup ?? columnSetupOf(layout);

@@ -2,6 +2,7 @@
 // A partir du texte d'une note, produit un arbre neutre (titres, paragraphes, listes, citations, code, tableaux, figures)
 // sans aucune information de mise en page. Les commentaires du plugin (%% ... %%) n'y apparaissent jamais.
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
+import { markParagraphMarkers, ParagraphFormat, splitParagraphSentinel } from "../paragraph-format";
 import { markTableMarkers, styleFromSentinel, TABLE_MARKER_SENTINEL, TableStyle } from "../table-marker";
 import { MmNode, parseNote, splitLines } from "../model";
 
@@ -16,7 +17,8 @@ export type ColumnAlign = `left` | `center` | `right`;
 
 // `id` : identifiant de bloc Obsidian (^identifiant a la fin du bloc), qui permet de renvoyer au bloc.
 export type DocBlock =
-  | { type: `paragraph`; text: string; id?: string }
+  // `format` : exception ecrite au debut du paragraphe (%% p: droite %%), voir paragraph-format.ts.
+  | { type: `paragraph`; text: string; id?: string; format?: ParagraphFormat }
   | { type: `list`; ordered: boolean; items: DocListItem[] }
   | { type: `quote`; text: string; id?: string }
   | { type: `code`; lang: string; text: string }
@@ -224,14 +226,26 @@ function indentWidth(s: string): number {
 
 // Decoupe le texte situe sous un titre en blocs.
 export function parseBlocks(text: string): DocBlock[] {
-  const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(text))).text.split(`\n`);
+  const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(markParagraphMarkers(text)))).text.split(`\n`);
   const blocks: DocBlock[] = [];
   let para: string[] = [];
+  // Exception d'un repere seul sur sa ligne : elle s'applique au paragraphe suivant.
+  let pendingFormat: ParagraphFormat | null = null;
   const flushPara = (): void => {
     if (para.length > 0) {
-      const text = para.join(` `);
-      const m = BLOCK_ID_RE.exec(text);
-      blocks.push(m ? { type: `paragraph`, text: text.slice(0, m.index), id: m[1] } : { type: `paragraph`, text });
+      const joined = para.join(` `);
+      const split = splitParagraphSentinel(joined);
+      const format = split.format ?? pendingFormat;
+      const text = split.text;
+      if (text !== `` || split.format === null) pendingFormat = null;
+      if (text === `` && split.format !== null) {
+        // Repere seul : il attend le paragraphe suivant.
+        pendingFormat = split.format;
+      } else {
+        const m = BLOCK_ID_RE.exec(text);
+        const fmt = format && Object.keys(format).length > 0 ? { format } : {};
+        blocks.push(m ? { type: `paragraph`, text: text.slice(0, m.index), id: m[1], ...fmt } : { type: `paragraph`, text, ...fmt });
+      }
     }
     para = [];
   };

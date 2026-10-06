@@ -3,6 +3,7 @@
 import { App, Modal, Setting } from "obsidian";
 import { currentLang, t } from "./i18n";
 import { FORMAT_IDS, FORMATS, FormatId, MarginId, maxColumns, MIN_COLUMN_WIDTH, Orientation, PageLayout, sanitizeLayout } from "./page-layout";
+import { drawLayoutDiagram, layoutDiagram } from "./layout-diagram";
 import type { PageModalHost } from "./page-modal";
 
 export class LayoutModal extends Modal {
@@ -31,6 +32,10 @@ export class LayoutModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     const lang = currentLang();
+    // Schema a l'echelle : feuille, marges (pointilles) et colonnes. Il suit les choix ci-dessous.
+    const diagram = contentEl.createDiv({ cls: `mmw-diagram` });
+    drawLayoutDiagram(diagram, layoutDiagram(this.layout), { margin: t(`Marge`), sheet: t(`Schéma de la feuille`) });
+    diagram.createDiv({ cls: `mmw-pnote`, text: t(`Le trait pointillé délimite la zone de texte : sa distance au bord de la feuille est la marge.`) });
     new Setting(contentEl).setName(t(`Format de la feuille`)).addDropdown((d) => {
       for (const id of FORMAT_IDS) d.addOption(id, FORMATS[id][lang]);
       d.setValue(this.layout.format).onChange((v) => this.save({ format: v as FormatId }));

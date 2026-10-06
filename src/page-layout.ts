@@ -43,7 +43,7 @@ export const MAX_COLUMNS = 8;
 // Marges de l'A4 d'origine (2,5 cm) : etroites = moitie, larges = une fois et demie. Elles diminuent avec les petites feuilles.
 const MARGIN_POINTS: Record<MarginId, number> = { narrow: 36, normal: 72, wide: 108 };
 
-function size(layout: PageLayout): { width: number; height: number } {
+export function size(layout: PageLayout): { width: number; height: number } {
   const f = FORMATS[layout.format];
   return layout.orientation === `landscape` ? { width: f.height, height: f.width } : { width: f.width, height: f.height };
 }
