@@ -2368,3 +2368,17 @@ table.mmw-t-equal td {
   font-size: 0.9em;
   color: var(--text-muted);
 }
+
+/* Fenetre du format de la page : schema de la feuille. */
+.mmw-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+
+.mmw-diagram svg {
+  max-width: 100%;
+  height: auto;
+}

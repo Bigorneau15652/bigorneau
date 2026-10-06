@@ -4,6 +4,7 @@
 import { Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { parsePageMarker } from "./page-config";
+import { PARAGRAPH_MARKER_RE } from "./paragraph-format";
 import { parseTableMarker } from "./table-marker";
 
 const markerLine = Decoration.line({ class: `mmw-marker-line` });
@@ -46,6 +47,40 @@ export function tableMarkerHideExtension(): Extension {
       }
       update(u: ViewUpdate): void {
         if (u.docChanged || u.viewportChanged) this.decorations = build(u.view);
+      }
+    },
+    { decorations: (v) => v.decorations }
+  );
+}
+
+// Etiquette de paragraphe (%% p: droite %%) au debut d'une ligne : cachee dans l'apercu en direct, sauf sur la ligne du curseur.
+function buildParagraphMarkers(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const doc = view.state.doc;
+  const caret = doc.lineAt(view.state.selection.main.head).number;
+  for (const range of view.visibleRanges) {
+    let pos = range.from;
+    while (pos <= range.to) {
+      const line = doc.lineAt(pos);
+      if (line.number !== caret && line.text.includes(`%%`)) {
+        const m = PARAGRAPH_MARKER_RE.exec(line.text);
+        if (m) builder.add(line.from + m[1].length, line.from + m[0].length, Decoration.replace({}));
+      }
+      pos = line.to + 1;
+    }
+  }
+  return builder.finish();
+}
+
+export function paragraphMarkerHideExtension(): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(view: EditorView) {
+        this.decorations = buildParagraphMarkers(view);
+      }
+      update(u: ViewUpdate): void {
+        if (u.docChanged || u.viewportChanged || u.selectionSet) this.decorations = buildParagraphMarkers(u.view);
       }
     },
     { decorations: (v) => v.decorations }
