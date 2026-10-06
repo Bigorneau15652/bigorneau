@@ -2,7 +2,7 @@
 // dans la note (ligne de commentaire sous les proprietes), avec les reglages d'en-tete et de pied de page.
 import { App, Modal, Setting } from "obsidian";
 import { currentLang, t } from "./i18n";
-import { FORMAT_IDS, FORMATS, FormatId, MarginId, maxColumns, MIN_COLUMN_WIDTH, Orientation, PageLayout, sanitizeLayout } from "./page-layout";
+import { FORMAT_IDS, FORMATS, FormatId, GapId, MarginId, maxColumns, MIN_COLUMN_WIDTH, Orientation, PageLayout, sanitizeLayout } from "./page-layout";
 import { drawLayoutDiagram, layoutDiagram } from "./layout-diagram";
 import type { PageModalHost } from "./page-modal";
 
@@ -34,7 +34,7 @@ export class LayoutModal extends Modal {
     const lang = currentLang();
     // Schema a l'echelle : feuille, marges (pointilles) et colonnes. Il suit les choix ci-dessous.
     const diagram = contentEl.createDiv({ cls: `mmw-diagram` });
-    drawLayoutDiagram(diagram, layoutDiagram(this.layout), { margin: t(`Marge`), sheet: t(`Schéma de la feuille`) });
+    drawLayoutDiagram(diagram, layoutDiagram(this.layout), { margin: t(`Marge`), gap: t(`Espace entre colonnes`), sheet: t(`Schéma de la feuille`) });
     diagram.createDiv({ cls: `mmw-pnote`, text: t(`Le trait pointillé délimite la zone de texte : sa distance au bord de la feuille est la marge.`) });
     new Setting(contentEl).setName(t(`Format de la feuille`)).addDropdown((d) => {
       for (const id of FORMAT_IDS) d.addOption(id, FORMATS[id][lang]);
@@ -60,6 +60,11 @@ export class LayoutModal extends Modal {
         for (let n = 1; n <= max; n++) d.addOption(String(n), String(n));
         d.setValue(String(this.layout.columns)).onChange((v) => this.save({ columns: Number(v) }));
       });
+    if (this.layout.columns > 1) {
+      new Setting(contentEl).setName(t(`Espace entre les colonnes`)).setDesc(t(`S : 0,5 cm, M : 1 cm, L : 1,5 cm. Il apparaît en couleur sur le schéma.`)).addDropdown((d) =>
+        d.addOptions({ s: `S`, m: `M`, l: `L` }).setValue(this.layout.gap).onChange((v) => this.save({ gap: v as GapId }))
+      );
+    }
     contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Les notes de bas de page se placent au bas de leur colonne. Les figures et les tableaux ont la largeur d'une colonne.`) });
   }
 
