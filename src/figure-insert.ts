@@ -112,3 +112,49 @@ export function figureLines(text: string): FigureLine[] {
   });
   return out;
 }
+
+// Legendes de tableaux nommes d'une note, avec leur numero : la ligne « Tableau : Nom » placee au-dessus d'un tableau (comme l'export,
+// les lignes vides et la ligne de style du tableau peuvent s'intercaler). Les tableaux sans nom ne sont pas numerotes.
+export interface TableCaptionLine {
+  line: number;
+  // Decalage, dans la ligne, de la fin du mot « Tableau » ou « Table » : c'est la que s'affiche le numero.
+  wordEnd: number;
+  number: number;
+}
+
+const TABLE_CAPTION = /^(Tableau|Table)[ \t\u00a0]*:[ \t\u00a0]*(.+)$/i;
+const TABLE_MARKER = /^%%[ \t]*mmw-table\b.*%%[ \t]*$/;
+const TABLE_ROW = /^[ \t]*\|.*\|[ \t]*$/;
+const TABLE_SEPARATOR = /^[ \t]*\|?[ \t]*:?-{1,}:?[ \t]*(\|[ \t]*:?-{1,}:?[ \t]*)*\|?[ \t]*$/;
+
+export function tableCaptionLines(text: string): TableCaptionLine[] {
+  const lines = text.split(`\n`).map((l) => l.replace(/\r$/, ``));
+  const out: TableCaptionLine[] = [];
+  let fence: string | null = null;
+  let n = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (f) {
+      if (fence === null) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    // Debut d'un tableau : une ligne de cellules suivie de la ligne de separation.
+    if (!TABLE_ROW.test(line) || i + 1 >= lines.length || !TABLE_SEPARATOR.test(lines[i + 1]) || !lines[i + 1].includes(`-`)) continue;
+    if (i > 0 && TABLE_ROW.test(lines[i - 1])) continue;
+    let j = i - 1;
+    while (j >= 0 && (lines[j].trim() === `` || TABLE_MARKER.test(lines[j].trim()))) j--;
+    if (j < 0) continue;
+    const m = TABLE_CAPTION.exec(lines[j].trim());
+    if (!m) continue;
+    // La legende est un paragraphe a elle seule : la ligne qui la precede est vide, un repere de style ou un titre.
+    let k = j - 1;
+    while (k >= 0 && TABLE_MARKER.test(lines[k].trim())) k--;
+    if (k >= 0 && lines[k].trim() !== `` && !/^#{1,6}[ \t]/.test(lines[k]) && !/^---[ \t]*$/.test(lines[k])) continue;
+    n++;
+    out.push({ line: j, wordEnd: lines[j].indexOf(m[1]) + m[1].length, number: n });
+  }
+  return out;
+}

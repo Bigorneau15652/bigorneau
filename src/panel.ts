@@ -2,6 +2,7 @@
 // choisi par l'utilisateur (clic long sur un bouton, puis glissement, pour le deplacer). Chaque fonction a aussi sa commande de
 // la palette. Le panneau est pose dans chaque editeur Markdown ouvert.
 import { App, Editor, getIconIds, MarkdownView, Notice, Platform, setIcon, setTooltip } from "obsidian";
+import { CUSTOM_ICON_IDS } from "./custom-icons";
 import { FunctionRegistry, moveId, panelOrder, PanelFunction, reorderVisible, visibleIds } from "./functions";
 import { currentLang, t } from "./i18n";
 import { SNAIL_ICON } from "./snail-icon";
@@ -33,6 +34,8 @@ let knownIcons: Set<string> | null = null;
 
 // Premiere icone de la liste qui existe dans la serie d'Obsidian ; sinon une icone neutre.
 export function pickIcon(candidates: string[]): string {
+  // Une icone dessinee pour Bigorneau n'est pas dans la serie d'Obsidian : elle est prise telle quelle.
+  if (candidates.length > 0 && CUSTOM_ICON_IDS.has(candidates[0])) return candidates[0];
   if (!knownIcons) {
     try {
       knownIcons = new Set(getIconIds());
