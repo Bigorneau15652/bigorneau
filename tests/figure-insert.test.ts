@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addedDrawing, cleanFigureName, drawingEmbeds, figureMarkup, isolateFigure, nameDrawing } from "../src/figure-insert";
+import { addedDrawing, cleanFigureName, drawingEmbeds, figureLines, figureMarkup, isolateFigure, nameDrawing, parseFigureLine } from "../src/figure-insert";
 import { composeNote } from "../src/export/compose";
 import { DEFAULT_PAGE_STYLE } from "../src/export/typeset";
 import { imageCandidates, isExcalidrawTarget, isImageTarget } from "../src/export/image";
@@ -65,4 +65,16 @@ test(`un dessin insere au milieu d'une ligne est mis seul sur sa ligne`, () => {
   const e2 = drawingEmbeds(alone)[0];
   const edit2 = isolateFigure(alone, nameDrawing(e2, `Nom`));
   assert.equal(alone.slice(0, edit2.from) + edit2.insert + alone.slice(edit2.to), `Avant\n\n![[Dessin.excalidraw|Nom]]\n\nAprès`);
+});
+
+test(`les figures nommees d'une note sont numerotees comme a l'export, les autres ne comptent pas`, () => {
+  const text = [`# T`, ``, `![[a.excalidraw]]`, ``, `![[b.excalidraw|Toto]]`, ``, "```", `![[c.png|Dans un code]]`, "```", ``, `![](d.png)`, ``, `![[e.png|Plan|300]]`, ``, `![[video.mp4|Une vidéo]]`, ``, `![[f.png|400]]`].join(`\n`);
+  const figs = figureLines(text);
+  assert.deepEqual(figs.map((f) => [f.line, f.number, f.caption]), [[4, 1, `Toto`], [12, 2, `Plan`]]);
+  assert.equal(figs[0].text, `Figure 1\u00a0: Toto`);
+  assert.equal(figs[0].label, `Figure 1`);
+  const en = figureLines(`---\nlang: en\n---\n\n![[b.png|Site plan]]`);
+  assert.equal(en[0].text, `Figure 1: Site plan`);
+  assert.deepEqual(parseFigureLine(`![[x.png|300]]`), { target: `x.png`, caption: `` });
+  assert.equal(parseFigureLine(`Texte ![[x.png|Nom]]`), null);
 });

@@ -24,6 +24,7 @@ import * as obsidianApi from "obsidian";
 import { columnAt, findTable, insertBlock, newTableBlock, tableContext } from "./table-edit";
 import { cellAtLine, MenuSpec, tableMenu } from "./table-menu";
 import { TableModal } from "./table-modal";
+import { figureCaptionExtension } from "./figure-caption-widget";
 import { tableMarkerHideExtension } from "./table-marker-hide";
 import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
@@ -354,6 +355,7 @@ export default class MindmapWritingPlugin extends Plugin {
       callback: () => this.describeTables(),
     });
     this.registerEditorExtension(tableMarkerHideExtension());
+    this.registerEditorExtension(figureCaptionExtension());
     this.registerEditorExtension(tableWidgetExtension({ showMenu: (event, items, access) => this.showTableMenu(event, items, access) }));
     // Mode Source : clic droit dans un tableau.
     this.registerEvent(

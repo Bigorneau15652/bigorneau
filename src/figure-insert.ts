@@ -1,5 +1,7 @@
 // Figures et dessins ecrits dans la note : ![[cible|Nom]]. Le nom devient la legende « Figure N : Nom » a l'export ; sans nom, la figure
 // n'a ni legende ni numero. Ce module ne depend pas d'Obsidian.
+import { mediaKindOf } from "./export/doc-tree";
+import { isImageTarget, isWebTarget } from "./export/image";
 
 // Nom prepare pour la barre verticale du lien : retours a la ligne, barres et crochets retires.
 export function cleanFigureName(name: string): string {
@@ -60,4 +62,53 @@ export function isolateFigure(text: string, edit: { from: number; to: number; in
   const head = before.trim() === `` ? `` : `${before.trimEnd()}\n\n`;
   const tail = after.trim() === `` ? `` : `\n\n${after.trimStart()}`;
   return { from: lineStart, to: lineEnd, insert: `${head}${edit.insert}${tail}` };
+}
+
+// Figures nommees d'une note, avec leur numero : celles que l'export legende « Figure N : Nom ». Les figures sans nom n'y sont pas.
+export interface FigureLine {
+  // Numero de ligne (a partir de 0) et cible de la figure.
+  line: number;
+  target: string;
+  caption: string;
+  number: number;
+  // Legende complete, dans la langue de la note : « Figure 3 : Nom » (« Figure 3: Name » en anglais).
+  text: string;
+  // Partie en gras de la legende : « Figure 3 ».
+  label: string;
+}
+
+const WIKI_FIGURE = /^!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\](?:[ \t]+\^[A-Za-z0-9-]+)?[ \t]*$/;
+const MD_FIGURE = /^!\[([^\]]*)\]\(([^)]+)\)(?:[ \t]+\^[A-Za-z0-9-]+)?[ \t]*$/;
+
+// Cible et nom d'une ligne de figure, ou null si la ligne n'en est pas une (la taille |400 n'est pas un nom).
+export function parseFigureLine(line: string): { target: string; caption: string } | null {
+  const wiki = WIKI_FIGURE.exec(line);
+  const md = wiki ? null : MD_FIGURE.exec(line);
+  if (!wiki && !md) return null;
+  const parts = (wiki ? (wiki[2] ?? ``) : md![1]).split(`|`).map((x) => x.trim());
+  if (parts.length > 0 && /^\d+(x\d+)?$/.test(parts[parts.length - 1])) parts.pop();
+  return { target: wiki ? wiki[1].trim() : md![2].trim(), caption: parts.join(`|`).trim() };
+}
+
+export function figureLines(text: string): FigureLine[] {
+  const english = /^---[ \t]*\r?\n(?:[^\n]*\r?\n)*?lang:[ \t]*["']?en/i.test(text);
+  const out: FigureLine[] = [];
+  let fence: string | null = null;
+  let n = 0;
+  text.split(`\n`).forEach((raw, i) => {
+    const line = raw.replace(/\r$/, ``);
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (f) {
+      if (fence === null) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      return;
+    }
+    if (fence !== null) return;
+    const fig = parseFigureLine(line);
+    if (!fig || fig.caption === `` || mediaKindOf(fig.target) !== undefined || !(isImageTarget(fig.target) || isWebTarget(fig.target))) return;
+    n++;
+    const label = english ? `Figure ${n}` : `Figure ${n}`;
+    out.push({ line: i, target: fig.target, caption: fig.caption, number: n, label, text: english ? `${label}: ${fig.caption}` : `${label}\u00a0: ${fig.caption}` });
+  });
+  return out;
 }
