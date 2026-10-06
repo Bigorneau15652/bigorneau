@@ -390,7 +390,9 @@ export function parseBlocks(text: string): DocBlock[] {
       continue;
     }
 
+    // Chaque ligne de texte est un paragraphe : un retour a la ligne simple et un retour suivi de lignes vides donnent la meme mise en page.
     para.push(line.trim());
+    flushPara();
     i++;
   }
   flushPara();

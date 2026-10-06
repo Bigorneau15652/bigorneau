@@ -12,12 +12,16 @@ test(`les commentaires situes dans un bloc de code sont conserves`, () => {
   assert.equal(stripComments(text), [`\`\`\``, `%% reste %%`, `\`\`\``, `x `].join(`\n`));
 });
 
-test(`les paragraphes sont separes par une ligne vide et leurs lignes se rejoignent`, () => {
-  const blocks = parseBlocks([`L'ete dernier,`, `il a plu.`, ``, `Second paragraphe.`].join(`\n`));
-  assert.deepEqual(blocks, [
-    { type: `paragraph`, text: `L'ete dernier, il a plu.` },
-    { type: `paragraph`, text: `Second paragraphe.` },
-  ]);
+test(`chaque ligne de texte est un paragraphe, quel que soit le nombre de lignes vides entre elles`, () => {
+  const expected = [
+    { type: `paragraph`, text: `Premier.` },
+    { type: `paragraph`, text: `Second.` },
+    { type: `paragraph`, text: `Troisieme.` },
+  ];
+  // Un simple retour a la ligne, une ligne vide ou quatre : la mise en page est la meme.
+  assert.deepEqual(parseBlocks([`Premier.`, `Second.`, `Troisieme.`].join(`\n`)), expected);
+  assert.deepEqual(parseBlocks([`Premier.`, ``, `Second.`, ``, `Troisieme.`].join(`\n`)), expected);
+  assert.deepEqual(parseBlocks([`Premier.`, ``, ``, ``, ``, `Second.`, `Troisieme.`, ``, ``].join(`\n`)), expected);
 });
 
 test(`listes ordonnees, a puces et imbriquees`, () => {
