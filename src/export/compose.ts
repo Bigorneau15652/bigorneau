@@ -4,7 +4,7 @@ import { findPageConfig } from "../page-config";
 import { buildExportDoc } from "./doc-tree";
 import { languageOf } from "./typeset";
 import { anchorPages, groupColumns, paginate, Page } from "./paginate";
-import { columnSetupOf, columnWidthOf, COLUMN_GAP, defaultLayout, pageSetupOf } from "../page-layout";
+import { columnSetupOf, columnWidthOf, defaultLayout, gapOf, pageSetupOf } from "../page-layout";
 import { ImageAsset } from "./image";
 import { inlineMathOf, MathAsset } from "./math";
 import { buildPdf } from "./pdf";
@@ -103,7 +103,7 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
   const setup = explicitSetup ?? pageSetupOf(layout);
   const columnSetup = explicitSetup ?? columnSetupOf(layout);
   const columnCount = layout.columns;
-  const arrange = (list: Page[]): Page[] => (columnCount > 1 ? groupColumns(list, columnCount, columnWidthOf(layout), COLUMN_GAP) : list);
+  const arrange = (list: Page[]): Page[] => (columnCount > 1 ? groupColumns(list, columnCount, columnWidthOf(layout), gapOf(layout)) : list);
   // Table des matieres et renvois avec numero de page : la mise en page depend des numeros de page, qui dependent de la mise
   // en page. On recompose avec les numeros de la composition precedente jusqu'a ce qu'ils ne changent plus (quatre fois au plus).
   const plan = tocPlan(doc, style);

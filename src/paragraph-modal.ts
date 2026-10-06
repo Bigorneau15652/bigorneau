@@ -13,13 +13,16 @@ export interface ParagraphModalHost extends PageModalHost {
 
 const SAME = `same`;
 
+// `scope` : `document` regle toute la note, `one` l'exception du seul paragraphe du curseur (bouton separe).
+export type ParagraphScope = `document` | `one`;
+
 export class ParagraphModal extends Modal {
   private settings: ParagraphSettings;
   // Choix de l'exception en cours d'edition (valeurs de liste : `same` = comme le document).
   private align = SAME;
   private style = SAME;
 
-  constructor(app: App, private host: ParagraphModalHost) {
+  constructor(app: App, private host: ParagraphModalHost, private part: ParagraphScope = `document`) {
     super(app);
     this.settings = host.read().paragraphs;
     const now = host.current();
@@ -30,7 +33,7 @@ export class ParagraphModal extends Modal {
   }
 
   onOpen(): void {
-    this.titleEl.setText(t(`Paragraphes`));
+    this.titleEl.setText(this.part === `document` ? t(`Paragraphes`) : t(`Ce paragraphe seulement`));
     this.render();
   }
 
@@ -56,18 +59,18 @@ export class ParagraphModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     const align = { justify: t(`Justifié`), left: t(`À gauche`), right: t(`À droite`), center: t(`Centré`) };
-    contentEl.createEl(`h4`, { text: t(`Toute la note`) });
-    new Setting(contentEl).setName(t(`Début des paragraphes`)).addDropdown((d) =>
-      d.addOptions({ indent: t(`Retrait de la première ligne`), space: t(`Espace entre les paragraphes`) }).setValue(this.settings.mode).onChange((v) => this.save({ mode: v as ParaMode }))
-    );
-    if (this.settings.mode === `space`) {
-      new Setting(contentEl).setName(t(`Taille de l'espace`)).setDesc(t(`S : 4 pt, M : 8 pt, L : 14 pt. Pas de retrait : l'alignement reste le même.`)).addDropdown((d) =>
-        d.addOptions({ s: `S`, m: `M`, l: `L` }).setValue(this.settings.size).onChange((v) => this.save({ size: v as ParaSize }))
+    if (this.part === `document`) {
+      new Setting(contentEl).setName(t(`Début des paragraphes`)).addDropdown((d) =>
+        d.addOptions({ indent: t(`Retrait de la première ligne`), space: t(`Espace entre les paragraphes`) }).setValue(this.settings.mode).onChange((v) => this.save({ mode: v as ParaMode }))
       );
+      if (this.settings.mode === `space`) {
+        new Setting(contentEl).setName(t(`Taille de l'espace`)).setDesc(t(`S : 4 pt, M : 8 pt, L : 14 pt. Pas de retrait : l'alignement reste le même.`)).addDropdown((d) =>
+          d.addOptions({ s: `S`, m: `M`, l: `L` }).setValue(this.settings.size).onChange((v) => this.save({ size: v as ParaSize }))
+        );
+      }
+      new Setting(contentEl).setName(t(`Alignement`)).addDropdown((d) => d.addOptions(align).setValue(this.settings.align).onChange((v) => this.save({ align: v as ParaAlign })));
+      return;
     }
-    new Setting(contentEl).setName(t(`Alignement`)).addDropdown((d) => d.addOptions(align).setValue(this.settings.align).onChange((v) => this.save({ align: v as ParaAlign })));
-
-    contentEl.createEl(`h4`, { text: t(`Ce paragraphe seulement`) });
     contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Place le curseur dans le paragraphe voulu avant d'ouvrir cette fenêtre. Une étiquette cachée est écrite au début de sa ligne.`) });
     new Setting(contentEl).setName(t(`Alignement`)).addDropdown((d) =>
       d.addOptions({ [SAME]: t(`Comme le document`), ...align }).setValue(this.align).onChange((v) => (this.align = v))

@@ -1,12 +1,14 @@
 // Script officiel « Mise en page » : en-tete, pied de page et bord exterieur des pages de l'export, propres a chaque note. Un seul
 // bouton ouvre la fenetre de reglages (trois onglets) ; il est plus contraste quand au moins un des trois elements existe dans la note.
 // Desactive, il ne change rien : l'export reste celui d'avant, avec ses reglages generaux.
+import type { Editor } from "obsidian";
 import { applyPageConfig, readPageConfig } from "./page-apply";
 import { LayoutModal } from "./layout-modal";
 import { anyDecor } from "./page-config";
 import { defaultLayout, sameLayout } from "./page-layout";
 import { PageModal, PageModalHost } from "./page-modal";
-import { ParagraphModal } from "./paragraph-modal";
+import { ICON_PARAGRAPH } from "./custom-icons";
+import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
 import { defaultParagraphSettings, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
 import type { OfficialScript } from "./scripts";
 
@@ -62,26 +64,38 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
         new LayoutModal(api.app, { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) }).open();
       },
     });
-    // Troisieme bouton : style des paragraphes de la note (retrait ou espace, alignement) et exception pour le paragraphe du curseur.
+    // Troisieme bouton : style des paragraphes de toute la note (retrait ou espace, alignement).
+    const paragraphHost = (editor: Editor): ParagraphModalHost => {
+      const offset = () => editor.posToOffset(editor.getCursor());
+      return {
+        read: () => readPageConfig(editor.getValue()),
+        write: (c) => applyPageConfig(editor, c),
+        current: () => paragraphMarkerAt(editor.getValue(), offset()),
+        setException: (format) => {
+          const change = setParagraphMarker(editor.getValue(), offset(), format);
+          editor.replaceRange(change.insert, editor.offsetToPos(change.from), editor.offsetToPos(change.to));
+        },
+      };
+    };
     api.addFunction({
       id: `page-paragraphs`,
-      name: { fr: `Paragraphes : retrait, espace et alignement`, en: `Paragraphs: indent, spacing and alignment` },
+      name: { fr: `Paragraphes : retrait, espace et alignement de la note`, en: `Paragraphs: indent, spacing and alignment of the note` },
       icon: [`pilcrow`, `align-justify`, `text`],
       needsEditor: true,
       active: ({ editor }) => (editor ? JSON.stringify(readPageConfig(editor.getValue()).paragraphs) !== JSON.stringify(defaultParagraphSettings()) : false),
       run: ({ editor }) => {
-        if (!editor) return;
-        const offset = () => editor.posToOffset(editor.getCursor());
-        new ParagraphModal(api.app, {
-          read: () => readPageConfig(editor.getValue()),
-          write: (c) => applyPageConfig(editor, c),
-          current: () => paragraphMarkerAt(editor.getValue(), offset()),
-          setException: (format) => {
-            const text = editor.getValue();
-            const change = setParagraphMarker(text, offset(), format);
-            editor.replaceRange(change.insert, editor.offsetToPos(change.from), editor.offsetToPos(change.to));
-          },
-        }).open();
+        if (editor) new ParagraphModal(api.app, paragraphHost(editor), `document`).open();
+      },
+    });
+    // Quatrieme bouton : exception pour le seul paragraphe du curseur. Plus contraste quand ce paragraphe a une exception.
+    api.addFunction({
+      id: `page-paragraph`,
+      name: { fr: `Ce paragraphe seulement : alignement et début`, en: `This paragraph only: alignment and start` },
+      icon: [ICON_PARAGRAPH, `pilcrow`],
+      needsEditor: true,
+      active: ({ editor }) => (editor ? paragraphMarkerAt(editor.getValue(), editor.posToOffset(editor.getCursor())) !== null : false),
+      run: ({ editor }) => {
+        if (editor) new ParagraphModal(api.app, paragraphHost(editor), `one`).open();
       },
     });
   },

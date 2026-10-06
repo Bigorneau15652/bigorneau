@@ -93,3 +93,18 @@ test(`le schema de la feuille suit le format, l'orientation, les marges et les c
   assert.ok(land.columns[1].x > land.columns[0].x + land.columns[0].width);
   assert.ok(layoutDiagram({ ...defaultLayout(), margins: `wide` }).marginMm > a4.marginMm);
 });
+
+test(`l'espace entre colonnes se regle en S, M ou L et reste M par defaut`, async () => {
+  const { gapOf, GAP_POINTS } = await import(`../src/page-layout`);
+  const { layoutDiagram } = await import(`../src/layout-diagram`);
+  assert.equal(defaultLayout().gap, `m`);
+  assert.equal(sanitizeLayout({ columns: 2 }).gap, `m`);
+  assert.equal(sanitizeLayout({ gap: `xl` }).gap, `m`);
+  assert.equal(gapOf(sanitizeLayout({ gap: `l` })), GAP_POINTS.l);
+  const small = sanitizeLayout({ columns: 2, gap: `s` });
+  const large = sanitizeLayout({ columns: 2, gap: `l` });
+  assert.ok(columnWidthOf(small) > columnWidthOf(large));
+  assert.ok(layoutDiagram(large).gapMm > layoutDiagram(small).gapMm);
+  assert.equal(layoutDiagram(small).gaps.length, 1);
+  assert.equal(layoutDiagram(defaultLayout()).gaps.length, 0);
+});

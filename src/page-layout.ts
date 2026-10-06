@@ -5,6 +5,7 @@ import { A4_SETUP, PageSetup } from "./export/typeset";
 export type FormatId = `a3` | `a4` | `a5` | `a6` | `b5` | `letter` | `legal` | `book6x9` | `book55x85`;
 export type Orientation = `portrait` | `landscape`;
 export type MarginId = `normal` | `narrow` | `wide`;
+export type GapId = `s` | `m` | `l`;
 
 const MM = 72 / 25.4;
 const IN = 72;
@@ -31,12 +32,17 @@ export interface PageLayout {
   orientation: Orientation;
   margins: MarginId;
   columns: number;
+  // Espace entre deux colonnes : S (0,5 cm), M (1 cm) ou L (1,5 cm).
+  gap: GapId;
 }
 
-export const defaultLayout = (): PageLayout => ({ format: `a4`, orientation: `portrait`, margins: `normal`, columns: 1 });
+export const defaultLayout = (): PageLayout => ({ format: `a4`, orientation: `portrait`, margins: `normal`, columns: 1, gap: `m` });
 
 // Espace entre deux colonnes (1 cm) et largeur minimale d'une colonne (environ 4,6 cm : assez pour du texte courant).
 export const COLUMN_GAP = 28.35;
+export const GAP_POINTS: Record<GapId, number> = { s: 14.17, m: COLUMN_GAP, l: 42.52 };
+export const GAP_IDS: GapId[] = [`s`, `m`, `l`];
+export const gapOf = (layout: PageLayout): number => GAP_POINTS[layout.gap];
 export const MIN_COLUMN_WIDTH = 130;
 export const MAX_COLUMNS = 8;
 
@@ -57,7 +63,7 @@ export function marginOf(layout: PageLayout): number {
 // Nombre maximal de colonnes de cette feuille : chacune garde au moins MIN_COLUMN_WIDTH.
 export function maxColumns(layout: PageLayout): number {
   const text = size(layout).width - 2 * marginOf(layout);
-  return Math.max(1, Math.min(MAX_COLUMNS, Math.floor((text + COLUMN_GAP) / (MIN_COLUMN_WIDTH + COLUMN_GAP))));
+  return Math.max(1, Math.min(MAX_COLUMNS, Math.floor((text + gapOf(layout)) / (MIN_COLUMN_WIDTH + gapOf(layout)))));
 }
 
 // Mise en page nettoyee : valeurs inconnues remplacees, colonnes ramenees au maximum permis.
@@ -69,6 +75,7 @@ export function sanitizeLayout(raw: unknown): PageLayout {
     orientation: r.orientation === `landscape` ? `landscape` : `portrait`,
     margins: typeof r.margins === `string` && (MARGIN_IDS as string[]).includes(r.margins) ? (r.margins as MarginId) : d.margins,
     columns: typeof r.columns === `number` && Number.isFinite(r.columns) ? Math.max(1, Math.round(r.columns)) : 1,
+    gap: typeof r.gap === `string` && (GAP_IDS as string[]).includes(r.gap) ? (r.gap as GapId) : d.gap,
   };
   layout.columns = Math.min(layout.columns, maxColumns(layout));
   return layout;
@@ -87,7 +94,7 @@ export function pageSetupOf(layout: PageLayout): PageSetup {
 export function columnWidthOf(layout: PageLayout): number {
   const setup = pageSetupOf(layout);
   const text = setup.width - setup.marginLeft - setup.marginRight;
-  return (text - (layout.columns - 1) * COLUMN_GAP) / layout.columns;
+  return (text - (layout.columns - 1) * gapOf(layout)) / layout.columns;
 }
 
 // Reglages pour composer le texte : une « feuille » de la largeur d'une colonne et de la hauteur de la vraie feuille. Le texte est
