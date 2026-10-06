@@ -33,6 +33,8 @@ export interface Page {
   // Feuille a plusieurs colonnes : chaque colonne se dessine a part. `rows`, `topFloats` et `bottomFloats` rassemblent alors celles de
   // toutes les colonnes (pour retrouver les ancres et les titres de la page) et ne sont pas dessinees.
   columns?: ColumnPage[];
+  // Feuille de cette page quand elle differe de celle de la note (zone en paysage ou en portrait, voir page-zone.ts).
+  setup?: PageSetup;
   header?: string;
   footer?: string;
   // En-tete, pied de page et numero composes d'apres les reglages de la note (voir page-decor.ts) : ils remplacent header et footer.
@@ -70,7 +72,7 @@ export function columnsOf(page: Page, textWidth: number): ColumnPage[] {
 
 // Regroupe des pages d'une colonne en feuilles de `count` colonnes : la premiere colonne est a gauche, la suivante a droite, et ainsi
 // de suite ; la feuille est numerotee a partir de 1. La derniere feuille peut n'avoir que quelques colonnes.
-export function groupColumns(columnPages: Page[], count: number, width: number, gap: number): Page[] {
+export function groupColumns(columnPages: Page[], count: number, width: number, gap: number, firstNumber = 1): Page[] {
   const out: Page[] = [];
   for (let k = 0; k < columnPages.length; k += count) {
     const group = columnPages.slice(k, k + count);
@@ -84,12 +86,13 @@ export function groupColumns(columnPages: Page[], count: number, width: number, 
     }));
     const tops = group.flatMap((p) => p.topFloats ?? []);
     const bottoms = group.flatMap((p) => p.bottomFloats ?? []);
-    out.push({ number: out.length + 1, rows: group.flatMap((p) => p.rows), footnotes: [], ...(tops.length > 0 ? { topFloats: tops } : {}), ...(bottoms.length > 0 ? { bottomFloats: bottoms } : {}), columns });
+    out.push({ number: firstNumber + out.length, rows: group.flatMap((p) => p.rows), footnotes: [], ...(tops.length > 0 ? { topFloats: tops } : {}), ...(bottoms.length > 0 ? { bottomFloats: bottoms } : {}), columns });
   }
   return out;
 }
 
-export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title`>, setup: PageSetup, style: PageStyle): Page[] {
+// `firstNumber` : numero de la premiere page (une zone d'une autre orientation continue la numerotation de la partie precedente).
+export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title`>, setup: PageSetup, style: PageStyle, firstNumber = 1): Page[] {
   const rows = typeset.rows;
   const blocks = typeset.footnotes;
   const available = setup.height - setup.marginTop - setup.marginBottom;
@@ -270,7 +273,7 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
     }
     const top = pagePlaced.filter((p) => p.position === `top`).flatMap((p) => floatRows(p, gapRow));
     const bottom = pagePlaced.filter((p) => p.position === `bottom`).flatMap((p) => floatRows(p, gapRow));
-    pages.push({ number: pages.length + 1, rows: pageRows, footnotes: foot, ...(top.length > 0 ? { topFloats: top } : {}), ...(bottom.length > 0 ? { bottomFloats: bottom } : {}) });
+    pages.push({ number: firstNumber + pages.length, rows: pageRows, footnotes: foot, ...(top.length > 0 ? { topFloats: top } : {}), ...(bottom.length > 0 ? { bottomFloats: bottom } : {}) });
     i = bodyDone ? n : best + 1;
   }
   // Notes reportees apres la derniere ligne : elles occupent des pages sans corps.
@@ -282,14 +285,14 @@ export function paginate(typeset: Pick<TypesetDoc, `rows` | `footnotes` | `title
       kept.push(f);
       used += f.height;
     }
-    pages.push({ number: pages.length + 1, rows: [], footnotes: kept });
+    pages.push({ number: firstNumber + pages.length, rows: [], footnotes: kept });
     carry = carry.slice(kept.length);
   }
 
   // En-tetes et pieds de page.
   pages.forEach((p, index) => {
     if (style.footer === `number`) p.footer = String(p.number);
-    if (index === 0 || style.header === `none`) return;
+    if ((index === 0 && firstNumber === 1) || style.header === `none`) return;
     if (style.header === `title`) {
       p.header = typeset.title;
       return;

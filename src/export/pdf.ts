@@ -125,7 +125,7 @@ function baselineIn(top: number, height: number, size: number, font: OpenTypeFon
   return top + (height - (asc + desc)) / 2 + asc;
 }
 
-export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions): Promise<Uint8Array> {
+export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOptions): Promise<Uint8Array> {
   const uses = new Map<FontStyle, FontUse>();
   const use = (s: FontStyle): FontUse => {
     let u = uses.get(s);
@@ -135,8 +135,11 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
     }
     return u;
   };
-  const textWidth = setup.width - setup.marginLeft - setup.marginRight;
-  const H = setup.height;
+  // Feuille de la page en cours de dessin : celle de la note, ou celle de la page quand une zone en change l'orientation.
+  let setup = baseSetup;
+  let textWidth = setup.width - setup.marginLeft - setup.marginRight;
+  let H = setup.height;
+  const pageSetups: PageSetup[] = pages.map((p) => p.setup ?? baseSetup);
   const regular = use(`regular`);
 
   interface Heading {
@@ -227,6 +230,9 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
 
   const pageContents: { ops: string[]; links: LinkBox[] }[] = [];
   pages.forEach((page, pageIndex) => {
+    setup = pageSetups[pageIndex];
+    textWidth = setup.width - setup.marginLeft - setup.marginRight;
+    H = setup.height;
     const ops: string[] = [];
     const links: LinkBox[] = [];
 
@@ -497,7 +503,7 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
       const r = link.rect.map(num).join(` `);
       define(id, async () =>
         target
-          ? `<< /Type /Annot /Subtype /Link /Rect [${r}] /Border [0 0 0] /F 4 /Dest [${pageIds[target.page]} 0 R /XYZ ${num(target.x)} ${num(H - target.y + 4)} null] >>`
+          ? `<< /Type /Annot /Subtype /Link /Rect [${r}] /Border [0 0 0] /F 4 /Dest [${pageIds[target.page]} 0 R /XYZ ${num(target.x)} ${num(pageSetups[target.page].height - target.y + 4)} null] >>`
           : `<< /Type /Annot /Subtype /Link /Rect [${r}] /Border [0 0 0] /F 4 /A << /S /URI /URI ${uriString(link.url)} >> >>`
       );
     }
@@ -505,7 +511,7 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
   pages.forEach((_p, i) => {
     define(pageIds[i], async () => {
       const annots = annotIds[i].length > 0 ? ` /Annots [${annotIds[i].map((a) => `${a} 0 R`).join(` `)}]` : ``;
-      return `<< /Type /Page /Parent ${pagesRoot} 0 R /MediaBox [0 0 ${num(setup.width)} ${num(H)}] /Resources << /Font ${fontRes()}${xobjectRes()} >> /Contents ${contentIds[i]} 0 R${annots} >>`;
+      return `<< /Type /Page /Parent ${pagesRoot} 0 R /MediaBox [0 0 ${num(pageSetups[i].width)} ${num(pageSetups[i].height)}] /Resources << /Font ${fontRes()}${xobjectRes()} >> /Contents ${contentIds[i]} 0 R${annots} >>`;
     });
     define(contentIds[i], async () => stream(``, encoder.encode(pageContents[i].ops.join(`\n`))));
   });
@@ -533,7 +539,7 @@ export async function buildPdf(pages: Page[], setup: PageSetup, opts: PdfOptions
   const defineOutline = (n: OutlineNode, siblings: OutlineNode[], index: number, parentId: number): void => {
     define(n.id, async () => {
       const h = n.heading;
-      const parts = [`/Title ${pdfText(h.title)}`, `/Parent ${parentId} 0 R`, `/Dest [${pageIds[h.page]} 0 R /XYZ ${num(h.x)} ${num(H - h.y + 4)} null]`];
+      const parts = [`/Title ${pdfText(h.title)}`, `/Parent ${parentId} 0 R`, `/Dest [${pageIds[h.page]} 0 R /XYZ ${num(h.x)} ${num(pageSetups[h.page].height - h.y + 4)} null]`];
       if (index > 0) parts.push(`/Prev ${siblings[index - 1].id} 0 R`);
       if (index < siblings.length - 1) parts.push(`/Next ${siblings[index + 1].id} 0 R`);
       if (n.children.length > 0) parts.push(`/First ${n.children[0].id} 0 R /Last ${n.children[n.children.length - 1].id} 0 R /Count ${count(n)}`);

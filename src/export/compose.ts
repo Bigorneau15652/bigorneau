@@ -4,7 +4,8 @@ import { findPageConfig } from "../page-config";
 import { buildExportDoc } from "./doc-tree";
 import { languageOf } from "./typeset";
 import { anchorPages, groupColumns, paginate, Page } from "./paginate";
-import { columnSetupOf, columnWidthOf, defaultLayout, gapOf, pageSetupOf } from "../page-layout";
+import { columnSetupOf, columnWidthOf, defaultLayout, gapOf, pageSetupOf, PageLayout, sanitizeLayout } from "../page-layout";
+import type { PageZone } from "../page-zone";
 import { ImageAsset } from "./image";
 import { inlineMathOf, MathAsset } from "./math";
 import { buildPdf } from "./pdf";
@@ -102,22 +103,42 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
   const layout = explicitSetup ? defaultLayout() : (found?.config.layout ?? defaultLayout());
   const setup = explicitSetup ?? pageSetupOf(layout);
   const columnSetup = explicitSetup ?? columnSetupOf(layout);
-  const columnCount = layout.columns;
-  const arrange = (list: Page[]): Page[] => (columnCount > 1 ? groupColumns(list, columnCount, columnWidthOf(layout), gapOf(layout)) : list);
+  // Zone d'une autre orientation (etiquettes %% page: paysage %%) : sa mise en page derive de celle de la note.
+  const zoneLayout = (zone: PageZone | null): PageLayout => (zone === null ? layout : sanitizeLayout({ ...layout, orientation: zone.orientation, columns: zone.columns ?? layout.columns }));
+  const zoneSetup = explicitSetup ? undefined : (zone: PageZone | null): PageSetup => (zone === null ? columnSetup : columnSetupOf(zoneLayout(zone)));
+  // Le texte est compose d'une traite, puis coupe aux changements de zone : chaque partie est mise en pages avec sa feuille.
+  const build = (pageOf: ((a: string) => number | undefined) | undefined): { typeset: TypesetDoc; pages: Page[] } => {
+    const typeset = typesetDoc(doc, columnSetup, undefined, style, { ...options, ...(zoneSetup ? { zoneSetup } : {}), ...(pageOf ? { pageOf } : {}) });
+    const parts: { zone: PageZone | null; rows: Page[`rows`] }[] = [{ zone: null, rows: [] }];
+    for (const r of typeset.rows) {
+      if (r.zoneStart) parts.push({ zone: r.zoneStart.zone, rows: [] });
+      else parts[parts.length - 1].rows.push(r);
+    }
+    const pages: Page[] = [];
+    const real = parts.filter((p, i) => i === 0 || p.rows.some((r) => r.kind !== `space`));
+    for (const part of real) {
+      const l = zoneLayout(part.zone);
+      const first = pages.length + 1;
+      let list = paginate({ rows: part.rows, footnotes: typeset.footnotes, title: typeset.title }, part.zone === null ? columnSetup : columnSetupOf(l), style, first);
+      if (l.columns > 1) list = groupColumns(list, l.columns, columnWidthOf(l), gapOf(l), first);
+      // Une partie dont la feuille n'est pas celle de la note la porte avec ses pages.
+      const sheet = pageSetupOf(l);
+      const differs = sheet.width !== setup.width || sheet.height !== setup.height;
+      pages.push(...(differs ? list.map((p) => ({ ...p, setup: sheet })) : list));
+    }
+    return { typeset, pages };
+  };
   // Table des matieres et renvois avec numero de page : la mise en page depend des numeros de page, qui dependent de la mise
   // en page. On recompose avec les numeros de la composition precedente jusqu'a ce qu'ils ne changent plus (quatre fois au plus).
   const plan = tocPlan(doc, style);
   const needsPages = plan.general > 0 || plan.chapter > 0 || style.pageRefs;
   let known: Map<string, number> | undefined;
-  let typeset = typesetDoc(doc, columnSetup, undefined, style, options);
-  let pages = arrange(paginate(typeset, columnSetup, style));
+  let { typeset, pages } = build(undefined);
   for (let pass = 0; needsPages && pass < 4; pass++) {
     const found = anchorPages(pages);
     if (known && sameMap(known, found)) break;
     known = found;
-    const pageOf = (a: string): number | undefined => found.get(a);
-    typeset = typesetDoc(doc, columnSetup, undefined, style, { ...options, pageOf });
-    pages = arrange(paginate(typeset, columnSetup, style));
+    ({ typeset, pages } = build((a: string) => found.get(a)));
   }
   // En-tete, pied de page et numero d'apres les reglages ecrits dans la note : ils remplacent ceux d'origine.
   if (found) {

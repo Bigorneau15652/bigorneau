@@ -269,9 +269,11 @@ export function layoutDecor(config: PageConfig, pages: Page[], ctx: DecorContext
     if (index === 0 && config.skipFirst) return out;
     const values: PageValues = { document: ctx.title, chapter: titles[index].chapter, section: titles[index].section, author: ctx.author, date: ctx.date, created: ctx.created, modified: ctx.modified, page: page.number, pages: pages.length };
     const odd = page.number % 2 === 1;
-    if (bandUsed(config.header)) bandItems(config.header, odd, `header`, values, ctx, missing, out);
-    if (bandUsed(config.footer)) bandItems(config.footer, odd, `footer`, values, ctx, missing, out);
-    if (bandUsed(config.edge)) edgeItems(config.edge, odd, values, ctx, missing, out);
+    // Une page d'une autre orientation a sa propre feuille : les bandes sont placees d'apres elle.
+    const here = page.setup ? { ...ctx, setup: page.setup } : ctx;
+    if (bandUsed(config.header)) bandItems(config.header, odd, `header`, values, here, missing, out);
+    if (bandUsed(config.footer)) bandItems(config.footer, odd, `footer`, values, here, missing, out);
+    if (bandUsed(config.edge)) edgeItems(config.edge, odd, values, here, missing, out);
     return out;
   });
   return { pages: result, missing: [...missing] };
