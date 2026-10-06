@@ -9,6 +9,17 @@ import type { DecorItem } from "./page-decor";
 import { INF_PENALTY } from "./tex-params";
 import { FloatBlock, FootnoteBlock, PageSetup, PageStyle, Row, TypesetDoc } from "./typeset";
 
+// Une colonne de texte d'une feuille a plusieurs colonnes : ses lignes, ses flottants et ses notes, et sa place sur la feuille
+// (decalage depuis la marge gauche, et largeur).
+export interface ColumnPage {
+  rows: Row[];
+  footnotes: Row[];
+  topFloats?: Row[];
+  bottomFloats?: Row[];
+  x: number;
+  width: number;
+}
+
 export interface Page {
   number: number;
   // Lignes du corps de page. Quand les pages sont alignees en bas, la hauteur des espaces est deja ajustee.
@@ -19,6 +30,9 @@ export interface Page {
   // comprend l'espace qui la separe du texte.
   topFloats?: Row[];
   bottomFloats?: Row[];
+  // Feuille a plusieurs colonnes : chaque colonne se dessine a part. `rows`, `topFloats` et `bottomFloats` rassemblent alors celles de
+  // toutes les colonnes (pour retrouver les ancres et les titres de la page) et ne sont pas dessinees.
+  columns?: ColumnPage[];
   header?: string;
   footer?: string;
   // En-tete, pied de page et numero composes d'apres les reglages de la note (voir page-decor.ts) : ils remplacent header et footer.
@@ -45,6 +59,32 @@ export function anchorPages(pages: Page[]): Map<string, number> {
     for (const list of [p.topFloats ?? [], p.rows, p.bottomFloats ?? []]) {
       for (const r of list) if (r.anchor !== undefined && !out.has(r.anchor)) out.set(r.anchor, p.number);
     }
+  }
+  return out;
+}
+
+// Colonnes de la feuille : celles de `columns`, ou une seule faite de la page elle-meme.
+export function columnsOf(page: Page, textWidth: number): ColumnPage[] {
+  return page.columns ?? [{ rows: page.rows, footnotes: page.footnotes, ...(page.topFloats ? { topFloats: page.topFloats } : {}), ...(page.bottomFloats ? { bottomFloats: page.bottomFloats } : {}), x: 0, width: textWidth }];
+}
+
+// Regroupe des pages d'une colonne en feuilles de `count` colonnes : la premiere colonne est a gauche, la suivante a droite, et ainsi
+// de suite ; la feuille est numerotee a partir de 1. La derniere feuille peut n'avoir que quelques colonnes.
+export function groupColumns(columnPages: Page[], count: number, width: number, gap: number): Page[] {
+  const out: Page[] = [];
+  for (let k = 0; k < columnPages.length; k += count) {
+    const group = columnPages.slice(k, k + count);
+    const columns: ColumnPage[] = group.map((p, i) => ({
+      rows: p.rows,
+      footnotes: p.footnotes,
+      ...(p.topFloats ? { topFloats: p.topFloats } : {}),
+      ...(p.bottomFloats ? { bottomFloats: p.bottomFloats } : {}),
+      x: i * (width + gap),
+      width,
+    }));
+    const tops = group.flatMap((p) => p.topFloats ?? []);
+    const bottoms = group.flatMap((p) => p.bottomFloats ?? []);
+    out.push({ number: out.length + 1, rows: group.flatMap((p) => p.rows), footnotes: [], ...(tops.length > 0 ? { topFloats: tops } : {}), ...(bottoms.length > 0 ? { bottomFloats: bottoms } : {}), columns });
   }
   return out;
 }

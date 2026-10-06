@@ -4,6 +4,8 @@
 // {document} {chapter} {section} {author} {date} {page} {pages} pour les valeurs variables, ![[image.png|largeur]] pour une image.
 // Ce module ne depend pas d'Obsidian : il sert a l'export et aux fenetres de reglage.
 
+import { defaultLayout, PageLayout, sanitizeLayout } from "./page-layout";
+
 export type SizeCode = `xs` | `s` | `m` | `l`;
 export const SIZE_POINTS: Record<SizeCode, number> = { xs: 7, s: 8.5, m: 10, l: 12 };
 export const SIZE_CODES: SizeCode[] = [`xs`, `s`, `m`, `l`];
@@ -68,6 +70,8 @@ export interface PageConfig {
   edge: Band;
   // Pas d'en-tete, de pied de page ni de bord sur la premiere page (page de garde).
   skipFirst: boolean;
+  // Format de la feuille, orientation, marges et colonnes.
+  layout: PageLayout;
 }
 
 export const VARIABLES = [`document`, `chapter`, `section`, `author`, `date`, `created`, `modified`, `page`, `pages`] as const;
@@ -95,7 +99,7 @@ export function defaultBand(): Band {
 }
 
 export function defaultConfig(): PageConfig {
-  return { header: defaultBand(), footer: defaultBand(), edge: defaultBand(), skipFirst: false };
+  return { header: defaultBand(), footer: defaultBand(), edge: defaultBand(), skipFirst: false, layout: defaultLayout() };
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === `object` && v !== null && !Array.isArray(v);
@@ -148,7 +152,7 @@ function bandOf(v: unknown): Band {
 // numerotation (version 0.5.0 et 0.5.1) devient un {page} dans la zone correspondante, avec sa forme.
 export function sanitizeConfig(raw: unknown): PageConfig {
   const r = isObject(raw) ? raw : {};
-  const config: PageConfig = { header: bandOf(r.header), footer: bandOf(r.footer), edge: bandOf(r.edge), skipFirst: flag(r.skipFirst, false) };
+  const config: PageConfig = { header: bandOf(r.header), footer: bandOf(r.footer), edge: bandOf(r.edge), skipFirst: flag(r.skipFirst, false), layout: sanitizeLayout(r.layout) };
   const n = isObject(r.numbering) ? r.numbering : null;
   if (n && n.enabled === true) {
     const place = pick(n.place, [`header`, `footer`, `outer`], `footer`);

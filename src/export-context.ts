@@ -4,7 +4,8 @@ import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, imageCandidates, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
-import { A4_SETUP, DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
+import { DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
+import { columnSetupOf, defaultLayout } from "./page-layout";
 import { configImages, findPageConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX } from "./page-config";
 import type { MathRenderer } from "./script-formulas";
 import type { MmSettings } from "./settings";
@@ -56,7 +57,8 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
   const formulas = math ? await loadFormulas(text, fileName, math) : new Map<string, MathAsset>();
   const images = new Map<string, ImageAsset>();
   const urls: string[] = [];
-  const bounds = figureBounds(A4_SETUP);
+  // Zone des figures : la largeur d'une colonne de la mise en page de la note.
+  const bounds = figureBounds(columnSetupOf(findPageConfig(text)?.config.layout ?? defaultLayout()));
   const widths = new Map<string, number | undefined>();
   for (const { target, width } of imageTargets(text, fileName)) if (!widths.has(target) || widths.get(target) === undefined) widths.set(target, width);
   for (const [target, width] of widths) {
