@@ -24,7 +24,7 @@ export class IllustrationListModal extends Modal {
   private render(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Place le curseur à l'endroit voulu avant d'ouvrir cette fenêtre : la liste est insérée avant le bloc où il se trouve. Seuls les figures et les tableaux qui portent un nom y figurent.`) });
+    contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Place le curseur à l'endroit voulu avant d'ouvrir cette fenêtre : la liste est insérée sous le titre si le curseur est sur un titre, sinon avant le bloc où il se trouve. Seuls les figures et les tableaux qui portent un nom y figurent.`) });
     const present = this.host.present();
     const row = (kind: ListKind, name: string): void => {
       const here = present.includes(kind);

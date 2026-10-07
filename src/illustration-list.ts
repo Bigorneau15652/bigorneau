@@ -84,15 +84,18 @@ export function removeListMarker(text: string, kind: ListKind): string {
   return out.join(`\n`);
 }
 
-// Place l'etiquette de ce genre de liste avant le bloc de `offset` (ligne seule, entouree de lignes vides) ; celle qui existait deja est
-// retiree (la liste n'a qu'une place).
+// Place l'etiquette de ce genre de liste a l'endroit du curseur : sous le titre quand le curseur est sur une ligne de titre, sinon avant
+// le bloc de `offset`. L'etiquette est une ligne seule, entouree de lignes vides ; celle qui existait deja est retiree (la liste n'a
+// qu'une place).
 export function placeListMarker(text: string, offset: number, kind: ListKind): string {
-  const start = blockStart(text, offset);
-  const head = text.slice(0, start);
-  const tail = text.slice(start);
+  const lineStart = text.lastIndexOf(`\n`, offset - 1) + 1;
+  const nl = text.indexOf(`\n`, offset);
+  const underHeading = /^ {0,3}#{1,6}[ \t]/.test(text.slice(lineStart, nl === -1 ? text.length : nl));
+  const point = underHeading ? (nl === -1 ? text.length : nl + 1) : blockStart(text, offset);
+  const lead = underHeading && nl === -1 ? `\n` : ``;
   // Retire l'ancienne etiquette de part et d'autre du point d'insertion, puis insere.
-  const cleanHead = removeListMarker(head, kind);
-  const cleanTail = removeListMarker(tail, kind);
-  const before = cleanHead !== `` && !cleanHead.endsWith(`\n\n`) ? (cleanHead.endsWith(`\n`) ? `\n` : `\n\n`) : ``;
-  return `${cleanHead}${before}${formatListMarker(kind)}\n\n${cleanTail}`;
+  const head = removeListMarker(text.slice(0, point), kind);
+  const tail = removeListMarker(text.slice(point), kind);
+  const before = underHeading || head === `` || head.endsWith(`\n\n`) ? `` : head.endsWith(`\n`) ? `\n` : `\n\n`;
+  return `${head}${lead}${before}${formatListMarker(kind)}\n\n${tail}`;
 }
