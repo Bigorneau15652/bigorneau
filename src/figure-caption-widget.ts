@@ -7,6 +7,8 @@ import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetTy
 import { figureLines, tableCaptionLines } from "./figure-insert";
 
 const CAPTION_CLASS = `mmw-figure-caption`;
+// Element qui contient la figure et sa legende : mis en colonne pour que la legende ne soit jamais cachee par le dessin.
+const HOST_CLASS = `mmw-figure-host`;
 
 class FigureCaptions {
   private scheduled = false;
@@ -28,7 +30,10 @@ class FigureCaptions {
 
   destroy(): void {
     this.observer.disconnect();
-    this.view.contentDOM.querySelectorAll(`.${CAPTION_CLASS}`).forEach((e) => e.remove());
+    this.view.contentDOM.querySelectorAll(`.${CAPTION_CLASS}`).forEach((e) => {
+      e.parentElement?.classList.remove(HOST_CLASS);
+      e.remove();
+    });
   }
 
   private schedule(): void {
@@ -68,7 +73,10 @@ class FigureCaptions {
     dom.querySelectorAll<HTMLElement>(`.${CAPTION_CLASS}`).forEach((cap) => {
       const owner = cap.parentElement;
       const stillThere = owner !== null && Array.from(hosts.values()).includes(owner);
-      if (!stillThere) cap.remove();
+      if (!stillThere) {
+        owner?.classList.remove(HOST_CLASS);
+        cap.remove();
+      }
     });
     for (const [line, host] of hosts) {
       const fig = byLine.get(line);
@@ -78,6 +86,7 @@ class FigureCaptions {
         cap = document.createElement(`div`);
         cap.className = CAPTION_CLASS;
         host.appendChild(cap);
+        host.classList.add(HOST_CLASS);
       }
       const want = fig.text;
       if (cap.dataset.text !== want) {

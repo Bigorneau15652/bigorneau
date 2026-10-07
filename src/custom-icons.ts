@@ -5,6 +5,7 @@ import { addIcon } from "obsidian";
 export const ICON_FOOTNOTE = `bigorneau-footnote`;
 export const ICON_LOREM = `bigorneau-lorem`;
 export const ICON_PARAGRAPH = `bigorneau-paragraph`;
+export const ICON_ORIENTATION = `bigorneau-orientation`;
 
 const STROKE = `fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"`;
 
@@ -15,6 +16,8 @@ const ICONS: Record<string, string> = {
   [ICON_LOREM]: `<text x="50" y="72" font-size="62" font-weight="700" font-family="Trajan Pro, Cinzel, Georgia, Times New Roman, serif" text-anchor="middle" fill="currentColor">LI</text>`,
   // Le pied de mouche entre deux lignes de texte au-dessus et deux en dessous : un seul paragraphe.
   [ICON_PARAGRAPH]: `<g ${STROKE}><path d="M12 12 H88"/><path d="M12 27 H70"/><path d="M12 73 H88"/><path d="M12 88 H60"/></g><text x="50" y="62" font-size="44" font-weight="700" font-family="Georgia, Times New Roman, serif" text-anchor="middle" fill="currentColor">¶</text>`,
+  // Une page en portrait posee sur une page en paysage, reliees par une fleche courbe a deux pointes : le changement d'orientation.
+  [ICON_ORIENTATION]: `<g ${STROKE}><path d="M10 8 H38 V58 H10 Z"/><path d="M8 58 H92 V92 H8 Z"/><path d="M48 16 C70 26 78 40 76 55"/><path d="M48 16 L62 18 M48 16 L56 28"/><path d="M76 55 L68 44 M76 55 L80 43"/></g>`,
 };
 
 export const CUSTOM_ICON_IDS = new Set(Object.keys(ICONS));

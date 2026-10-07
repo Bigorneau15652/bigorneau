@@ -2361,6 +2361,20 @@ table.mmw-t-equal td {
   text-align: inherit;
 }
 
+/* Figure et legende l'une sous l'autre : le dessin ne se place plus a cote de sa legende ni par-dessus. */
+.mmw-figure-host {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  float: none;
+}
+
+.mmw-figure-host > .mmw-figure-caption {
+  position: static;
+  width: 100%;
+  clear: both;
+}
+
 /* Legende d'une figure ou d'un dessin nomme, dans l'apercu en direct. */
 .mmw-figure-caption {
   margin: 4px 0 8px;
