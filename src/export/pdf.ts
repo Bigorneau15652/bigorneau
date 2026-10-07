@@ -240,6 +240,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
     let top = setup.marginTop;
     const drawRow = (row: Row, left: number, rowTop: number): void => {
       if (row.anchor !== undefined && !anchors.has(row.anchor)) anchors.set(row.anchor, { page: pageIndex, x: left + row.x, y: rowTop });
+      if (row.alias !== undefined && !anchors.has(row.alias)) anchors.set(row.alias, { page: pageIndex, x: left + row.x, y: rowTop });
       if (row.shade) ops.push(`q ${num(row.shade.fill)} g ${num(left + row.x)} ${num(H - rowTop - row.height)} ${num(row.width)} ${num(row.height)} re f Q`);
       if (row.rules) {
         // Filets du tableau, sur toute sa largeur.

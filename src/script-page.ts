@@ -2,12 +2,14 @@
 // bouton ouvre la fenetre de reglages (trois onglets) ; il est plus contraste quand au moins un des trois elements existe dans la note.
 // Desactive, il ne change rien : l'export reste celui d'avant, avec ses reglages generaux.
 import type { Editor } from "obsidian";
-import { applyPageConfig, readPageConfig } from "./page-apply";
+import { applyPageConfig, readPageConfig, replaceChanged } from "./page-apply";
 import { LayoutModal } from "./layout-modal";
 import { anyDecor } from "./page-config";
 import { defaultLayout, sameLayout } from "./page-layout";
 import { PageModal, PageModalHost } from "./page-modal";
 import { ICON_ORIENTATION, ICON_PARAGRAPH } from "./custom-icons";
+import { IllustrationListModal } from "./illustration-list-modal";
+import { listMarkersIn, placeListMarker, removeListMarker } from "./illustration-list";
 import { PageZoneModal } from "./page-zone-modal";
 import { pageZoneAt, setPageZone } from "./page-zone";
 import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
@@ -117,6 +119,27 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
             const change = setPageZone(editor.getValue(), offset(), zone);
             editor.replaceRange(change.insert, editor.offsetToPos(change.from), editor.offsetToPos(change.to));
           },
+        }).open();
+      },
+    });
+    // Sixieme bouton : listes des figures et des tableaux, placees ou l'on veut par une etiquette cachee.
+    api.addFunction({
+      id: `page-lists`,
+      name: { fr: `Listes des figures et des tableaux`, en: `Lists of figures and tables` },
+      icon: [`gallery-vertical-end`, `list-ordered`, `list`],
+      needsEditor: true,
+      active: ({ editor }) => (editor ? listMarkersIn(editor.getValue()).length > 0 : false),
+      run: ({ editor }) => {
+        if (!editor) return;
+        const offset = () => editor.posToOffset(editor.getCursor());
+        const rewrite = (after: (text: string) => string): void => {
+          const before = editor.getValue();
+          replaceChanged(editor, before, after(before));
+        };
+        new IllustrationListModal(api.app, {
+          present: () => listMarkersIn(editor.getValue()),
+          place: (kind) => rewrite((text) => placeListMarker(text, offset(), kind)),
+          remove: (kind) => rewrite((text) => removeListMarker(text, kind)),
         }).open();
       },
     });

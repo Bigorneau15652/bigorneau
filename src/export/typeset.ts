@@ -174,6 +174,8 @@ export interface Row {
   image?: { target: string; width: number; height: number };
   // Repere de la ligne pour les renvois (titre : hid:N, bloc avec identifiant : b:identifiant).
   anchor?: string;
+  // Second repere de la meme ligne : celui de la legende d'une figure ou d'un tableau pour les listes d'illustrations (lst:Figure 1).
+  alias?: string;
   // Ligne de la table des matieres : repere du titre, numero de sa page (inconnu a la premiere composition).
   toc?: { anchor: string; page: number };
   // Repere de flottant : la figure ou le tableau se place a la page, pas ici.
@@ -533,6 +535,11 @@ class Typesetter {
   }
 
   block(b: DocBlock): void {
+    if (b.type === `illustrations`) {
+      this.illustrationList(b.kind);
+      this.afterParagraph = false;
+      return;
+    }
     if (b.type === `zone`) {
       if (this.restore === undefined || !b.zone.once) this.restore = b.zone.once ? { zone: this.zone } : undefined;
       this.enterZone(b.zone);
@@ -681,6 +688,7 @@ class Typesetter {
     const size = this.setup.fontSize - 1;
     const first = this.sink.length;
     this.paragraph(source, `caption`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: true, fontSize: size });
+    if (this.sink[first]) this.sink[first].alias = `lst:${label}`;
     const lines = this.sink.length - first;
     if (lines === 1) this.sink[first].align = `center`;
     if (lines > 1) for (let k = first; k < this.sink.length - 1; k++) this.sink[k].breakAfter = INF_PENALTY;
@@ -836,6 +844,24 @@ class Typesetter {
       s.sections.forEach(walk);
     };
     sections.forEach(walk);
+    this.entryRows(entries, heading, heading !== undefined);
+  }
+
+  // Liste des figures ou des tableaux nommes, dans l'ordre du document, avec leur page.
+  private illustrationList(kind: `figures` | `tables`): void {
+    const entries: { level: number; title: string; anchor: string }[] = [];
+    for (const [block, label] of this.anchors.labels) {
+      if ((kind === `figures`) !== (block.type === `figure`)) continue;
+      const text = block.type === `figure` || block.type === `table` ? plainOf(parseInline(block.type === `figure` ? block.caption : (block.caption ?? ``)).text).trim() : ``;
+      const sep = this.language === `en` ? `:` : ` :`;
+      entries.push({ level: 1, title: text === `` ? label : `${label}${sep} ${text}`, anchor: `lst:${label}` });
+    }
+    const heading = kind === `figures` ? (this.language === `en` ? `List of figures` : `Liste des figures`) : this.language === `en` ? `List of tables` : `Liste des tableaux`;
+    this.entryRows(entries, heading, false);
+  }
+
+  // Lignes d'une liste de titres avec leur page (table des matieres, listes d'illustrations).
+  private entryRows(entries: { level: number; title: string; anchor: string }[], heading: string | undefined, boldTop: boolean): void {
     if (entries.length === 0) return;
     const lead = this.setup.leading;
     const size = heading === undefined ? this.setup.fontSize - 1 : this.setup.fontSize;
@@ -850,7 +876,7 @@ class Typesetter {
     for (const e of entries) {
       const x = (e.level - top) * 16;
       const first = this.sink.length;
-      this.paragraph(e.title, `toc`, x, this.textWidth - x - numberWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false, style: e.level === top && heading !== undefined ? `bold` : `regular` });
+      this.paragraph(e.title, `toc`, x, this.textWidth - x - numberWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false, style: e.level === top && boldTop ? `bold` : `regular` });
       const last = this.sink[this.sink.length - 1];
       for (let k = first; k < this.sink.length - 1; k++) this.sink[k].breakAfter = INF_PENALTY;
       // Le titre peut etre sur plusieurs lignes : la zone cliquable et le numero sont sur la derniere.

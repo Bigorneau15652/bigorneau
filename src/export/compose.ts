@@ -131,7 +131,7 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
   // Table des matieres et renvois avec numero de page : la mise en page depend des numeros de page, qui dependent de la mise
   // en page. On recompose avec les numeros de la composition precedente jusqu'a ce qu'ils ne changent plus (quatre fois au plus).
   const plan = tocPlan(doc, style);
-  const needsPages = plan.general > 0 || plan.chapter > 0 || style.pageRefs;
+  const needsPages = plan.general > 0 || plan.chapter > 0 || style.pageRefs || hasIllustrationLists(doc);
   let known: Map<string, number> | undefined;
   let { typeset, pages } = build(undefined);
   for (let pass = 0; needsPages && pass < 4; pass++) {
@@ -162,6 +162,13 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
     title: doc.title,
     ...(images ? { images } : {}),
   };
+}
+
+// La note demande-t-elle une liste des figures ou des tableaux (leurs numeros de page se calculent en plusieurs passes) ?
+function hasIllustrationLists(doc: ReturnType<typeof buildExportDoc>): boolean {
+  const some = (list: ReturnType<typeof buildExportDoc>[`blocks`]): boolean => list.some((b) => b.type === `illustrations`);
+  const sections = (list: typeof doc.sections): boolean => list.some((s) => some(s.blocks) || sections(s.sections));
+  return some(doc.blocks) || sections(doc.sections);
 }
 
 function sameMap(a: Map<string, number>, b: Map<string, number>): boolean {
