@@ -1,9 +1,9 @@
-// Panneau de boutons a droite de la zone de redaction : un bouton d'aide, puis un bouton par fonction du registre, dans l'ordre
-// choisi par l'utilisateur (clic long sur un bouton, puis glissement, pour le deplacer). Chaque fonction a aussi sa commande de
+// Panneau de boutons a droite de la zone de redaction : le bouton Bigorneau (fixe), puis un bouton par fonction du registre (l'aide
+// comprise) et des separations, dans l'ordre choisi par l'utilisateur (clic long sur un bouton, puis glissement, pour le deplacer). Chaque fonction a aussi sa commande de
 // la palette. Le panneau est pose dans chaque editeur Markdown ouvert.
 import { App, Editor, getIconIds, MarkdownView, Notice, Platform, setIcon, setTooltip } from "obsidian";
 import { CUSTOM_ICON_IDS } from "./custom-icons";
-import { FunctionRegistry, moveId, panelOrder, PanelFunction, reorderVisible, visibleIds } from "./functions";
+import { displayItems, FunctionRegistry, isSeparator, moveId, panelOrder, PanelFunction, reorderVisible, visibleIds } from "./functions";
 import { currentLang, t } from "./i18n";
 import { SNAIL_ICON } from "./snail-icon";
 import type { MmSettings } from "./settings";
@@ -21,7 +21,6 @@ export interface PanelHost {
   functions: FunctionRegistry<FunctionContext>;
   // Enregistre le nouvel ordre complet des boutons.
   saveOrder(order: string[]): Promise<void>;
-  openHelp(): void;
   openScripts(): void;
 }
 
@@ -96,12 +95,15 @@ export class ButtonPanel {
     const s = this.host.settings;
     const functions = this.available();
     const shown = visibleIds(functions.map((f) => f.id), s.panelOrder, s.panelHidden);
+    const items = displayItems(shown);
+    // Boutons seuls (sans les separations) : ce sont eux que l'on deplace.
+    const buttons = shown.filter((id) => !isSeparator(id));
     // Rien n'est reconstruit tant que ni les boutons, ni leur ordre, ni la langue n'ont change.
-    const states = shown.map((id) => {
+    const states = buttons.map((id) => {
       const fn = functions.find((f) => f.id === id) as PanelFunction<FunctionContext>;
       return fn.active ? fn.active({ app: this.host.app, view, editor: view.editor }) : null;
     });
-    const signature = JSON.stringify([shown, currentLang(), states]);
+    const signature = JSON.stringify([items, currentLang(), states]);
     if (panel.dataset.signature === signature) return;
     panel.dataset.signature = signature;
     panel.empty();
@@ -113,15 +115,12 @@ export class ButtonPanel {
     setTooltip(scripts, t(`Scripts de Bigorneau`), { placement: `left` });
     scripts.addEventListener(`click`, () => this.host.openScripts());
 
-    const help = panel.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
-    help.type = `button`;
-    setIcon(help, pickIcon([`circle-help`, `help-circle`, `info`]));
-    help.setAttr(`aria-label`, t(`Aide de Bigorneau`));
-    setTooltip(help, t(`Aide de Bigorneau`), { placement: `left` });
-    help.addEventListener(`click`, () => this.host.openHelp());
-
     const list = panel.createDiv({ cls: `mmw-panel-functions` });
-    for (const id of shown) {
+    for (const id of items) {
+      if (isSeparator(id)) {
+        list.createDiv({ cls: `mmw-panel-separator` });
+        continue;
+      }
       const fn = functions.find((f) => f.id === id) as PanelFunction<FunctionContext>;
       const btn = list.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
       btn.type = `button`;
@@ -134,7 +133,7 @@ export class ButtonPanel {
         if (this.suppressClick) return;
         this.run(fn, view);
       });
-      this.makeDraggable(btn, list, functions.map((f) => f.id), shown);
+      this.makeDraggable(btn, list, functions.map((f) => f.id), buttons);
     }
   }
 
@@ -156,7 +155,7 @@ export class ButtonPanel {
     let dragging = false;
     let target = 0;
     let origin = 0;
-    const others = (): HTMLElement[] => Array.from(list.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c !== btn);
+    const others = (): HTMLElement[] => Array.from(list.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c !== btn && c.dataset.id !== undefined);
     const clearMarks = (): void => {
       for (const el of Array.from(list.children)) el.removeClasses([`mmw-panel-drop-before`, `mmw-panel-drop-after`]);
     };

@@ -188,6 +188,8 @@ export interface MmSettings {
   panelOnMobile: boolean;
   panelOrder: string[];
   panelHidden: string[];
+  // Vrai quand la disposition de depart du panneau (aide en tete, separations autour de l'apercu et de l'export) a ete posee.
+  panelLayoutDone: boolean;
   // Fenetre de creation d'un tableau : choix gardes d'une fois a l'autre (en-tete fonce, alternance de lignes, nom du tableau).
   tableHeader: boolean;
   tableStripes: boolean;
@@ -283,6 +285,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   panelOnMobile: false,
   panelOrder: [],
   panelHidden: [],
+  panelLayoutDone: false,
   tableHeader: true,
   tableStripes: false,
   tableCaption: true,
@@ -377,6 +380,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.exportProtrusion = merged.exportProtrusion !== false;
   merged.exportToc = merged.exportToc === true;
   merged.exportChapterToc = merged.exportChapterToc === true;
+  merged.panelLayoutDone = merged.panelLayoutDone === true;
   merged.panelVisible = merged.panelVisible !== false;
   merged.panelOnMobile = merged.panelOnMobile === true;
   merged.tableHeader = merged.tableHeader !== false;

@@ -7,7 +7,7 @@ import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
-import { FunctionRegistry, PanelFunction } from "./functions";
+import { FunctionRegistry, isSeparator, panelOrder, PanelFunction } from "./functions";
 import { HelpRegistry } from "./help";
 import { PLUGIN_HELP } from "./help-data";
 import { HelpModal } from "./help-modal";
@@ -258,6 +258,14 @@ export default class MindmapWritingPlugin extends Plugin {
     // Fonctions du plugin : chacune est une commande de la palette (sans raccourci impose : chacun s'attribue dans les reglages
     // d'Obsidian, Raccourcis clavier) et un bouton du panneau, dans l'ordre d'ajout. Les cinq premieres ecrivent dans la note
     // (editeur actif) pour preparer les elements que l'export met en forme.
+    // Aide de Bigorneau : un bouton du panneau comme les autres (deplacable, masquable), sans commande en double de celle de la palette.
+    this.functions.register({
+      id: `help`,
+      name: () => t(`Aide de Bigorneau`),
+      icons: [`circle-help`, `help-circle`, `info`],
+      needsEditor: false,
+      run: () => this.openHelp(),
+    });
     this.addFunction({
       id: `insert-footnote`,
       name: () => t(`Insérer une note de bas de page`),
@@ -311,7 +319,7 @@ export default class MindmapWritingPlugin extends Plugin {
     // L'export de haute qualite est reserve a l'ordinateur : sur tablette et telephone, ces fonctions ne sont pas proposees.
     this.addFunction({
       id: `export-preview`,
-      name: () => t(`Aperçu de l'export de la note`),
+      name: () => t(`Aperçu et export PDF de la note`),
       icons: [`file-search`, `eye`, `file-text`],
       needsEditor: false,
       available: () => Platform.isDesktop,
@@ -322,6 +330,8 @@ export default class MindmapWritingPlugin extends Plugin {
       name: () => t(`Exporter la note en PDF`),
       icons: [`file-output`, `file-down`, `download`],
       needsEditor: false,
+      // L'export se lance depuis l'apercu : la commande de la palette reste, le bouton du panneau n'existe plus.
+      button: false,
       available: () => Platform.isDesktop,
       run: () => {
         if (!this.app.workspace.getActiveFile() && !this.lastFile) {
@@ -639,6 +649,7 @@ export default class MindmapWritingPlugin extends Plugin {
     }
     this.scripts.setExternal(found);
     await this.scripts.loadEnabled();
+    await this.placeDefaultSeparators();
     this.panel.sync();
   }
 
@@ -767,6 +778,23 @@ export default class MindmapWritingPlugin extends Plugin {
 
   openHelp(): void {
     new HelpModal(this.app, () => this.helpEntries.all()).open();
+  }
+
+  // Premiere fois : l'aide passe en tete, avec des separations autour de l'apercu et de l'export, les boutons des scripts venant apres.
+  // Ensuite l'utilisateur dispose les boutons et les separations comme il veut ; rien n'est replace.
+  private async placeDefaultSeparators(): Promise<void> {
+    if (this.settings.panelLayoutDone) return;
+    const ids = this.functions.all().filter((f) => f.button !== false && (!f.available || f.available())).map((f) => f.id);
+    const full = panelOrder(ids, this.settings.panelOrder);
+    const core = new Set([`insert-footnote`, `toggle-toc`, `insert-table`, `lorem-ipsum`, `draw`, `insert-figure`]);
+    const rest = full.filter((id) => !isSeparator(id) && id !== `help` && id !== `export-preview`);
+    const order: string[] = [];
+    if (ids.includes(`help`)) order.push(`help`, `sep:1`);
+    order.push(...rest.filter((id) => core.has(id)));
+    if (ids.includes(`export-preview`)) order.push(`sep:2`, `export-preview`, `sep:3`);
+    order.push(...rest.filter((id) => !core.has(id)));
+    this.settings.panelLayoutDone = true;
+    await this.saveOrder(order);
   }
 
   // Nouvel ordre des boutons du panneau, apres un deplacement.

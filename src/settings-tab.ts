@@ -19,7 +19,7 @@ import {
 } from "./settings";
 import { SHAPE_CHOICES, ShapeChoice, shapeChoice, shapePatch } from "./style";
 import { setSvg } from "./dom";
-import { moveId, panelOrder, setHidden } from "./functions";
+import { addSeparator, isSeparator, moveId, panelOrder, removeId, setHidden } from "./functions";
 
 type KeyField = `keyPrev` | `keyNext` | `keyParent` | `keyChild`;
 type IconField = `iconExternal` | `iconInternal` | `iconWeb`;
@@ -575,44 +575,97 @@ export class MmSettingTab extends PluginSettingTab {
     this.exportToggle(el, t(`Afficher le panneau de boutons`), t(`Les boutons des fonctions apparaissent à droite de la zone de rédaction, au milieu de la hauteur. Un clic long sur un bouton, puis un glissement, le déplace.`), s.panelVisible, (v) => (s.panelVisible = v));
     this.exportToggle(el, t(`Afficher le panneau sur tablette et téléphone`), t(`Par défaut, le panneau est masqué sur ces appareils, faute de place.`), s.panelOnMobile, (v) => (s.panelOnMobile = v));
     new Setting(el).setName(t(`Boutons`)).setHeading();
+    el.createDiv({ cls: `mmw-pnote`, text: t(`Glissez la poignée d'une ligne pour déplacer un bouton ou une séparation. L'interrupteur affiche ou masque le bouton ; le bouton Bigorneau (l'escargot) reste toujours en haut du panneau.`) });
     const list = el.createDiv({ cls: `mmw-panel-settings` });
     const draw = (): void => {
       list.empty();
       const all = this.plugin.functions.all().filter((f) => f.button !== false && (!f.available || f.available()));
       const order = panelOrder(all.map((f) => f.id), s.panelOrder);
-      order.forEach((id, index) => {
+      for (const id of order) {
+        const separator = isSeparator(id);
         const fn = all.find((f) => f.id === id);
-        if (!fn) return;
-        const row = new Setting(list).setName(fn.name());
-        row.addExtraButton((b) =>
-          b
-            .setIcon(`arrow-up`)
-            .setTooltip(t(`Monter`))
-            .setDisabled(index === 0)
-            .onClick(async () => {
-              await this.plugin.saveOrder(moveId(order, id, index - 1));
-              draw();
+        if (!separator && !fn) continue;
+        const row = new Setting(list).setName(separator ? t(`Séparation`) : (fn as { name: () => string }).name());
+        row.settingEl.addClass(`mmw-panel-row`);
+        row.settingEl.dataset.id = id;
+        if (separator) row.setDesc(t(`Un trait entre deux groupes de boutons.`));
+        row.addExtraButton((b) => {
+          b.setIcon(`grip-vertical`).setTooltip(t(`Glisser pour déplacer`));
+          this.makeRowDraggable(b.extraSettingsEl, row.settingEl, list, order, id, draw);
+        });
+        if (separator) {
+          row.addExtraButton((b) =>
+            b
+              .setIcon(`trash`)
+              .setTooltip(t(`Supprimer la séparation`))
+              .onClick(async () => {
+                await this.plugin.saveOrder(removeId(order, id));
+                draw();
+              })
+          );
+        } else {
+          row.addToggle((x) =>
+            x.setValue(!s.panelHidden.includes(id)).onChange(async (shown) => {
+              s.panelHidden = setHidden(s.panelHidden, id, !shown);
+              await this.plugin.saveSettings(false);
             })
-        );
-        row.addExtraButton((b) =>
-          b
-            .setIcon(`arrow-down`)
-            .setTooltip(t(`Descendre`))
-            .setDisabled(index === order.length - 1)
-            .onClick(async () => {
-              await this.plugin.saveOrder(moveId(order, id, index + 1));
-              draw();
-            })
-        );
-        row.addToggle((x) =>
-          x.setValue(!s.panelHidden.includes(id)).onChange(async (shown) => {
-            s.panelHidden = setHidden(s.panelHidden, id, !shown);
-            await this.plugin.saveSettings(false);
-          })
-        );
-      });
+          );
+        }
+      }
     };
     draw();
+    new Setting(el).addButton((b) =>
+      b.setButtonText(t(`Ajouter une séparation`)).onClick(async () => {
+        const all = this.plugin.functions.all().filter((f) => f.button !== false && (!f.available || f.available()));
+        await this.plugin.saveOrder(addSeparator(panelOrder(all.map((f) => f.id), s.panelOrder)));
+        draw();
+      })
+    );
+  }
+
+  // Glisser-deposer d'une ligne de la liste des boutons : la poignee suit le pointeur, un trait montre ou la ligne sera deposee.
+  private makeRowDraggable(handle: HTMLElement, rowEl: HTMLElement, list: HTMLElement, order: string[], id: string, redraw: () => void): void {
+    handle.addClass(`mmw-panel-handle`);
+    let startY = 0;
+    let target = 0;
+    let dragging = false;
+    const others = (): HTMLElement[] => Array.from(list.querySelectorAll<HTMLElement>(`.mmw-panel-row`)).filter((r) => r !== rowEl);
+    const clear = (): void => others().forEach((r) => r.removeClasses([`mmw-panel-drop-before`, `mmw-panel-drop-after`]));
+    handle.addEventListener(`pointerdown`, (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      dragging = true;
+      startY = e.clientY;
+      target = order.indexOf(id);
+      handle.setPointerCapture(e.pointerId);
+      rowEl.addClass(`mmw-panel-row-dragging`);
+    });
+    handle.addEventListener(`pointermove`, (e) => {
+      if (!dragging) return;
+      rowEl.style.transform = `translateY(${e.clientY - startY}px)`;
+      const rest = others();
+      target = rest.filter((r) => {
+        const box = r.getBoundingClientRect();
+        return box.top + box.height / 2 < e.clientY;
+      }).length;
+      clear();
+      if (target < rest.length) rest[target].addClass(`mmw-panel-drop-before`);
+      else if (rest.length > 0) rest[rest.length - 1].addClass(`mmw-panel-drop-after`);
+    });
+    const finish = async (commit: boolean): Promise<void> => {
+      if (!dragging) return;
+      dragging = false;
+      clear();
+      rowEl.removeClass(`mmw-panel-row-dragging`);
+      rowEl.style.removeProperty(`transform`);
+      if (!commit) return;
+      const moved = moveId(order, id, target);
+      if (moved.join() === order.join()) return;
+      await this.plugin.saveOrder(moved);
+      redraw();
+    };
+    handle.addEventListener(`pointerup`, () => void finish(true));
+    handle.addEventListener(`pointercancel`, () => void finish(false));
   }
 
   private buildKeys(el: HTMLElement): void {
