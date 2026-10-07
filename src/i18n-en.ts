@@ -711,7 +711,7 @@ const PAIRS: [string, string][] = [
   [`Excalidraw est installé, mais sa commande de création de dessin est introuvable : mettez le plugin à jour.`, `Excalidraw is installed, but its drawing creation command was not found: update the plugin.`],
   [`Nouveau dessin`, `New drawing`],
   [`Le dessin est créé. Pour le nommer, écrivez son nom après une barre verticale dans le lien : ![[dessin.excalidraw|Nom]].`, `The drawing is created. To name it, write its name after a vertical bar in the link: ![[drawing.excalidraw|Name]].`],
-  [`Dessin Excalidraw sans export image : {0}. Dans les réglages d'Excalidraw, activez l'export automatique en SVG ou en PNG, puis ouvrez et refermez le dessin.`, `Excalidraw drawing without an image export: {0}. In the Excalidraw settings, turn on automatic SVG or PNG export, then open and close the drawing.`],
+  [`Dessin Excalidraw sans image : {0}. Excalidraw n'a pas pu la fournir à Bigorneau. Dans les réglages d'Excalidraw, activez l'export automatique en SVG ou en PNG, puis ouvrez et refermez le dessin.`, `Excalidraw drawing without an image: {0}. Excalidraw could not provide it to Bigorneau. In the Excalidraw settings, turn on automatic SVG or PNG export, then open and close the drawing.`],
   [`Dessiner (Excalidraw)`, `Draw (Excalidraw)`],
   [`Insérer une image ou un dessin avec son nom`, `Insert an image or a drawing with its name`],
   [`Légende des figures et des dessins`, `Caption of figures and drawings`],

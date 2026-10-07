@@ -3,6 +3,8 @@
 import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, imageCandidates, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
+import { excalidrawSvg } from "./excalidraw-export";
+import { isExcalidrawTarget } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
 import { DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
 import { columnSetupOf, defaultLayout } from "./page-layout";
@@ -77,6 +79,11 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
         // Image illisible : traitee comme absente.
       }
     }
+    // Dessin Excalidraw sans fichier d'export : l'image est demandee au plugin Excalidraw.
+    if (!images.has(target) && isExcalidrawTarget(target)) {
+      const drawn = await loadDrawing(app, target, sourcePath, width, bounds, urls);
+      if (drawn) images.set(target, drawn);
+    }
   }
   // Images de l'en-tete et du pied de page. Un dessin Excalidraw est lu par son export image (.excalidraw.svg ou .excalidraw.png).
   const found = findPageConfig(text);
@@ -96,14 +103,33 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
           // Image illisible : traitee comme absente.
         }
       }
+      if (!images.has(target) && isExcalidrawTarget(target)) {
+        const drawn = await loadDrawing(app, target, sourcePath, width, { maxWidth: IMAGE_MAX_WIDTH_PX * 0.75, maxHeight: IMAGE_MAX_HEIGHT_PX * 0.75 }, urls);
+        if (drawn) images.set(target, drawn);
+      }
     }
   }
   return { images, formulas, urls };
 }
 
+// Dessin Excalidraw dont l'image n'a pas ete exportee : le plugin Excalidraw en fournit le SVG.
+async function loadDrawing(app: App, target: string, sourcePath: string, requestedWidth: number | undefined, bounds: { maxWidth: number; maxHeight: number }, urls: string[]): Promise<ImageAsset | null> {
+  const file = fileFor(app, target, sourcePath) ?? fileFor(app, `${target.replace(/\.md$/i, ``)}.md`, sourcePath);
+  if (!file) return null;
+  const svg = await excalidrawSvg(app, file);
+  if (!svg) return null;
+  try {
+    return await loadBytes(new TextEncoder().encode(svg), `svg`, requestedWidth, bounds, urls);
+  } catch {
+    return null;
+  }
+}
+
 async function loadOne(app: App, file: TFile, requestedWidth: number | undefined, bounds: { maxWidth: number; maxHeight: number }, urls: string[]): Promise<ImageAsset | null> {
-  const bytes = new Uint8Array(await app.vault.readBinary(file));
-  const ext = file.extension.toLowerCase();
+  return loadBytes(new Uint8Array(await app.vault.readBinary(file)), file.extension.toLowerCase(), requestedWidth, bounds, urls);
+}
+
+async function loadBytes(bytes: Uint8Array<ArrayBuffer>, ext: string, requestedWidth: number | undefined, bounds: { maxWidth: number; maxHeight: number }, urls: string[]): Promise<ImageAsset | null> {
   const blob = new Blob([bytes], { type: MIME[ext] ?? `application/octet-stream` });
   const url = URL.createObjectURL(blob);
   urls.push(url);
