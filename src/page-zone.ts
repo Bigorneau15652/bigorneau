@@ -12,6 +12,9 @@ export interface PageZone {
   once?: boolean;
 }
 
+// Ligne d'etiquette seule (zone de page ou liste d'illustrations) : elle ne fait pas partie du bloc qui la suit.
+const LABEL_LINE_RE = /^[ \t]*%%[ \t]*(?:liste|list)[ \t]*:[^%\n]*%%[ \t]*$/;
+
 export const PAGE_ZONE_RE = /^[ \t]*%%[ \t]*page[ \t]*:[ \t]*([^%\n]*?)[ \t]*%%[ \t]*$/;
 
 const norm = (s: string): string => s.normalize(`NFD`).replace(/[̀-ͯ]/g, ``).toLowerCase().trim();
@@ -86,12 +89,12 @@ export function zoneFromSentinel(line: string): PageZone | null {
 }
 
 // Debut du bloc qui contient `offset` : on remonte tant que la ligne precedente n'est pas vide.
-function blockStart(text: string, offset: number): number {
+export function blockStart(text: string, offset: number): number {
   let start = text.lastIndexOf(`\n`, offset - 1) + 1;
   while (start > 0) {
     const prevStart = text.lastIndexOf(`\n`, start - 2) + 1;
     const prev = text.slice(prevStart, start - 1);
-    if (prev.trim() === `` || readPageZone(prev)) break;
+    if (prev.trim() === `` || readPageZone(prev) || LABEL_LINE_RE.test(prev)) break;
     start = prevStart;
   }
   return start;

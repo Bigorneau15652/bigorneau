@@ -9,7 +9,11 @@ export function readPageConfig(noteText: string): PageConfig {
 
 export function applyPageConfig(editor: Editor, config: PageConfig): void {
   const before = editor.getValue();
-  const after = writePageConfig(before, config);
+  replaceChanged(editor, before, writePageConfig(before, config));
+}
+
+// Remplace dans l'editeur le seul morceau qui change entre `before` (le texte actuel) et `after`.
+export function replaceChanged(editor: Editor, before: string, after: string): void {
   if (after === before) return;
   let start = 0;
   const max = Math.min(before.length, after.length);

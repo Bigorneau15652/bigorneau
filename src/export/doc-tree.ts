@@ -2,6 +2,7 @@
 // A partir du texte d'une note, produit un arbre neutre (titres, paragraphes, listes, citations, code, tableaux, figures)
 // sans aucune information de mise en page. Les commentaires du plugin (%% ... %%) n'y apparaissent jamais.
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
+import { listFromSentinel, ListKind, markListMarkers } from "../illustration-list";
 import { markPageZones, PageZone, zoneFromSentinel } from "../page-zone";
 import { markParagraphMarkers, ParagraphFormat, splitParagraphSentinel } from "../paragraph-format";
 import { markTableMarkers, styleFromSentinel, TABLE_MARKER_SENTINEL, TableStyle } from "../table-marker";
@@ -32,7 +33,9 @@ export type DocBlock =
   // Media qui ne se lit pas sur papier (video, son, document, contenu integre) : `target` est un fichier du coffre ou une adresse.
   | { type: `media`; kind: MediaKind; target: string; caption: string; id?: string }
   // Etiquette de zone (%% page: paysage %%) : la feuille change d'orientation a partir d'ici, voir page-zone.ts.
-  | { type: `zone`; zone: PageZone };
+  | { type: `zone`; zone: PageZone }
+  // Etiquette de liste (%% liste: figures %%) : la liste des figures ou des tableaux se place ici, voir illustration-list.ts.
+  | { type: `illustrations`; kind: ListKind };
 
 export type MediaKind = `video` | `audio` | `document` | `embed`;
 
@@ -229,7 +232,7 @@ function indentWidth(s: string): number {
 
 // Decoupe le texte situe sous un titre en blocs.
 export function parseBlocks(text: string): DocBlock[] {
-  const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(markParagraphMarkers(markPageZones(text))))).text.split(`\n`);
+  const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(markParagraphMarkers(markListMarkers(markPageZones(text)))))).text.split(`\n`);
   const blocks: DocBlock[] = [];
   let para: string[] = [];
   // Exception d'un repere seul sur sa ligne : elle s'applique au paragraphe suivant.
@@ -258,6 +261,14 @@ export function parseBlocks(text: string): DocBlock[] {
     const line = lines[i];
     if (line.trim() === ``) {
       flushPara();
+      i++;
+      continue;
+    }
+
+    const listKind = listFromSentinel(line);
+    if (listKind) {
+      flushPara();
+      blocks.push({ type: `illustrations`, kind: listKind });
       i++;
       continue;
     }

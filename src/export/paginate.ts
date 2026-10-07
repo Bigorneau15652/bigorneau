@@ -59,7 +59,10 @@ export function anchorPages(pages: Page[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const p of pages) {
     for (const list of [p.topFloats ?? [], p.rows, p.bottomFloats ?? []]) {
-      for (const r of list) if (r.anchor !== undefined && !out.has(r.anchor)) out.set(r.anchor, p.number);
+      for (const r of list) {
+        if (r.anchor !== undefined && !out.has(r.anchor)) out.set(r.anchor, p.number);
+        if (r.alias !== undefined && !out.has(r.alias)) out.set(r.alias, p.number);
+      }
     }
   }
   return out;

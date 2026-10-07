@@ -119,7 +119,7 @@ export class ExportPreviewView extends ItemView {
 
   // Fait defiler l'apercu jusqu'a un repere (titre, figure, tableau, bloc).
   private goTo(anchor: string) {
-    const target = Array.from(this.contentEl.querySelectorAll<HTMLElement>(`[data-anchor]`)).find((e) => e.dataset.anchor === anchor);
+    const target = Array.from(this.contentEl.querySelectorAll<HTMLElement>(`[data-anchor], [data-alias]`)).find((e) => e.dataset.anchor === anchor || e.dataset.alias === anchor);
     target?.scrollIntoView({ block: `center`, behavior: `smooth` });
   }
 
@@ -177,6 +177,7 @@ export class ExportPreviewView extends ItemView {
     const el = parent.createDiv({ cls: `mmw-row mmw-row-${row.kind}` });
     el.style.height = `${row.height}pt`;
     if (row.anchor !== undefined) el.dataset.anchor = row.anchor;
+    if (row.alias !== undefined) el.dataset.alias = row.alias;
     if (row.shade) {
       // Fond de la ligne d'un tableau, sur toute sa largeur (en-tete fonce, alternance).
       el.style.position = `relative`;
