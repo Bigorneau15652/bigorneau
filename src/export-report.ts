@@ -15,7 +15,7 @@ export function warningLines(warnings: string[], opts: ReportOptions = { formula
     if (w.startsWith(`note:`)) out.push(t(`Note de bas de page sans définition : {0}`, w.slice(5)));
     else if (w.startsWith(`image:`)) {
       const target = w.slice(6);
-      if (isExcalidrawTarget(target)) out.push(t(`Dessin Excalidraw sans export image : {0}. Dans les réglages d'Excalidraw, activez l'export automatique en SVG ou en PNG, puis ouvrez et refermez le dessin.`, target));
+      if (isExcalidrawTarget(target)) out.push(t(`Dessin Excalidraw sans image : {0}. Excalidraw n'a pas pu la fournir à Bigorneau. Dans les réglages d'Excalidraw, activez l'export automatique en SVG ou en PNG, puis ouvrez et refermez le dessin.`, target));
       else out.push(t(`Image introuvable : {0}`, target));
     }
     else if (w.startsWith(`webimage:`)) out.push(t(`Image du web non téléchargée, remplacée par son adresse : {0}`, w.slice(9)));
