@@ -2396,3 +2396,13 @@ table.mmw-t-equal td {
   max-width: 100%;
   height: auto;
 }
+
+/* Apercu en direct : mention a la place de l'etiquette d'une liste d'illustrations. */
+.mmw-list-marker {
+  padding: 1px 8px;
+  border: 1px dashed var(--text-faint);
+  border-radius: var(--radius-s);
+  font-size: 0.85em;
+  font-style: italic;
+  color: var(--text-muted);
+}

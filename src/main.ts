@@ -27,7 +27,7 @@ import { columnAt, findTable, insertBlock, newTableBlock, tableContext } from ".
 import { cellAtLine, MenuSpec, tableMenu } from "./table-menu";
 import { TableModal } from "./table-modal";
 import { figureCaptionExtension, tableNumberExtension } from "./figure-caption-widget";
-import { paragraphMarkerHideExtension, tableMarkerHideExtension } from "./table-marker-hide";
+import { listMarkerWidgetExtension, paragraphMarkerHideExtension, tableMarkerHideExtension } from "./table-marker-hide";
 import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
@@ -359,6 +359,7 @@ export default class MindmapWritingPlugin extends Plugin {
     });
     this.registerEditorExtension(tableMarkerHideExtension());
     this.registerEditorExtension(paragraphMarkerHideExtension());
+    this.registerEditorExtension(listMarkerWidgetExtension());
     this.registerEditorExtension(figureCaptionExtension());
     this.registerEditorExtension(tableNumberExtension());
     this.registerEditorExtension(tableWidgetExtension({ showMenu: (event, items, access) => this.showTableMenu(event, items, access) }));

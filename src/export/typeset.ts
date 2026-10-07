@@ -507,6 +507,7 @@ class Typesetter {
     this.space(lead * 0.5);
     this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
     if (isChapter && this.chapterTocDepth > 0) this.chapterToc(section, this.chapterTocDepth);
+    this.afterHeading = section.title;
   }
 
   // Repere de renvoi pose sur la premiere ligne ajoutee depuis `from`.
@@ -534,9 +535,15 @@ class Typesetter {
     this.push({ kind: `space`, text: ``, x: 0, width: this.textWidth, fontSize: setup.fontSize, height: 0, wordSpacing: 0, align: `left`, zoneStart: { zone } });
   }
 
+  // Titre ecrit juste avant le bloc en cours : une liste d'illustrations placee sous un titre qui la nomme (« Liste des figures »)
+  // n'ajoute pas le sien.
+  private afterHeading: string | undefined;
+
   block(b: DocBlock): void {
+    const previousHeading = this.afterHeading;
+    this.afterHeading = undefined;
     if (b.type === `illustrations`) {
-      this.illustrationList(b.kind);
+      this.illustrationList(b.kind, previousHeading !== undefined && namesList(previousHeading, b.kind));
       this.afterParagraph = false;
       return;
     }
@@ -848,7 +855,7 @@ class Typesetter {
   }
 
   // Liste des figures ou des tableaux nommes, dans l'ordre du document, avec leur page.
-  private illustrationList(kind: `figures` | `tables`): void {
+  private illustrationList(kind: `figures` | `tables`, underHeading: boolean): void {
     const entries: { level: number; title: string; anchor: string }[] = [];
     for (const [block, label] of this.anchors.labels) {
       if ((kind === `figures`) !== (block.type === `figure`)) continue;
@@ -857,14 +864,14 @@ class Typesetter {
       entries.push({ level: 1, title: text === `` ? label : `${label}${sep} ${text}`, anchor: `lst:${label}` });
     }
     const heading = kind === `figures` ? (this.language === `en` ? `List of figures` : `Liste des figures`) : this.language === `en` ? `List of tables` : `Liste des tableaux`;
-    this.entryRows(entries, heading, false);
+    this.entryRows(entries, underHeading ? undefined : heading, false, false);
   }
 
   // Lignes d'une liste de titres avec leur page (table des matieres, listes d'illustrations).
-  private entryRows(entries: { level: number; title: string; anchor: string }[], heading: string | undefined, boldTop: boolean): void {
+  private entryRows(entries: { level: number; title: string; anchor: string }[], heading: string | undefined, boldTop: boolean, compact = heading === undefined): void {
     if (entries.length === 0) return;
     const lead = this.setup.leading;
-    const size = heading === undefined ? this.setup.fontSize - 1 : this.setup.fontSize;
+    const size = compact ? this.setup.fontSize - 1 : this.setup.fontSize;
     const top = Math.min(...entries.map((e) => e.level));
     if (heading !== undefined) {
       this.space(lead * 0.8);
@@ -883,7 +890,7 @@ class Typesetter {
       for (let k = first; k < this.sink.length; k++) this.sink[k].toc = { anchor: e.anchor, page: k === this.sink.length - 1 ? (this.opts.pageOf?.(e.anchor) ?? 0) : -1 };
       last.width = this.textWidth - x;
     }
-    this.space(heading === undefined ? lead * 0.6 : lead);
+    this.space(compact ? lead * 0.6 : lead);
   }
 
   section(s: DocSection): void {
@@ -891,6 +898,12 @@ class Typesetter {
     for (const b of s.blocks) this.block(b);
     for (const c of s.sections) this.section(c);
   }
+}
+
+// Le titre nomme-t-il cette liste (« Liste des figures », « Table des tableaux », « List of tables »...) ?
+function namesList(title: string, kind: `figures` | `tables`): boolean {
+  const w = normalizeHeading(title);
+  return kind === `figures` ? /figure/.test(w) : /tableau|table/.test(w);
 }
 
 function countWords(blocks: DocBlock[]): number {

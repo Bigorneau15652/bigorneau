@@ -83,3 +83,22 @@ test(`sans etiquette, aucune liste n'est ajoutee`, () => {
   const composed = composeNote(NOTE.replace(/%% liste[^\n]*\n\n/g, ``), `N.md`);
   assert.ok(!composed.typeset.rows.some((r) => r.kind === `toc`));
 });
+
+test(`sur une ligne de titre, la liste est placee sous le titre`, () => {
+  const text = `# Intro\n\nTexte.\n\n# Liste des figures\n\nSuite.`;
+  const placed = placeListMarker(text, text.indexOf(`Liste des`) + 3, `figures`);
+  assert.equal(placed, `# Intro\n\nTexte.\n\n# Liste des figures\n%% liste: figures %%\n\n\nSuite.`);
+  assert.deepEqual(listMarkersIn(placed), [`figures`]);
+  // Titre en derniere ligne.
+  assert.equal(placeListMarker(`# Fin`, 2, `tables`), `# Fin\n%% liste: tableaux %%\n\n`);
+});
+
+test(`une liste placee sous un titre n'ajoute pas son propre titre`, () => {
+  const named = [`# Liste des figures`, ``, `%% liste: figures %%`, ``, `Un texte.`, ``, `![[plan.png|Plan]]`].join(`\n`);
+  const rows = composeNote(named, `N.md`).typeset.rows;
+  assert.equal(rows.filter((r) => r.kind === `heading` && r.text === `Liste des figures`).length, 1);
+  assert.equal(rows.filter((r) => r.kind === `toc`).length, 1);
+  // Sous un titre qui ne la nomme pas, ou sans titre juste avant, la liste a le sien.
+  const bare = composeNote([`# Chapitre`, ``, `Un texte.`, ``, `%% liste: figures %%`, ``, `![[plan.png|Plan]]`].join(`\n`), `N.md`).typeset.rows;
+  assert.equal(bare.filter((r) => r.kind === `heading` && r.text === `Liste des figures`).length, 1);
+});
