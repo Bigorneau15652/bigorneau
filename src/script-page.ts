@@ -7,7 +7,7 @@ import { LayoutModal } from "./layout-modal";
 import { anyDecor } from "./page-config";
 import { defaultLayout, sameLayout } from "./page-layout";
 import { PageModal, PageModalHost } from "./page-modal";
-import { ICON_PARAGRAPH } from "./custom-icons";
+import { ICON_ORIENTATION, ICON_PARAGRAPH } from "./custom-icons";
 import { PageZoneModal } from "./page-zone-modal";
 import { pageZoneAt, setPageZone } from "./page-zone";
 import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
@@ -104,7 +104,7 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
     api.addFunction({
       id: `page-zone`,
       name: { fr: `Orientation de la page : paysage ou portrait pour un bloc`, en: `Page orientation: landscape or portrait for a block` },
-      icon: [`rectangle-horizontal`, `rotate-cw-square`, `file-text`],
+      icon: [ICON_ORIENTATION, `rectangle-horizontal`],
       needsEditor: true,
       active: ({ editor }) => (editor ? pageZoneAt(editor.getValue(), editor.posToOffset(editor.getCursor())) !== null : false),
       run: ({ editor }) => {
