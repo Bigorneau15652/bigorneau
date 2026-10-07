@@ -38,12 +38,38 @@ export class FunctionRegistry<Ctx> {
   }
 }
 
+// Separation entre deux groupes de boutons du panneau : un identifiant de la forme sep:N, place dans l'ordre comme un bouton.
+export const isSeparator = (id: string): boolean => /^sep:\d+$/.test(id);
+
+// Ordre avec une separation de plus, a la position `at` (a la fin par defaut).
+export function addSeparator(order: string[], at?: number): string[] {
+  const used = order.filter(isSeparator).map((id) => Number(id.slice(4)));
+  const id = `sep:${(used.length > 0 ? Math.max(...used) : 0) + 1}`;
+  const out = [...order];
+  out.splice(at === undefined ? out.length : Math.max(0, Math.min(out.length, at)), 0, id);
+  return out;
+}
+
+export const removeId = (order: string[], id: string): string[] => order.filter((x) => x !== id);
+
+// Elements a dessiner : les separations ne comptent que entre deux boutons (ni en tete, ni en queue, ni deux de suite).
+export function displayItems(shown: string[]): string[] {
+  const out: string[] = [];
+  for (const id of shown) {
+    if (isSeparator(id) && (out.length === 0 || isSeparator(out[out.length - 1]))) continue;
+    out.push(id);
+  }
+  while (out.length > 0 && isSeparator(out[out.length - 1])) out.pop();
+  return out;
+}
+
 // Ordre des boutons : d'abord les identifiants de l'ordre enregistre qui existent encore, dans cet ordre, puis les fonctions
 // nouvelles, dans l'ordre ou elles ont ete ajoutees.
 export function panelOrder(ids: string[], saved: string[]): string[] {
   const known = new Set(ids);
   const out: string[] = [];
-  for (const id of saved) if (known.has(id) && !out.includes(id)) out.push(id);
+  // Une separation (sep:1, sep:2...) n'est pas une fonction : elle reste dans l'ordre tant qu'on ne la supprime pas.
+  for (const id of saved) if ((known.has(id) || isSeparator(id)) && !out.includes(id)) out.push(id);
   for (const id of ids) if (!out.includes(id)) out.push(id);
   return out;
 }

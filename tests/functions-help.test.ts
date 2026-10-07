@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FunctionRegistry, moveId, panelOrder, reorderVisible, setHidden, visibleIds } from "../src/functions";
+import { addSeparator, displayItems, FunctionRegistry, isSeparator, moveId, panelOrder, removeId, reorderVisible, setHidden, visibleIds } from "../src/functions";
 import { HelpEntry, HelpRegistry, normalize, searchHelp } from "../src/help";
 import { PLUGIN_HELP } from "../src/help-data";
 
@@ -88,4 +88,24 @@ test(`reordonner les boutons affiches laisse les boutons masques a leur place`, 
   assert.deepEqual(reorderVisible([`a`, `b`, `c`, `d`, `e`], [`a`, `c`, `e`], [`e`, `a`, `c`]), [`e`, `b`, `a`, `d`, `c`]);
   assert.deepEqual(reorderVisible([`a`, `b`, `c`], [`a`, `b`, `c`], [`c`, `b`, `a`]), [`c`, `b`, `a`]);
   assert.deepEqual(reorderVisible([`a`, `b`, `c`], [`a`, `c`], [`a`, `c`]), [`a`, `b`, `c`]);
+});
+
+test(`les separations restent dans l'ordre des boutons, sont numerotees et se retirent`, () => {
+  assert.ok(isSeparator(`sep:3`) && !isSeparator(`separator`) && !isSeparator(`sep:`));
+  const ids = [`a`, `b`, `c`];
+  // Une separation enregistree est gardee meme si aucune fonction ne porte son identifiant.
+  assert.deepEqual(panelOrder(ids, [`b`, `sep:1`, `a`]), [`b`, `sep:1`, `a`, `c`]);
+  assert.deepEqual(addSeparator([`a`, `sep:2`, `b`]), [`a`, `sep:2`, `b`, `sep:3`]);
+  assert.deepEqual(addSeparator([`a`, `b`], 1), [`a`, `sep:1`, `b`]);
+  assert.deepEqual(removeId([`a`, `sep:1`, `b`], `sep:1`), [`a`, `b`]);
+  // Un bouton passe de l'autre cote d'une separation sans que celle-ci change de place dans la liste.
+  const full = [`a`, `sep:1`, `b`];
+  assert.deepEqual(reorderVisible(full, [`a`, `b`], [`b`, `a`]), [`b`, `sep:1`, `a`]);
+});
+
+test(`une separation n'est dessinee qu'entre deux boutons affiches`, () => {
+  assert.deepEqual(displayItems([`sep:1`, `a`, `sep:2`, `sep:3`, `b`, `sep:4`]), [`a`, `sep:2`, `b`]);
+  assert.deepEqual(displayItems([`sep:1`, `sep:2`]), []);
+  // Un bouton masque ne laisse pas deux separations de suite.
+  assert.deepEqual(displayItems(visibleIds([`a`, `b`, `c`], [`a`, `sep:1`, `b`, `sep:2`, `c`], [`b`])), [`a`, `sep:1`, `c`]);
 });

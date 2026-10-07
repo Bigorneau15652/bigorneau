@@ -2406,3 +2406,37 @@ table.mmw-t-equal td {
   font-style: italic;
   color: var(--text-muted);
 }
+
+/* Separation entre deux groupes de boutons du panneau. */
+.mmw-panel-separator {
+  align-self: stretch;
+  height: 0;
+  margin: 3px 4px;
+  border-top: 1px solid var(--background-modifier-border-hover);
+}
+
+/* Liste des boutons des reglages : poignee de deplacement et ligne en cours de deplacement. */
+.mmw-panel-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.mmw-panel-row {
+  position: relative;
+}
+
+.mmw-panel-row-dragging {
+  z-index: 2;
+  background: var(--background-modifier-hover);
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+  box-shadow: var(--shadow-s);
+}
+
+.mmw-panel-row.mmw-panel-drop-before {
+  box-shadow: 0 -2px 0 0 var(--interactive-accent);
+}
+
+.mmw-panel-row.mmw-panel-drop-after {
+  box-shadow: 0 2px 0 0 var(--interactive-accent);
+}
