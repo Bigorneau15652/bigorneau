@@ -259,6 +259,18 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
         if (row.rules.top) ops.push(`q 0.15 G 0.6 w ${num(x1)} ${num(H - rowTop)} m ${num(x2)} ${num(H - rowTop)} l S Q`);
         if (row.rules.bottom) ops.push(`q 0.15 G 0.6 w ${num(x1)} ${num(H - rowTop - row.height)} m ${num(x2)} ${num(H - rowTop - row.height)} l S Q`);
       }
+      if (row.box) {
+        // Cadre d'un titre : fond sur toute la ligne, bords gauche et droit sur chaque ligne, haut et bas sur la premiere et la derniere.
+        const x1 = left + row.box.x;
+        const x2 = x1 + row.box.width;
+        const y1 = H - rowTop;
+        const y2 = H - rowTop - row.height;
+        if (row.box.fill !== ``) ops.push(`q ${hexOperands(row.box.fill)} rg ${num(x1)} ${num(y2)} ${num(x2 - x1)} ${num(y1 - y2)} re f Q`);
+        const edges: string[] = [`${num(x1)} ${num(y1)} m ${num(x1)} ${num(y2)} l S`, `${num(x2)} ${num(y1)} m ${num(x2)} ${num(y2)} l S`];
+        if (row.box.top) edges.push(`${num(x1)} ${num(y1)} m ${num(x2)} ${num(y1)} l S`);
+        if (row.box.bottom) edges.push(`${num(x1)} ${num(y2)} m ${num(x2)} ${num(y2)} l S`);
+        if (row.box.line > 0) ops.push(`q ${hexOperands(row.box.color)} RG ${num(row.box.line)} w ${edges.join(` `)} Q`);
+      }
       if (row.frame) {
         // Cadre d'un media : bords gauche et droit, et haut ou bas sur la premiere et la derniere ligne.
         const x1 = left;
@@ -291,7 +303,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
         if (name) ops.push(`q ${num(row.image.width)} 0 0 ${num(row.image.height)} ${num(left + row.x)} ${num(H - rowTop - row.image.height)} cm /${name} Do Q`);
         return;
       }
-      const baseline = baselineIn(rowTop, row.height, row.fontSize, regular.font);
+      const baseline = row.inset ? baselineIn(rowTop + row.inset.top, row.height - row.inset.top - row.inset.bottom, row.fontSize, regular.font) : baselineIn(rowTop, row.height, row.fontSize, regular.font);
       if (row.heading) headings.push({ level: row.heading.level, title: row.heading.title, page: pageIndex, x: left + row.x, y: rowTop });
       if (row.kind === `quote`) {
         // Filet vertical a gauche des citations.

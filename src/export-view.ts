@@ -221,9 +221,27 @@ export class ExportPreviewView extends ItemView {
       if (row.frame.top) frame.style.borderTopWidth = `0.5pt`;
       if (row.frame.bottom) frame.style.borderBottomWidth = `0.5pt`;
     }
+    if (row.box) {
+      // Cadre d'un titre : fond et trait sur la largeur du cadre, bords haut et bas sur la premiere et la derniere ligne.
+      el.style.position = `relative`;
+      const box = el.createDiv({ cls: `mmw-row-box` });
+      box.style.left = `${row.box.x}pt`;
+      box.style.width = `${row.box.width}pt`;
+      if (row.box.fill !== ``) box.style.background = row.box.fill;
+      box.style.borderColor = row.box.color;
+      box.style.borderLeftWidth = `${row.box.line}pt`;
+      box.style.borderRightWidth = `${row.box.line}pt`;
+      if (row.box.top) box.style.borderTopWidth = `${row.box.line}pt`;
+      if (row.box.bottom) box.style.borderBottomWidth = `${row.box.line}pt`;
+    }
     if (row.kind === `space` || row.kind === `float`) return;
     el.style.fontSize = `${row.fontSize}pt`;
-    el.style.lineHeight = `${row.height}pt`;
+    if (row.inset && !row.cells) {
+      // Air au-dessus ou au-dessous du texte (cadre d'un titre) : le texte reste centre dans l'espace restant.
+      el.style.height = `${row.height - row.inset.top}pt`;
+      el.style.paddingTop = `${row.inset.top}pt`;
+      el.style.lineHeight = `${row.height - row.inset.top - row.inset.bottom}pt`;
+    } else el.style.lineHeight = `${row.height}pt`;
     if (row.underline) el.style.textDecoration = `underline`;
     if (row.x >= 0) {
       el.style.paddingLeft = `${row.x}pt`;

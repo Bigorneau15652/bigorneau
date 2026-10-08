@@ -526,20 +526,10 @@ export class MmSettingTab extends PluginSettingTab {
 
     new Setting(el).setName(t(`Polices et titres`)).setHeading();
     new Setting(el)
-      .setName(t(`Dossier des polices`))
-      .setDesc(t(`Dossier du coffre où l'on dépose les fichiers .ttf ou .otf à utiliser dans l'export (par exemple téléchargés sur Google Fonts ou DaFont). La licence de chaque police est de votre responsabilité.`))
-      .addText((x) =>
-        x.setValue(s.fontFolder).onChange(async (v) => {
-          s.fontFolder = v.trim().replace(/^\/+|\/+$/g, ``) || `Bigorneau/Polices`;
-          await this.plugin.saveSettings(false);
-          await this.plugin.fonts.refresh(true);
-        })
-      );
-    new Setting(el)
       .setName(t(`Police, taille, casse et numérotation des titres`))
       .setDesc(t(`Réglage pour toutes les notes. Pour une seule note, utilisez le bouton Polices et titres du panneau.`))
       .addButton((b) => b.setButtonText(t(`Ouvrir`)).onClick(() => new TypographyModal(this.app, this.plugin.typographyHost()).open()));
-    renderFontInfo(el, this.plugin.typographyHost(), () => this.display());
+    renderFontInfo(el, this.app, this.plugin.typographyHost(), () => this.display());
 
     new Setting(el).setName(t(`Figures, renvois et médias`)).setHeading();
     this.exportChoice(
