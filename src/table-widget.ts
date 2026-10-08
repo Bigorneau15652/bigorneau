@@ -4,6 +4,7 @@
 // sur autre chose que leur element table, et ne fait rien quand elle n'en trouve pas.
 import { Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
+import { record } from "./diagnostics";
 import { addColumn, addRow, findTable, renderTable, tableContext } from "./table-edit";
 import { MenuSpec, tableMenu } from "./table-menu";
 
@@ -45,13 +46,14 @@ class TableWidgets {
     this.observer.disconnect();
   }
 
+  // Un seul passage pour une rafale de changements du DOM de l'editeur.
   private schedule(): void {
     if (this.scheduled) return;
     this.scheduled = true;
-    window.requestAnimationFrame(() => {
+    window.setTimeout(() => {
       this.scheduled = false;
       this.scan();
-    });
+    }, 120);
   }
 
   private applyText(newText: string): void {
@@ -69,8 +71,17 @@ class TableWidgets {
   }
 
   private scan(): void {
+    const started = performance.now();
+    this.scanNow();
+    record(`Éditeur : repérage des tableaux`, performance.now() - started);
+  }
+
+  private scanNow(): void {
+    const tables = Array.from(this.view.contentDOM.querySelectorAll<HTMLTableElement>(`table`));
+    // Pas de tableau affiche : la note n'est meme pas lue.
+    if (tables.length === 0) return;
     const text = this.view.state.doc.toString();
-    for (const table of Array.from(this.view.contentDOM.querySelectorAll<HTMLTableElement>(`table`))) {
+    for (const table of tables) {
       const host = (table.closest(`.cm-table-widget, .cm-embed-block`) as HTMLElement | null) ?? table.parentElement;
       if (!host) continue;
       const pos = this.posOf(host);

@@ -1,5 +1,6 @@
 // Edition des formules dans le texte d'une note : retrouver la formule sous le curseur, ecrire une formule ($...$ ou bloc $$...$$)
 // et inserer un modele de la palette dans la zone de saisie. Ce module ne depend pas d'Obsidian : il se teste avec node --test.
+import { lineStartAt } from "./text-lines";
 import type { InsertResult } from "./export/insert";
 
 export interface FoundFormula {
@@ -17,7 +18,7 @@ export function findFormula(text: string, offset: number): FoundFormula | null {
     const to = block.lastIndex;
     if (offset >= from && offset <= to) return { from, to, tex: m[2].trim(), display: true };
   }
-  const lineStart = text.lastIndexOf(`\n`, offset - 1) + 1;
+  const lineStart = lineStartAt(text, offset);
   const lineEndAt = text.indexOf(`\n`, offset);
   const lineEnd = lineEndAt < 0 ? text.length : lineEndAt;
   const line = text.slice(lineStart, lineEnd);
@@ -54,7 +55,7 @@ export function writeFormula(text: string, from: number, to: number, tex: string
     return { edits: [{ from, to, insert }], cursor: from + insert.length };
   }
   const eol = text.includes(`\r\n`) ? `\r\n` : `\n`;
-  const lineStart = text.lastIndexOf(`\n`, from - 1) + 1;
+  const lineStart = lineStartAt(text, from);
   const lineEndAt = text.indexOf(`\n`, to);
   const lineEnd = lineEndAt < 0 ? text.length : lineEndAt;
   const before = text.slice(lineStart, from).trim() !== `` ? eol + eol : ``;

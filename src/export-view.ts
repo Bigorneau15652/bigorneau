@@ -1,5 +1,6 @@
 // Apercu de l'export de haute qualite : volet qui montre la note ouverte telle que l'export la composera.
 // Phase 2 : coupure de lignes de Knuth et Plass avec cesure ; la pagination definitive et le PDF arrivent aux phases suivantes.
+import { record } from "./diagnostics";
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { composeNote } from "./export/compose";
 import type { ImageAsset } from "./export/image";
@@ -29,6 +30,8 @@ export class ExportPreviewView extends ItemView {
   // Adresses des images de l'apercu, a liberer quand il est recompose ou ferme.
   private urls: string[] = [];
   private images = new Map<string, ImageAsset>();
+  // Vrai quand la note a change pendant que l'apercu n'etait pas visible : il est recompose quand on revient dessus.
+  private dirty = false;
 
   constructor(leaf: WorkspaceLeaf, private plugin: MindmapWritingPlugin) {
     super(leaf);
@@ -268,7 +271,28 @@ export class ExportPreviewView extends ItemView {
     }
   }
 
+  // Demande de recomposition apres une modification de la note : rien n'est calcule tant que l'apercu est cache (autre onglet).
+  requestRefresh(): void {
+    if (!this.contentEl.isShown()) {
+      this.dirty = true;
+      return;
+    }
+    void this.refresh();
+  }
+
+  // Au retour sur l'apercu : recomposition si la note a change entre-temps.
+  refreshIfDirty(): void {
+    if (this.dirty && this.contentEl.isShown()) void this.refresh();
+  }
+
   async refresh() {
+    const started = performance.now();
+    await this.refreshNow();
+    record(`Aperçu de l'export : composition`, performance.now() - started, `${this.sheets.length} pages`);
+  }
+
+  private async refreshNow() {
+    this.dirty = false;
     const token = ++this.token;
     const root = this.contentEl;
     // L'export de haute qualite n'existe que sur ordinateur : ailleurs, le volet l'explique sans rien calculer.

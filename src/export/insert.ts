@@ -1,6 +1,7 @@
 // Commandes qui ecrivent dans la note pour preparer l'export : note de bas de page, table des matieres, legende de tableau,
 // formules. Ce module calcule seulement les modifications a faire (sans dependre d'Obsidian, pour pouvoir etre teste avec
 // node --test) ; main.ts les applique dans l'editeur, ce qui garde l'historique d'annulation.
+import { lineStartAt } from "../text-lines";
 
 export interface TextEdit {
   from: number;
@@ -37,7 +38,7 @@ export function insertInlineMath(text: string, from: number, to: number): Insert
 // Formule en bloc : $$ sur sa propre ligne, la formule, $$ ; separee du texte voisin par une ligne vide.
 export function insertBlockMath(text: string, from: number, to: number): InsertResult {
   const eol = eolOf(text);
-  const lineStart = text.lastIndexOf(`\n`, from - 1) + 1;
+  const lineStart = lineStartAt(text, from);
   const lineEndAt = text.indexOf(`\n`, to);
   const lineEnd = lineEndAt < 0 ? text.length : lineEndAt;
   const before = text.slice(lineStart, from).trim() !== `` ? eol + eol : ``;

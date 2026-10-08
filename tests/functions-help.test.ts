@@ -109,3 +109,14 @@ test(`une separation n'est dessinee qu'entre deux boutons affiches`, () => {
   // Un bouton masque ne laisse pas deux separations de suite.
   assert.deepEqual(displayItems(visibleIds([`a`, `b`, `c`], [`a`, `sep:1`, `b`, `sep:2`, `c`], [`b`])), [`a`, `sep:1`, `c`]);
 });
+
+test(`les mesures gardent la derniere duree, la plus longue et le nombre de passages`, async () => {
+  const { record, timed, samplesList, formatSamples } = await import(`../src/diagnostics`);
+  record(`essai`, 12.34, `3 cases`);
+  record(`essai`, 5);
+  const s = samplesList().find((x) => x.name === `essai`);
+  assert.deepEqual([s?.ms, s?.max, s?.count], [5, 12.3, 2]);
+  assert.equal(timed(`autre`, () => 7), 7);
+  assert.ok(formatSamples(samplesList()).includes(`essai : 5 ms (maximum 12.3 ms, 2 fois)`));
+  assert.equal(formatSamples([]), ``);
+});

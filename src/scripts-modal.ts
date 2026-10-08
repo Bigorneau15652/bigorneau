@@ -29,6 +29,15 @@ export class ScriptsModal extends Modal {
       .setName(t(`Ajouter un fichier de script`))
       .setDesc(t(`Un script a les mêmes pouvoirs que le plugin : il peut lire et modifier toutes vos notes, et sur ordinateur accéder aux fichiers de la machine. N'ajoutez que des scripts dont vous connaissez l'origine. Chaque script doit être confirmé avant son premier lancement, et de nouveau s'il change.`))
       .addButton((b) => b.setButtonText(t(`Choisir un fichier…`)).onClick(() => this.pick()));
+    new Setting(contentEl)
+      .setName(t(`Diagnostic`))
+      .setDesc(t(`Affiche l'état du plugin, des scripts et les temps mesurés, à envoyer avec la description d'un problème.`))
+      .addButton((b) =>
+        b.setButtonText(t(`Ouvrir le diagnostic`)).onClick(() => {
+          this.close();
+          this.plugin.openDiagnostic();
+        })
+      );
   }
 
   private row(list: HTMLElement, info: ScriptInfo): void {

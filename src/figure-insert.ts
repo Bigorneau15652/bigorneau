@@ -1,5 +1,6 @@
 // Figures et dessins ecrits dans la note : ![[cible|Nom]]. Le nom devient la legende « Figure N : Nom » a l'export ; sans nom, la figure
 // n'a ni legende ni numero. Ce module ne depend pas d'Obsidian.
+import { lineStartAt } from "./text-lines";
 import { mediaKindOf } from "./export/doc-tree";
 import { isImageTarget, isWebTarget } from "./export/image";
 
@@ -53,7 +54,7 @@ export function nameDrawing(embed: DrawingEmbed, name: string): { from: number; 
 // Modification qui met `markup` (une figure) seul sur sa ligne a la place de `edit` : les figures ne sont reconnues que seules sur leur
 // ligne. Si le dessin est deja seul, c'est un simple remplacement.
 export function isolateFigure(text: string, edit: { from: number; to: number; insert: string }): { from: number; to: number; insert: string } {
-  const lineStart = text.lastIndexOf(`\n`, edit.from - 1) + 1;
+  const lineStart = lineStartAt(text, edit.from);
   const nl = text.indexOf(`\n`, edit.to);
   const lineEnd = nl === -1 ? text.length : nl;
   const before = text.slice(lineStart, edit.from);

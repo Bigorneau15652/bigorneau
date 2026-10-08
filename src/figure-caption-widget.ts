@@ -4,9 +4,12 @@
 // rien quand elle ne trouve pas de figure. Utilise uniquement CodeMirror.
 import { Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from "@codemirror/view";
+import { record } from "./diagnostics";
 import { figureLines, tableCaptionLines } from "./figure-insert";
 
 const CAPTION_CLASS = `mmw-figure-caption`;
+// Delai avant le passage qui cherche les figures dans l'editeur.
+const SCAN_DELAY_MS = 120;
 // Element qui contient la figure et sa legende : mis en colonne pour que la legende ne soit jamais cachee par le dessin.
 const HOST_CLASS = `mmw-figure-host`;
 
@@ -36,20 +39,41 @@ class FigureCaptions {
     });
   }
 
+  // Un seul passage pour une rafale de changements (un dessin Excalidraw qui s'affiche en provoque beaucoup).
   private schedule(): void {
     if (this.scheduled) return;
     this.scheduled = true;
-    window.requestAnimationFrame(() => {
+    window.setTimeout(() => {
       this.scheduled = false;
       this.scan();
-    });
+    }, SCAN_DELAY_MS);
+  }
+
+  // Figures de la note : recalculees seulement quand le texte a change.
+  private doc: unknown = null;
+  private byLine = new Map<number, ReturnType<typeof figureLines>[number]>();
+
+  private figuresByLine(): Map<number, ReturnType<typeof figureLines>[number]> {
+    const doc = this.view.state.doc;
+    if (doc !== this.doc) {
+      this.doc = doc;
+      const text = doc.toString();
+      this.byLine = new Map((text.includes(`![`) ? figureLines(text) : []).map((f) => [f.line, f]));
+    }
+    return this.byLine;
   }
 
   private scan(): void {
+    const started = performance.now();
+    this.scanNow();
+    record(`Éditeur : repérage des légendes de figures`, performance.now() - started);
+  }
+
+  private scanNow(): void {
     const dom = this.view.contentDOM;
-    const text = this.view.state.doc.toString();
-    const figures = text.includes(`![`) ? figureLines(text) : [];
-    const byLine = new Map(figures.map((f) => [f.line, f]));
+    // Rien a faire (et rien a lire dans la note) quand l'editeur n'affiche ni figure ni legende.
+    if (!dom.querySelector(`.internal-embed, .image-embed, .excalidraw-embed, .${CAPTION_CLASS}`)) return;
+    const byLine = this.figuresByLine();
     // Elements qui contiennent une figure dessinee (image integree ou dessin), un par ligne de la note.
     const hosts = new Map<number, HTMLElement>();
     dom.querySelectorAll<HTMLElement>(`.internal-embed, .image-embed, .excalidraw-embed`).forEach((embed) => {

@@ -1,6 +1,7 @@
 // Paragraphes : reglage de tout le document (retrait ou espace entre paragraphes, alignement) et exception pour un seul paragraphe,
 // ecrite au debut de sa ligne : %% p: droite %% ou %% p: centre, espace m %%. Le commentaire est invisible en lecture. Ce module ne
 // depend pas d'Obsidian : il sert a la composition de l'export et a la fenetre des paragraphes.
+import { lineStartAt } from "./text-lines";
 
 export type ParaAlign = `justify` | `left` | `right` | `center`;
 export type ParaMode = `indent` | `space`;
@@ -93,7 +94,7 @@ export function readParagraphMarker(line: string): { format: ParagraphFormat; le
 
 // Modification du texte qui pose (ou retire, avec `null`) l'exception du paragraphe dont la ligne contient `offset`.
 export function setParagraphMarker(text: string, offset: number, format: ParagraphFormat | null): { from: number; to: number; insert: string } {
-  const start = text.lastIndexOf(`\n`, offset - 1) + 1;
+  const start = lineStartAt(text, offset);
   const nl = text.indexOf(`\n`, offset);
   const end = nl === -1 ? text.length : nl;
   const line = text.slice(start, end).replace(/\r$/, ``);
@@ -105,7 +106,7 @@ export function setParagraphMarker(text: string, offset: number, format: Paragra
 
 // Exception du paragraphe dont la ligne contient `offset`, ou null.
 export function paragraphMarkerAt(text: string, offset: number): ParagraphFormat | null {
-  const start = text.lastIndexOf(`\n`, offset - 1) + 1;
+  const start = lineStartAt(text, offset);
   const nl = text.indexOf(`\n`, offset);
   return readParagraphMarker(text.slice(start, nl === -1 ? text.length : nl))?.format ?? null;
 }

@@ -92,3 +92,31 @@ test(`une feuille imposee ignore les etiquettes de zone`, () => {
   const composed = composeNote(note(`${para(1)}\n\n%% page: paysage %%\n\n${para(1)}`), `N.md`, { ...composeNote(`# a`, `N.md`).setup });
   assert.ok(composed.pages.every((p) => !p.setup));
 });
+
+test(`les reperes de ligne n'ont pas de piege de bord : une note qui commence par une ligne vide ne bloque rien`, async () => {
+  const { lineStartAt, lineEndAt, previousLineStart } = await import(`../src/text-lines`);
+  const { placeListMarker, removeListMarker } = await import(`../src/illustration-list`);
+  const { paragraphMarkerAt, setParagraphMarker } = await import(`../src/paragraph-format`);
+  assert.equal(lineStartAt(`\nHello`, 0), 0);
+  assert.equal(lineStartAt(`\nHello`, 3), 1);
+  assert.equal(lineEndAt(`\nHello`, 0), 0);
+  assert.equal(previousLineStart(`\nHello`, 1), 0);
+  const texts = [``, `\n`, `\n\n`, `\nHello`, `\n\nHello\n`, `Hello\n\n`, `%% page: paysage %%\n\nX`, `\n%% page: paysage %%\nX`, `\n\n%% liste: figures %%\n\nX\nY`, `a\n\n\nb`];
+  for (const text of texts) {
+    for (let offset = 0; offset <= text.length; offset++) {
+      // Chaque appel doit se terminer (une boucle sans fin ferait echouer l'essai par depassement de delai).
+      pageZoneAt(text, offset);
+      setPageZone(text, offset, { orientation: `landscape` });
+      setPageZone(text, offset, null);
+      placeListMarker(text, offset, `figures`);
+      removeListMarker(text, `figures`);
+      paragraphMarkerAt(text, offset);
+      setParagraphMarker(text, offset, { align: `right` });
+    }
+  }
+  // Une etiquette posee sur la deuxieme ligne d'une note qui commence par une ligne vide est retrouvee.
+  const text = `\nHello`;
+  const put = setPageZone(text, 3, { orientation: `landscape` });
+  const next = text.slice(0, put.from) + put.insert + text.slice(put.to);
+  assert.deepEqual(pageZoneAt(next, next.indexOf(`Hello`))?.zone, { orientation: `landscape` });
+});
