@@ -35,3 +35,15 @@ export function formatSamples(list: Sample[]): string {
   if (list.length === 0) return ``;
   return list.map((s) => `${s.name} : ${s.ms} ms (maximum ${s.max} ms, ${s.count} fois)${s.detail === `` ? `` : `, ${s.detail}`}`).join(`\n`);
 }
+
+// Erreurs interceptees (le panneau, le chargement des scripts) : gardees pour la fenetre de diagnostic, les dernieres seulement.
+const errors: string[] = [];
+const ERROR_LIMIT = 8;
+
+export function noteError(where: string, error: unknown): void {
+  const text = error instanceof Error ? `${error.message}${error.stack ? ` | ${error.stack.split(`\n`).slice(1, 3).join(` `).trim()}` : ``}` : String(error);
+  errors.push(`${where} : ${text}`);
+  while (errors.length > ERROR_LIMIT) errors.shift();
+}
+
+export const errorsList = (): string[] => [...errors];
