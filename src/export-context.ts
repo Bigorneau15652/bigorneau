@@ -112,21 +112,67 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
   return { images, formulas, urls };
 }
 
+// Images deja decodees, gardees d'une composition a l'autre : l'apercu de l'export est recompose a chaque pause de frappe, et relire,
+// decoder et reduire chaque image (ou redemander son dessin a Excalidraw) a chaque fois le rendrait tres lent. Une image garde son entree
+// tant que son fichier, sa taille d'affichage et sa date de modification ne changent pas. La memoire reservee est plafonnee.
+const IMAGE_CACHE_LIMIT_BYTES = 120 * 1024 * 1024;
+const imageCache = new Map<string, { asset: ImageAsset; blob: Blob | null; bytes: number }>();
+// Fichier d'origine de chaque image decodee, pour redonner une adresse d'apercu valide quand elle est reprise du cache.
+const sourceBlobs = new WeakMap<ImageAsset, Blob>();
+
+const sizeOf = (asset: ImageAsset, blob: Blob | null): number => asset.data.length + (asset.alpha?.length ?? 0) + (blob?.size ?? 0);
+
+async function cachedImage(key: string, urls: string[], make: () => Promise<ImageAsset | null>): Promise<ImageAsset | null> {
+  const hit = imageCache.get(key);
+  if (hit) {
+    // Entree reprise : elle devient la plus recente, et l'apercu recoit une adresse neuve (les anciennes sont liberees a chaque recomposition).
+    imageCache.delete(key);
+    imageCache.set(key, hit);
+    if (!hit.blob) return hit.asset;
+    const url = URL.createObjectURL(hit.blob);
+    urls.push(url);
+    return { ...hit.asset, previewUrl: url };
+  }
+  const asset = await make();
+  if (!asset) return null;
+  const blob = sourceBlobs.get(asset) ?? null;
+  imageCache.set(key, { asset, blob, bytes: sizeOf(asset, blob) });
+  let total = 0;
+  for (const e of imageCache.values()) total += e.bytes;
+  for (const k of Array.from(imageCache.keys())) {
+    if (total <= IMAGE_CACHE_LIMIT_BYTES || imageCache.size <= 1) break;
+    total -= imageCache.get(k)?.bytes ?? 0;
+    imageCache.delete(k);
+  }
+  return asset;
+}
+
+const boundsKey = (b: { maxWidth: number; maxHeight: number }): string => `${Math.round(b.maxWidth)}x${Math.round(b.maxHeight)}`;
+
 // Dessin Excalidraw dont l'image n'a pas ete exportee : le plugin Excalidraw en fournit le SVG.
 async function loadDrawing(app: App, target: string, sourcePath: string, requestedWidth: number | undefined, bounds: { maxWidth: number; maxHeight: number }, urls: string[]): Promise<ImageAsset | null> {
   const file = fileFor(app, target, sourcePath) ?? fileFor(app, `${target.replace(/\.md$/i, ``)}.md`, sourcePath);
   if (!file) return null;
-  const svg = await excalidrawSvg(app, file);
-  if (!svg) return null;
-  try {
-    return await loadBytes(new TextEncoder().encode(svg), `svg`, requestedWidth, bounds, urls);
-  } catch {
-    return null;
-  }
+  return cachedImage(`drawing|${file.path}|${file.stat.mtime}|${file.stat.size}|${requestedWidth ?? ``}|${boundsKey(bounds)}`, urls, async () => {
+    const svg = await excalidrawSvg(app, file);
+    if (!svg) return null;
+    try {
+      return await loadBytes(new TextEncoder().encode(svg), `svg`, requestedWidth, bounds, urls);
+    } catch {
+      return null;
+    }
+  });
 }
 
 async function loadOne(app: App, file: TFile, requestedWidth: number | undefined, bounds: { maxWidth: number; maxHeight: number }, urls: string[]): Promise<ImageAsset | null> {
-  return loadBytes(new Uint8Array(await app.vault.readBinary(file)), file.extension.toLowerCase(), requestedWidth, bounds, urls);
+  return cachedImage(`file|${file.path}|${file.stat.mtime}|${file.stat.size}|${requestedWidth ?? ``}|${boundsKey(bounds)}`, urls, async () =>
+    loadBytes(new Uint8Array(await app.vault.readBinary(file)), file.extension.toLowerCase(), requestedWidth, bounds, urls)
+  );
+}
+
+function remember(asset: ImageAsset, blob: Blob): ImageAsset {
+  sourceBlobs.set(asset, blob);
+  return asset;
 }
 
 async function loadBytes(bytes: Uint8Array<ArrayBuffer>, ext: string, requestedWidth: number | undefined, bounds: { maxWidth: number; maxHeight: number }, urls: string[]): Promise<ImageAsset | null> {
@@ -145,7 +191,7 @@ async function loadBytes(bytes: Uint8Array<ArrayBuffer>, ext: string, requestedW
   if (ext === `jpg` || ext === `jpeg`) {
     const info = jpegInfo(bytes);
     if (info && info.components === 3 && info.width === naturalWidth && info.height === naturalHeight) {
-      return { naturalWidth, naturalHeight, pixelWidth: info.width, pixelHeight: info.height, kind: `jpeg`, data: bytes, previewUrl: url };
+      return remember({ naturalWidth, naturalHeight, pixelWidth: info.width, pixelHeight: info.height, kind: `jpeg`, data: bytes, previewUrl: url }, blob);
     }
   }
 
@@ -171,7 +217,7 @@ async function loadBytes(bytes: Uint8Array<ArrayBuffer>, ext: string, requestedW
     alpha[p] = rgba[q + 3];
     if (rgba[q + 3] !== 255) translucent = true;
   }
-  return { naturalWidth, naturalHeight, pixelWidth: pw, pixelHeight: ph, kind: `rgb`, data: rgb, ...(translucent ? { alpha } : {}), previewUrl: url };
+  return remember({ naturalWidth, naturalHeight, pixelWidth: pw, pixelHeight: ph, kind: `rgb`, data: rgb, ...(translucent ? { alpha } : {}), previewUrl: url }, blob);
 }
 
 // Dessin des formules de la note par le service du script Formules. Une formule que MathJax refuse n'a pas d'entree : la composition

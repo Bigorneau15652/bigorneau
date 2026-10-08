@@ -99,10 +99,16 @@ export class ButtonPanel {
     // Boutons seuls (sans les separations) : ce sont eux que l'on deplace.
     const buttons = shown.filter((id) => !isSeparator(id));
     // Rien n'est reconstruit tant que ni les boutons, ni leur ordre, ni la langue n'ont change.
-    const states = buttons.map((id) => {
-      const fn = functions.find((f) => f.id === id) as PanelFunction<FunctionContext>;
-      return fn.active ? fn.active({ app: this.host.app, view, editor: view.editor }) : null;
-    });
+    // Une fonction dont le calcul d'etat echoue ne doit jamais vider le panneau : son bouton est alors simplement sans etat.
+    const stateOf = (fn: PanelFunction<FunctionContext>): boolean | null => {
+      if (!fn.active) return null;
+      try {
+        return fn.active({ app: this.host.app, view, editor: view.editor });
+      } catch {
+        return false;
+      }
+    };
+    const states = buttons.map((id) => stateOf(functions.find((f) => f.id === id) as PanelFunction<FunctionContext>));
     const signature = JSON.stringify([items, currentLang(), states]);
     if (panel.dataset.signature === signature) return;
     panel.dataset.signature = signature;
@@ -125,7 +131,7 @@ export class ButtonPanel {
       const btn = list.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
       btn.type = `button`;
       btn.dataset.id = fn.id;
-      if (fn.active && fn.active({ app: this.host.app, view, editor: view.editor })) btn.addClass(`mmw-panel-active`);
+      if (stateOf(fn)) btn.addClass(`mmw-panel-active`);
       setIcon(btn, pickIcon(fn.icons));
       btn.setAttr(`aria-label`, fn.name());
       setTooltip(btn, fn.name(), { placement: `left` });

@@ -2440,3 +2440,16 @@ table.mmw-t-equal td {
 .mmw-panel-row.mmw-panel-drop-after {
   box-shadow: 0 2px 0 0 var(--interactive-accent);
 }
+
+/* Fenetre de diagnostic : texte a copier. */
+.mmw-diagnostic {
+  max-height: 50vh;
+  margin: 8px 0;
+  padding: 8px;
+  overflow: auto;
+  font-size: var(--font-ui-smaller);
+  white-space: pre-wrap;
+  user-select: text;
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+}

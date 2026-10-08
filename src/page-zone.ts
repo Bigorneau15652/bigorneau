@@ -3,6 +3,7 @@
 // `%% page: paysage, seulement %%` (seul le bloc qui suit est concerne, puis la feuille reprend son orientation). La zone dure jusqu'a
 // la prochaine etiquette. Ce module ne depend pas d'Obsidian.
 import type { Orientation } from "./page-layout";
+import { lineEndAt, lineStartAt, previousLineStart } from "./text-lines";
 
 export interface PageZone {
   orientation: Orientation;
@@ -90,20 +91,15 @@ export function zoneFromSentinel(line: string): PageZone | null {
 
 // Debut du bloc qui contient `offset` : on remonte tant que la ligne precedente n'est pas vide.
 export function blockStart(text: string, offset: number): number {
-  let start = text.lastIndexOf(`\n`, offset - 1) + 1;
+  let start = lineStartAt(text, offset);
   while (start > 0) {
-    const prevStart = text.lastIndexOf(`\n`, start - 2) + 1;
+    const prevStart = previousLineStart(text, start);
     const prev = text.slice(prevStart, start - 1);
     if (prev.trim() === `` || readPageZone(prev) || LABEL_LINE_RE.test(prev)) break;
     start = prevStart;
   }
   return start;
 }
-
-const lineEndAt = (text: string, p: number): number => {
-  const nl = text.indexOf(`\n`, p);
-  return nl === -1 ? text.length : nl;
-};
 
 // Etiquette de zone du bloc qui contient `offset` : celle de la ligne du curseur, ou celle qui precede le bloc (apres des lignes vides
 // eventuelles). `from`..`lineTo` est la ligne de l'etiquette ; `from`..`to` comprend aussi les lignes vides qui la suivent.
@@ -114,9 +110,10 @@ export function pageZoneAt(text: string, offset: number): { zone: PageZone; from
     const lineTo = lineEndAt(text, start);
     return { zone: own, from: start, lineTo, to: Math.min(text.length, lineTo + 1) };
   }
+  // Lignes vides au-dessus du bloc, puis l'etiquette. Chaque tour remonte d'une ligne au moins.
   let probe = start;
   while (probe > 0) {
-    const prevStart = text.lastIndexOf(`\n`, probe - 2) + 1;
+    const prevStart = previousLineStart(text, probe);
     const prev = text.slice(prevStart, probe - 1);
     if (prev.trim() === ``) {
       probe = prevStart;

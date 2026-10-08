@@ -7,6 +7,8 @@ import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
+import { DiagnosticModal } from "./diagnostic-modal";
+import { record } from "./diagnostics";
 import { FunctionRegistry, isSeparator, panelOrder, PanelFunction } from "./functions";
 import { HelpRegistry } from "./help";
 import { PLUGIN_HELP } from "./help-data";
@@ -66,6 +68,7 @@ export default class MindmapWritingPlugin extends Plugin {
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
 
   async onload() {
+    const started = performance.now();
     const stored: unknown = await this.loadData();
     // Premier lancement sous le nom Bigorneau : les reglages de l'ancien plugin (Mindmap Note Writing) sont repris une fois.
     const legacy = stored === null || stored === undefined ? await this.legacyData() : null;
@@ -179,10 +182,17 @@ export default class MindmapWritingPlugin extends Plugin {
     // Panneau de boutons : pose dans chaque editeur Markdown, mis a jour quand les volets changent.
     this.helpEntries.add(PLUGIN_HELP);
     this.app.workspace.onLayoutReady(() => void this.startScripts());
-    this.registerEvent(this.app.workspace.on(`layout-change`, () => this.panel.sync()));
+    // Obsidian signale souvent plusieurs changements de volets de suite : un seul recalcul du panneau.
+    const syncPanelSoon = debounce(() => this.panel.sync(), 60, true);
+    this.registerEvent(this.app.workspace.on(`layout-change`, () => syncPanelSoon()));
     const syncPanelLater = debounce(() => this.panel.sync(), 400, true);
     this.registerEvent(this.app.workspace.on(`editor-change`, () => syncPanelLater()));
-    this.registerEvent(this.app.workspace.on(`active-leaf-change`, () => this.panel.sync()));
+    this.registerEvent(
+      this.app.workspace.on(`active-leaf-change`, (leaf) => {
+        this.panel.sync();
+        if (leaf?.view instanceof ExportPreviewView) leaf.view.refreshIfDirty();
+      })
+    );
     this.app.workspace.onLayoutReady(() => this.panel.sync());
     this.register(() => this.panel.detachAll());
 
@@ -399,6 +409,11 @@ export default class MindmapWritingPlugin extends Plugin {
       }
     });
     this.addCommand({
+      id: `diagnostic`,
+      name: t(`Diagnostic de Bigorneau`),
+      callback: () => this.openDiagnostic(),
+    });
+    this.addCommand({
       id: `toggle-panel`,
       name: t(`Afficher ou masquer le panneau de boutons`),
       callback: () => {
@@ -424,6 +439,7 @@ export default class MindmapWritingPlugin extends Plugin {
         void this.activateView();
       },
     });
+    record(`Démarrage du plugin (onload)`, performance.now() - started);
   }
 
   onunload() {
@@ -642,15 +658,31 @@ export default class MindmapWritingPlugin extends Plugin {
 
   // Scripts ajoutes a la main presents dans le dossier technique, puis chargement des scripts actifs.
   private async startScripts(): Promise<void> {
-    const found: ExternalScript[] = [];
-    for (const f of await this.scriptStore.list()) {
-      const built = await buildExternal(f.file, f.code);
-      if (built.ok) found.push(built.script);
+    const started = performance.now();
+    // Les scripts ajoutes a la main viennent d'un dossier que l'on peut ne pas pouvoir lire : les scripts officiels (Mise en page,
+    // Formules) sont charges quand meme, et le panneau est toujours remis a jour.
+    try {
+      const found: ExternalScript[] = [];
+      for (const f of await this.scriptStore.list()) {
+        const built = await buildExternal(f.file, f.code);
+        if (built.ok) found.push(built.script);
+      }
+      this.scripts.setExternal(found);
+    } catch (e) {
+      new Notice(t(`Les scripts ajoutés à la main n'ont pas pu être lus : {0}`, e instanceof Error ? e.message : String(e)), 8000);
     }
-    this.scripts.setExternal(found);
-    await this.scripts.loadEnabled();
-    await this.placeDefaultSeparators();
+    try {
+      await this.scripts.loadEnabled();
+    } catch (e) {
+      new Notice(t(`Les scripts n'ont pas pu être chargés : {0}`, e instanceof Error ? e.message : String(e)), 8000);
+    }
+    try {
+      await this.placeDefaultSeparators();
+    } catch {
+      // La disposition de depart sera reposee au prochain demarrage.
+    }
     this.panel.sync();
+    record(`Chargement des scripts`, performance.now() - started, `${this.scripts.info().filter((i) => i.loaded).length} chargés`);
   }
 
   // ---------------------------------------------------------------- tableaux
@@ -776,6 +808,10 @@ export default class MindmapWritingPlugin extends Plugin {
     );
   }
 
+  openDiagnostic(): void {
+    new DiagnosticModal(this.app, this).open();
+  }
+
   openHelp(): void {
     new HelpModal(this.app, () => this.helpEntries.all()).open();
   }
@@ -857,12 +893,16 @@ export default class MindmapWritingPlugin extends Plugin {
 
   private refreshViews() {
     this.forEachView((view) => void view.refresh());
-    this.refreshExportPreviews();
+    this.refreshExportPreviewsSoon();
   }
+
+  // La recomposition de l'apercu de l'export (mise en page entiere) est lourde : elle attend une pause de frappe plus longue que la
+  // carte, et ne se fait pas pour un apercu cache.
+  private refreshExportPreviewsSoon = debounce(() => this.refreshExportPreviews(), 1500, true);
 
   private refreshExportPreviews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_EXPORT)) {
-      if (leaf.view instanceof ExportPreviewView) void leaf.view.refresh();
+      if (leaf.view instanceof ExportPreviewView) leaf.view.requestRefresh();
     }
   }
 

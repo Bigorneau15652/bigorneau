@@ -1,6 +1,7 @@
 // Listes des illustrations : une ligne de commentaire seule, `%% liste: figures %%` ou `%% liste: tableaux %%`, place a cet endroit de la
 // note la liste des figures (images et dessins nommes) ou des tableaux nommes, avec leur numero de page. Sans etiquette, il n'y a pas de
 // liste. Ce module ne depend pas d'Obsidian.
+import { lineStartAt } from "./text-lines";
 import { blockStart } from "./page-zone";
 
 export type ListKind = `figures` | `tables`;
@@ -88,7 +89,7 @@ export function removeListMarker(text: string, kind: ListKind): string {
 // le bloc de `offset`. L'etiquette est une ligne seule, entouree de lignes vides ; celle qui existait deja est retiree (la liste n'a
 // qu'une place).
 export function placeListMarker(text: string, offset: number, kind: ListKind): string {
-  const lineStart = text.lastIndexOf(`\n`, offset - 1) + 1;
+  const lineStart = lineStartAt(text, offset);
   const nl = text.indexOf(`\n`, offset);
   const underHeading = /^ {0,3}#{1,6}[ \t]/.test(text.slice(lineStart, nl === -1 ? text.length : nl));
   const point = underHeading ? (nl === -1 ? text.length : nl + 1) : blockStart(text, offset);

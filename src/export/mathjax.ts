@@ -28,25 +28,41 @@ function getEngine(): Engine {
   return engine;
 }
 
+// Formules deja dessinees : l'apercu de l'export est recompose a chaque pause de frappe, et chaque formule garde son dessin d'une fois a
+// l'autre (le dessin ne depend que du texte TeX et du mode). Le cache est borne.
+const CACHE_LIMIT = 400;
+const assets = new Map<string, MathAsset | null>();
+const svgs = new Map<string, string | null>();
+
+function remember<T>(cache: Map<string, T>, key: string, value: T): T {
+  cache.set(key, value);
+  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string);
+  return value;
+}
+
 // Dessin d'une formule TeX, ou null si MathJax la refuse (syntaxe incorrecte) ou si le dessin est illisible.
 export function renderTex(tex: string, display: boolean): MathAsset | null {
+  const key = `${display ? `D` : `I`}:${tex}`;
+  if (assets.has(key)) return assets.get(key) as MathAsset | null;
   try {
-    return parseMathSvg(getEngine().convert(tex, display), tex, display);
+    return remember(assets, key, parseMathSvg(getEngine().convert(tex, display), tex, display));
   } catch {
-    return null;
+    return remember(assets, key, null);
   }
 }
 
 // Dessin SVG complet d'une formule (celui de MathJax, avec ses glyphes), pour l'apercu de l'editeur de formules ; null si MathJax la
 // refuse. Le texte renvoye est l'element svg seul.
 export function renderTexSvg(tex: string, display: boolean): string | null {
+  const key = `${display ? `D` : `I`}:${tex}`;
+  if (svgs.has(key)) return svgs.get(key) as string | null;
   try {
     const out = getEngine().convert(tex, display);
-    if (/data-mml-node="merror"|<mjx-merror|data-mjx-error/.test(out)) return null;
+    if (/data-mml-node="merror"|<mjx-merror|data-mjx-error/.test(out)) return remember(svgs, key, null);
     const from = out.indexOf(`<svg`);
     const to = out.lastIndexOf(`</svg>`);
-    return from < 0 || to < 0 ? null : out.slice(from, to + 6);
+    return remember(svgs, key, from < 0 || to < 0 ? null : out.slice(from, to + 6));
   } catch {
-    return null;
+    return remember(svgs, key, null);
   }
 }

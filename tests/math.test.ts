@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { inlineMathOf, mathKey, parseMathSvg } from "../src/export/math";
+import { renderTex, renderTexSvg } from "../src/export/mathjax";
 
 const samples = JSON.parse(readFileSync(`tests/math-samples.json`, `utf8`)) as Record<string, string>;
 
@@ -201,4 +202,14 @@ test(`la page peut se couper apres un cadre de media et avant le titre suivant`,
   assert.ok(lastOfFirst.breakAfter < 10000);
   const heading = t.rows.findIndex((r) => r.heading?.title === `B`);
   assert.ok(t.rows.slice(0, heading).some((r) => r.kind === `space` && r.breakAfter < 10000));
+});
+
+test(`une formule deja dessinee est reprise du cache, et une formule refusee aussi`, () => {
+  const a = renderTex(`x^2 + y^2`, false);
+  assert.ok(a);
+  assert.equal(renderTex(`x^2 + y^2`, false), a);
+  assert.notEqual(renderTex(`x^2 + y^2`, true), a);
+  assert.equal(renderTex(`\\frac{`, false), null);
+  assert.equal(renderTex(`\\frac{`, false), null);
+  assert.equal(renderTexSvg(`a+b`, false), renderTexSvg(`a+b`, false));
 });

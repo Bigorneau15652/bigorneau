@@ -14,6 +14,7 @@ import { MapLink, parseLinks, WebLink, webLinks } from "./links";
 import { HeadingItem, VaultPicker } from "./vault-picker";
 import { WebDialog, WebDialogOptions } from "./web-dialog";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, shapeChoice, ShapeChoice, shapePatch, StylePatch } from "./style";
+import { record } from "./diagnostics";
 import { setSvg } from "./dom";
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
@@ -198,6 +199,7 @@ export class MapRenderer {
   private dropLineEl: HTMLElement | null = null;
   private dropLine: { x: number; y: number } | null = null;
   private webByKey = new Map<string, WebLink[]>();
+  private linksFrom = new Map<string, MapLink[]>();
   private extBoxes: { link: MapLink; el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
   private linkHint: HTMLElement | null = null;
   private eyeHover: string | null = null;
@@ -423,6 +425,12 @@ export class MapRenderer {
   }
 
   rebuild(): void {
+    const started = performance.now();
+    this.rebuildNow();
+    record(`Carte : reconstruction`, performance.now() - started, `${this.list.length} cases, vue ${this.getSettings().viewMode}`);
+  }
+
+  private rebuildNow(): void {
     const s = this.getSettings();
     const list = s.viewMode === `list`;
     this.mapEl.classList.toggle(`mmw-list`, list);
@@ -477,6 +485,9 @@ export class MapRenderer {
     }
     if (this.selectedLink && this.selectedLink !== this.pendingLink && !this.links.some((l) => this.linkId(l) === this.selectedLink)) this.selectedLink = null;
     if (this.selectedLink && this.links.some((l) => this.linkId(l) === this.selectedLink && (l.external ? !s.showExternalLinks : !s.showInternalLinks))) this.selectedLink = null;
+    // Liens de chaque case, indexes une fois pour toutes (et non recherches dans toute la liste pour chaque case).
+    this.linksFrom.clear();
+    for (const l of this.links) this.linksFrom.set(l.from, [...(this.linksFrom.get(l.from) ?? []), l]);
     this.webByKey.clear();
     for (const n of this.list) {
       if (n.depth < 1) continue;
@@ -695,7 +706,7 @@ export class MapRenderer {
     // Liens replies (menu de l'oeil) : un repere colore par sorte de lien, a la place des cases et des fleches.
     // Carte : repere seulement si les cases sont repliees ; liste : repere si les liens sont affiches.
     if (list ? s.showExternalLinks : !s.showExternalLinks) {
-      const ext = this.links.filter((l) => l.from === n.key && l.external);
+      const ext = (this.linksFrom.get(n.key) ?? []).filter((l) => l.external);
       if (ext.length > 0) {
         const mark = document.createElement(`span`);
         mark.className = `mmw-link-mark`;
@@ -706,7 +717,7 @@ export class MapRenderer {
       }
     }
     if (list ? s.showInternalLinks : !s.showInternalLinks) {
-      const inner = this.links.filter((l) => l.from === n.key && !l.external && l.to);
+      const inner = (this.linksFrom.get(n.key) ?? []).filter((l) => !l.external && l.to);
       if (inner.length > 0) {
         const mark = document.createElement(`span`);
         mark.className = `mmw-int-mark`;
