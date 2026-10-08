@@ -870,6 +870,7 @@ const PAIRS: [string, string][] = [
   [`Exemple de note de bas de page`, `Sample footnote`],
   [`Exemple d'en-tête`, `Sample header`],
   [`En-tête du document`, `Document header`],
+  [`Pied de page du document`, `Document footer`],
   [`Premier chapitre`, `First chapter`],
   [`Un paragraphe de texte courant montre la police, la taille et la couleur du corps de texte, avec un mot en gras.`, `A paragraph of body text shows the font, size and colour of the body text, with a word in bold.`],
   [`Première partie`, `First part`],

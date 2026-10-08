@@ -41,6 +41,8 @@ import type { TypographyHost } from "./typography-modal";
 // Part de la largeur, en pourcentage, donnee au volet de la vue Liste a son ouverture.
 const LIST_PANE_PERCENT = 28;
 
+const FONT_LOAD_DELAY = 3000;
+
 export default class MindmapWritingPlugin extends Plugin {
   // Derniere note Markdown consultee : la vue Carte s'y rattache.
   lastFile: TFile | null = null;
@@ -188,7 +190,11 @@ export default class MindmapWritingPlugin extends Plugin {
     this.helpEntries.add(PLUGIN_HELP);
     this.app.workspace.onLayoutReady(() => void this.startScripts());
     // Polices du coffre : lues au demarrage, puis des qu'un fichier du dossier des polices est ajoute, change, renomme ou supprime.
-    this.app.workspace.onLayoutReady(() => void this.fonts.refresh());
+    // Le chargement attend quelques secondes apres l'ouverture de l'espace de travail : Obsidian et les autres plugins finissent d'abord.
+    this.app.workspace.onLayoutReady(() => {
+      const timer = window.setTimeout(() => void this.fonts.refresh(), FONT_LOAD_DELAY);
+      this.register(() => window.clearTimeout(timer));
+    });
     const refreshFonts = debounce(() => void this.fonts.refresh(), 600, true);
     const fontFileChanged = (file: { path: string }): void => {
       if (this.fonts.isFontPath(file.path)) refreshFonts();

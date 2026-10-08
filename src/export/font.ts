@@ -59,12 +59,17 @@ export class OpenTypeFont {
   isVariable = false;
   // Crenage de l'ancienne table kern (paires de glyphes), utilise quand GPOS n'en donne pas.
   private kernPairs = new Map<number, number>();
-  readonly cmap = new Map<number, number>();
+  private cmapTable = new Map<number, number>();
   private advances: number[] = [];
   private ligatures = new Map<number, LigatureRule[]>();
   private kernLookups: PairLookup[] = [];
   private view: DataView;
   private cache = new Map<string, ShapedGlyph[]>();
+  // Tables lues seulement quand la police sert a composer du texte (voir ensureShaping) : le dossier des polices est analyse a chaque
+  // demarrage d'Obsidian, et lire le crenage et les ligatures de toutes les polices a ce moment-la ralentit le chargement.
+  private tables = new Map<string, { offset: number; length: number }>();
+  private shapingReady = false;
+  private numHMetrics = 0;
 
   constructor(readonly data: Uint8Array) {
     this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -75,6 +80,7 @@ export class OpenTypeFont {
     if (!isCff && !isTrueType) throw new Error(`police OpenType ou TrueType attendue (WOFF et WOFF2 ne sont pas pris en charge)`);
     this.flavor = isCff ? `cff` : `truetype`;
     const tables = this.readDirectory();
+    this.tables = tables;
     const t = (name: string): number => {
       const off = tables.get(name);
       if (off === undefined) throw new Error(`table ${name} absente`);
@@ -91,16 +97,12 @@ export class OpenTypeFont {
     this.ascender = this.view.getInt16(hhea + 4);
     this.descender = this.view.getInt16(hhea + 6);
     this.lineGap = this.view.getInt16(hhea + 8);
-    const numHMetrics = this.view.getUint16(hhea + 34);
+    this.numHMetrics = this.view.getUint16(hhea + 34);
     this.numGlyphs = this.view.getUint16(t(`maxp`) + 4);
     if (this.capHeight === 0) this.capHeight = this.ascender;
-    const hmtx = t(`hmtx`);
-    let last = 0;
-    for (let g = 0; g < this.numGlyphs; g++) {
-      if (g < numHMetrics) last = this.view.getUint16(hmtx + 4 * g);
-      this.advances.push(last);
-    }
-    this.readCmap(t(`cmap`));
+    // Les tables obligatoires doivent etre la : une police qui n'en a pas est refusee des l'ouverture du fichier.
+    t(`hmtx`);
+    t(`cmap`);
     if (isCff) {
       const cff = tables.get(`CFF `);
       if (!cff) throw new Error(`table CFF absente (police OpenType a contours CFF2 non prise en charge)`);
@@ -123,14 +125,50 @@ export class OpenTypeFont {
     const macStyle = this.view.getUint16(head + 44);
     if (macStyle & 1) this.isBold = true;
     if (macStyle & 2) this.isItalic = true;
-    const gsub = tables.get(`GSUB`);
-    if (gsub) this.readGsub(gsub.offset);
-    const gpos = tables.get(`GPOS`);
-    if (gpos) this.readGpos(gpos.offset);
-    if (this.kernLookups.length === 0) {
-      const kern = tables.get(`kern`);
-      if (kern) this.readKern(kern.offset, kern.length);
+  }
+
+  // Lit la table des caracteres, les largeurs, les ligatures et le crenage, une seule fois, au premier besoin. Une table de
+  // ligatures ou de crenage abimee n'empeche pas d'utiliser la police : ces reglages typographiques sont alors ignores.
+  private ensureShaping(): void {
+    if (this.shapingReady) return;
+    this.shapingReady = true;
+    const tables = this.tables;
+    try {
+      const hmtx = tables.get(`hmtx`)!.offset;
+      let last = 0;
+      for (let g = 0; g < this.numGlyphs; g++) {
+        if (g < this.numHMetrics) last = this.view.getUint16(hmtx + 4 * g);
+        this.advances.push(last);
+      }
+      this.readCmap(tables.get(`cmap`)!.offset);
+    } catch {
+      // Table des caracteres illisible : la police n'a alors aucun caractere.
     }
+    try {
+      const gsub = tables.get(`GSUB`);
+      if (gsub) this.readGsub(gsub.offset);
+    } catch {
+      this.ligatures.clear();
+    }
+    try {
+      const gpos = tables.get(`GPOS`);
+      if (gpos) this.readGpos(gpos.offset);
+    } catch {
+      this.kernLookups = [];
+    }
+    try {
+      if (this.kernLookups.length === 0) {
+        const kern = tables.get(`kern`);
+        if (kern) this.readKern(kern.offset, kern.length);
+      }
+    } catch {
+      this.kernPairs.clear();
+    }
+  }
+
+  get cmap(): Map<number, number> {
+    this.ensureShaping();
+    return this.cmapTable;
   }
 
   // Noms de la police (table name) : famille typographique (ID 16) sinon famille (ID 1), sous-famille (17 ou 2), nom PostScript (6).
@@ -230,7 +268,7 @@ export class OpenTypeFont {
         const start = v.getUint32(o);
         const end = v.getUint32(o + 4);
         const gid = v.getUint32(o + 8);
-        for (let c = start; c <= end; c++) this.cmap.set(c, gid + (c - start));
+        for (let c = start; c <= end; c++) this.cmapTable.set(c, gid + (c - start));
       }
       return;
     }
@@ -251,7 +289,7 @@ export class OpenTypeFont {
           const g = v.getUint16(rangeO + 2 * s + ro + 2 * (c - start));
           gid = g === 0 ? 0 : (g + delta) & 0xffff;
         }
-        if (gid !== 0) this.cmap.set(c, gid);
+        if (gid !== 0) this.cmapTable.set(c, gid);
       }
     }
   }
@@ -449,6 +487,7 @@ export class OpenTypeFont {
   }
 
   advance(gid: number): number {
+    this.ensureShaping();
     return this.advances[gid] ?? 0;
   }
 

@@ -270,6 +270,8 @@ export class TypographyModal extends Modal {
     run(style.headings[2], BASE_POINTS.h3, t(`Détail`), 3);
     run(style.caption, BASE_POINTS.caption, t(`Figure 1 : exemple de légende`));
     run(style.footnote, BASE_POINTS.footnote, t(`1 Exemple de note de bas de page`));
+    const footer = page.createDiv({ cls: `mmw-typo-page-band mmw-typo-page-foot` });
+    paintSample(footer, style.decor, BASE_POINTS.decor, t(`Pied de page du document`), { scale });
   }
 
   private renderElement(parent: HTMLElement, el: Element, style: TypographyStyle, over: Overrides, families: LoadedFamily[]): void {

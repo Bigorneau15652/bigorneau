@@ -2547,7 +2547,7 @@ table.mmw-t-equal td {
   background: var(--background-primary);
 }
 .mmw-typo-page {
-  max-height: 210px;
+  max-height: 260px;
   overflow: hidden;
   padding: 8px 14px;
   border: 1px solid var(--background-modifier-border);
@@ -2559,6 +2559,12 @@ table.mmw-t-equal td {
   margin-bottom: 4px;
   padding-bottom: 3px;
   border-bottom: 1px solid #d0d0d0;
+}
+.mmw-typo-page-foot {
+  margin: 4px 0 0;
+  padding: 3px 0 0;
+  border-top: 1px solid #d0d0d0;
+  border-bottom: 0;
 }
 .mmw-sample {
   max-width: 100%;
