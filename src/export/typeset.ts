@@ -4,7 +4,7 @@
 // tableaux, formules et figures sont encore des reperes provisoires.
 import { defaultParagraphSettings, PARAGRAPH_SPACE_POINTS, ParagraphSettings } from "../paragraph-format";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
-import { applyCase, BASE_POINTS, CaseMode, defaultTypography, HeadingSpec, headingNumber, inFamilyOf, sizeFactor, styleOf, TypographyStyle } from "../text-style";
+import { applyCase, BASE_POINTS, CaseMode, defaultTypography, HeadingSpec, headingNumber, inFamilyOf, sizeFactor, styleOf, TextSpec, TypographyStyle } from "../text-style";
 import { FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
 import { LanguageCode } from "./hyphenate";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget } from "./image";
@@ -190,6 +190,9 @@ export interface Row {
   // Cadre d'un titre : position et largeur (a partir de la marge gauche), bords haut et bas (premiere et derniere ligne du titre ; les bords
   // gauche et droit sont sur chaque ligne), epaisseur du trait, couleur du trait et du fond (#rrggbb, fond vide : transparent).
   box?: { x: number; width: number; top: boolean; bottom: boolean; line: number; color: string; fill: string };
+  // Couleur du texte de la ligne et surlignage derriere son texte (#rrggbb), quand ils different de l'origine.
+  color?: string;
+  highlight?: string;
   // Ligne soulignee sur toute la largeur de son texte (titres).
   underline?: boolean;
   // Ligne sans hauteur qui marque le debut d'une zone d'une autre orientation (null : retour a la mise en page de la note). Elle sert a
@@ -481,6 +484,8 @@ class Typesetter {
       align: `left` as const,
       runs: l.runs,
       ...(i === 0 ? { marker: label } : {}),
+      ...(this.ty.footnote.color !== `` ? { color: this.ty.footnote.color } : {}),
+      ...(this.ty.footnote.highlight !== `` ? { highlight: this.ty.footnote.highlight } : {}),
     }));
     // Petit espace apres chaque note.
     if (rows.length > 0) rows[rows.length - 1].height += 2;
@@ -490,7 +495,7 @@ class Typesetter {
   }
 
   // Compose un texte en lignes et les ajoute ; renvoie le nombre de lignes ajoutees.
-  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle; shift?: `right` | `center`; case?: CaseMode; prefix?: string; underline?: boolean; frame?: HeadingSpec }): number {
+  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle; shift?: `right` | `center`; case?: CaseMode; prefix?: string; underline?: boolean; frame?: HeadingSpec; spec?: TextSpec }): number {
     let input = opts.notes === false ? parseInline(text) : this.inline(text);
     if (opts.case !== undefined && opts.case !== `none`) input = { ...input, text: applyCase(input.text, opts.case) };
     if (opts.prefix) input = { ...input, text: `${opts.prefix}${NO_BREAK_SPACE}${input.text}` };
@@ -511,8 +516,18 @@ class Typesetter {
     this.stats.paragraphs++;
     this.addLines(r.lines, kind, x, width, opts.fontSize, this.setup.leading * (opts.fontSize / this.setup.fontSize), { marker: opts.marker, keep: opts.keep, ...(opts.shift ? { shift: opts.shift } : {}) });
     if (opts.underline) for (let k = first; k < this.sink.length; k++) this.sink[k].underline = true;
+    this.paintRows(first, opts.spec ?? this.ty.body);
     if (opts.frame && opts.frame.frame !== `none`) this.boxRows(first, opts.frame);
     return r.lines.length;
+  }
+
+  // Couleur et surlignage des lignes ajoutees depuis `from`.
+  private paintRows(from: number, spec: TextSpec): void {
+    if (spec.color === `` && spec.highlight === ``) return;
+    for (let k = from; k < this.sink.length; k++) {
+      if (spec.color !== ``) this.sink[k].color = spec.color;
+      if (spec.highlight !== ``) this.sink[k].highlight = spec.highlight;
+    }
   }
 
   // Cadre des lignes ajoutees depuis `from` : sur toute la largeur de la colonne ou ajuste au plus long texte. Un peu d'air est ajoute au-dessus
@@ -540,7 +555,7 @@ class Typesetter {
     const first = this.sink.length;
     const spec = this.ty.title;
     const place = this.headingBox(spec);
-    this.paragraph(text, `title`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0] * sizeFactor(spec, BASE_POINTS.title), keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec });
+    this.paragraph(text, `title`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0] * sizeFactor(spec, BASE_POINTS.title), keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec });
     if (this.sink.length > first) this.sink[first].heading = { level: 0, title: plainOf(parseInline(text).text) };
     this.space(this.setup.leading * 1.2);
     // L'espace qui suit le titre reste avec lui.
@@ -562,7 +577,7 @@ class Typesetter {
     this.space(lead * (section.level <= 1 ? 1.6 : section.level === 2 ? 1.2 : 0.8), { breakBefore });
     const before = this.sink.length;
     const place = this.headingBox(spec);
-    this.paragraph(section.title || `(sans titre)`, `heading`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, ...(number ? { prefix: number } : {}) });
+    this.paragraph(section.title || `(sans titre)`, `heading`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec, ...(number ? { prefix: number } : {}) });
     if (this.sink.length > before) {
       this.sink[before].heading = { level: section.level, title: `${number ? `${number} ` : ``}${plainOf(parseInline(section.title).text) || `(sans titre)`}` };
       const anchor = this.anchors.sections.get(section);
@@ -759,7 +774,7 @@ class Typesetter {
     const source = `**${label}**${sep}${body === `` ? `` : ` ${body}`}`;
     const size = (this.setup.fontSize - 1) * sizeFactor(this.ty.caption, BASE_POINTS.caption);
     const first = this.sink.length;
-    this.paragraph(source, `caption`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: true, fontSize: size, style: styleOf(this.ty.caption) });
+    this.paragraph(source, `caption`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: true, fontSize: size, style: styleOf(this.ty.caption), spec: this.ty.caption });
     if (this.sink[first]) this.sink[first].alias = `lst:${label}`;
     const lines = this.sink.length - first;
     if (lines === 1) this.sink[first].align = `center`;
@@ -870,7 +885,11 @@ class Typesetter {
         this.space(lead * 0.4);
         this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
       }
-      for (const r of layout.rows) this.sink.push(r);
+      for (const r of layout.rows) {
+        if (this.ty.body.color !== ``) r.color = this.ty.body.color;
+        if (this.ty.body.highlight !== ``) r.highlight = this.ty.body.highlight;
+        this.sink.push(r);
+      }
     });
     // Un tableau flotte seulement s'il porte une legende et ne depasse pas 60 % de la hauteur de la page.
     const textHeight = this.setup.height - this.setup.marginTop - this.setup.marginBottom;
@@ -940,7 +959,7 @@ class Typesetter {
     const top = Math.min(...entries.map((e) => e.level));
     if (heading !== undefined) {
       this.space(lead * 0.8);
-      this.paragraph(heading, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[1] * sizeFactor(this.ty.headings[0], BASE_POINTS.h1), keep: true, notes: false, style: styleOf(this.ty.headings[0]) });
+      this.paragraph(heading, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[1] * sizeFactor(this.ty.headings[0], BASE_POINTS.h1), keep: true, notes: false, style: styleOf(this.ty.headings[0]), spec: this.ty.headings[0] });
       this.space(lead * 0.5);
       this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
     }

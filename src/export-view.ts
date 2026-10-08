@@ -98,13 +98,14 @@ export class ExportPreviewView extends ItemView {
     if (inline) svg.style.verticalAlign = `${-asset.descent * k}pt`;
   }
 
-  private appendRuns(el: HTMLElement, runs: LineRun[]) {
+  private appendRuns(el: HTMLElement, runs: LineRun[], highlight = ``) {
     for (const run of runs) {
       if (run.math) {
         this.appendMath(el, run.math, Number.parseFloat(el.style.fontSize) || 11, true);
         continue;
       }
       const span = el.createSpan({ text: run.text });
+      if (highlight !== ``) span.style.backgroundColor = highlight;
       if (run.sup) span.addClass(`mmw-sup`);
       if (run.style === `mono`) span.addClass(`mmw-run-mono`);
       if (run.style === `bold` || run.style === `boldItalic`) span.addClass(`mmw-run-bold`);
@@ -269,7 +270,8 @@ export class ExportPreviewView extends ItemView {
         cell.style.left = `${row.x + c.x}pt`;
         cell.style.top = `${row.inset?.top ?? 0}pt`;
         cell.style.lineHeight = `${inner}pt`;
-        this.appendRuns(cell, c.runs);
+        if (row.color && row.shade?.text !== `white`) cell.style.color = row.color;
+        this.appendRuns(cell, c.runs, row.highlight);
       }
       return;
     }
@@ -287,7 +289,8 @@ export class ExportPreviewView extends ItemView {
       const m = el.createSpan({ cls: row.kind === `footnote` ? `mmw-row-marker mmw-row-note-marker` : `mmw-row-marker`, text: row.marker });
       m.style.left = `${row.kind === `footnote` ? 0 : row.x - 16}pt`;
     }
-    if (row.runs) this.appendRuns(el, row.runs);
+    if (row.color) el.style.color = row.color;
+    if (row.runs) this.appendRuns(el, row.runs, row.highlight);
     else el.appendChild(document.createTextNode(row.text));
     if (row.toc) {
       // Entree de la table des matieres : points de conduite et numero de page sur la derniere ligne du titre.

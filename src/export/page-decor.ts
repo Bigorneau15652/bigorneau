@@ -154,7 +154,7 @@ function layoutBand(band: Band, zones: Zones, rotated: boolean, values: PageValu
   let pad = 0;
   for (const key of KEYS) {
     const frame = band.frames[key];
-    const textColor = frame.color !== `` ? frame.color : TEXT_COLOR;
+    const textColor = frame.color !== `` ? frame.color : ctx.typography?.color ? ctx.typography.color : TEXT_COLOR;
     lists[key] = zoneLines(zones[key]).map((line) => pieces(line, band, rotated, textColor, values, ctx, missing));
     if (lists[key].some((l) => l.length > 0)) {
       rows = Math.max(rows, lists[key].length);

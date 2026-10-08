@@ -99,3 +99,20 @@ test(`un titre encadre : cadre ajuste au texte ou sur toute la largeur, avec tra
   assert.match(pdf, /1 0 0 RG 1\.5 w/);
   assert.match(pdf, /1 1 0 rg/);
 });
+
+test(`couleur et surlignage du texte : corps, titres, legendes et PDF`, async () => {
+  let t = setPath(defaultTypography(), `body.color`, `#0000ff`);
+  t = setPath(t, `body.highlight`, `#ffff00`);
+  t = setPath(t, `h1.color`, `#ff0000`);
+  const c = composeNote(NOTE, `N.md`, undefined, style(t));
+  const text = c.typeset.rows.find((r) => r.kind === `text`);
+  assert.deepEqual([text?.color, text?.highlight], [`#0000ff`, `#ffff00`]);
+  const h1 = c.typeset.rows.find((r) => r.kind === `heading`);
+  assert.deepEqual([h1?.color, h1?.highlight], [`#ff0000`, undefined]);
+  const plain = composeNote(NOTE, `N.md`).typeset.rows.find((r) => r.kind === `text`);
+  assert.equal(plain?.color, undefined);
+  const pdf = Buffer.from(await composeToPdf(c, { creator: `t`, created: new Date(0) })).toString(`latin1`);
+  assert.match(pdf, /q 0 0 1 rg/);
+  assert.match(pdf, /q 1 1 0 rg [\d.]+ [\d.]+ [\d.]+ [\d.]+ re f Q/);
+  assert.match(pdf, /q 1 0 0 rg/);
+});

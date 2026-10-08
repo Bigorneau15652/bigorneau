@@ -20,7 +20,7 @@ import {
 import { SHAPE_CHOICES, ShapeChoice, shapeChoice, shapePatch } from "./style";
 import { setSvg } from "./dom";
 import { renderButtonList } from "./panel-buttons";
-import { renderFontInfo, TypographyModal } from "./typography-modal";
+import { renderFontTools, TypographyModal } from "./typography-modal";
 
 type KeyField = `keyPrev` | `keyNext` | `keyParent` | `keyChild`;
 type IconField = `iconExternal` | `iconInternal` | `iconWeb`;
@@ -529,7 +529,7 @@ export class MmSettingTab extends PluginSettingTab {
       .setName(t(`Police, taille, casse et numérotation des titres`))
       .setDesc(t(`Réglage pour toutes les notes. Pour une seule note, utilisez le bouton Polices et titres du panneau.`))
       .addButton((b) => b.setButtonText(t(`Ouvrir`)).onClick(() => new TypographyModal(this.app, this.plugin.typographyHost()).open()));
-    renderFontInfo(el, this.app, this.plugin.typographyHost(), () => this.display());
+    renderFontTools(el, this.app, this.plugin.typographyHost(), () => this.display());
 
     new Setting(el).setName(t(`Figures, renvois et médias`)).setHeading();
     this.exportChoice(

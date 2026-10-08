@@ -1,13 +1,17 @@
-// Fenetre « Polices et titres » : police, taille (en points, comme Word), gras et italique de chaque element du document (corps de texte,
-// titre, titres de niveau 1 a 6, legendes, notes de bas de page, en-tete et pied de page), et pour les titres la casse, le soulignement, la
-// numerotation et le cadre. Chaque element est une section repliable de deux ou trois lignes de reglages. Le reglage vaut pour toutes les
-// notes (reglages du plugin) ou pour la note ouverte seulement, qui garde alors ce qui differe.
+// Fenetre « Polices et titres » : police, taille (en points, comme Word), gras, italique, couleur et surlignage de chaque element du
+// document (corps de texte, titre, titres de niveau 1 a 6, legendes, notes de bas de page, en-tete et pied de page), et pour les titres la
+// casse, le soulignement, la numerotation et le cadre. Chaque element est une section repliable dont la ligne d'en-tete montre un exemple
+// mis en forme ; un apercu de page reste visible en haut. Le reglage vaut pour toutes les notes (reglages du plugin) ou pour la note
+// ouverte seulement, qui garde alors ce qui differe.
 import { App, Modal, setIcon } from "obsidian";
+import { AddFontModal } from "./add-font-modal";
+import { EXPORT_FONT_FAMILY, loadExportFont } from "./export-font";
+import { cssFamilyOf } from "./font-store";
 import { FolderPicker } from "./folder-picker";
+import type { ImportReport } from "./font-import";
 import { t } from "./i18n";
 import type { FontProblem, LoadedFamily } from "./font-library";
-import { variantsOf } from "./font-library";
-import { applyOverrides, BASE_POINTS, CaseMode, defaultTypography, FrameMode, getPath, HEADING_LEVELS, HeadingSpec, NumberScheme, Overrides, overridePaths, POINTS_MAX, POINTS_MIN, setPath, TextSpec, TypographyStyle } from "./text-style";
+import { applyOverrides, BASE_POINTS, CaseMode, defaultTypography, FrameMode, getPath, HEADING_LEVELS, HeadingSpec, headingNumber, NumberScheme, Overrides, overridePaths, POINTS_MAX, POINTS_MIN, setPath, styleOf, TextSpec, TypographyStyle } from "./text-style";
 
 export interface TypographyHost {
   // Style general (reglages du plugin) et son enregistrement.
@@ -23,31 +27,34 @@ export interface TypographyHost {
   // Cree le dossier des polices s'il n'existe pas.
   prepareFolder(): Promise<void>;
   refresh(): Promise<void>;
+  // Copie des fichiers de polices choisis sur l'ordinateur dans le dossier des polices.
+  importFiles(files: File[]): Promise<ImportReport>;
 }
-
-// Sites ou trouver des polices : ils s'ouvrent dans le navigateur (le plugin ne telecharge rien lui-meme).
-const FONT_SITES: [string, string][] = [
-  [`Google Fonts`, `https://fonts.google.com`],
-  [`Font Squirrel`, `https://www.fontsquirrel.com`],
-  [`Fontshare`, `https://www.fontshare.com`],
-];
 
 const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 48, 60, 72];
 const LINE_WIDTHS = [0.5, 0.75, 1, 1.5, 2, 3];
+// Hauteur maximale d'un exemple dans l'en-tete d'une section, en points : au-dela, l'exemple est coupe.
+const SAMPLE_MAX_POINTS = 30;
 
 interface Element {
   group: string;
   label: string;
+  sample: string;
   heading: boolean;
+  level: number;
 }
 
 function elements(): Element[] {
   const out: Element[] = [
-    { group: `body`, label: t(`Corps de texte`), heading: false },
-    { group: `title`, label: t(`Titre du document`), heading: true },
+    { group: `body`, label: t(`Corps de texte`), sample: t(`Exemple de texte courant`), heading: false, level: 0 },
+    { group: `title`, label: t(`Titre du document`), sample: t(`Titre du document`), heading: true, level: 0 },
   ];
-  for (let i = 1; i <= HEADING_LEVELS; i++) out.push({ group: `h${i}`, label: t(`Titre de niveau {0}`, i), heading: true });
-  out.push({ group: `caption`, label: t(`Légendes`), heading: false }, { group: `footnote`, label: t(`Notes de bas de page`), heading: false }, { group: `decor`, label: t(`En-tête, pied de page et bord extérieur`), heading: false });
+  for (let i = 1; i <= HEADING_LEVELS; i++) out.push({ group: `h${i}`, label: t(`Titre de niveau {0}`, i), sample: t(`Exemple de titre`), heading: true, level: i });
+  out.push(
+    { group: `caption`, label: t(`Légendes`), sample: t(`Figure 1 : exemple de légende`), heading: false, level: 0 },
+    { group: `footnote`, label: t(`Notes de bas de page`), sample: t(`Exemple de note de bas de page`), heading: false, level: 0 },
+    { group: `decor`, label: t(`En-tête, pied de page et bord extérieur`), sample: t(`Exemple d'en-tête`), heading: false, level: 0 }
+  );
   return out;
 }
 
@@ -68,30 +75,61 @@ export function problemText(p: FontProblem): string {
   }
 }
 
-// Dossier des polices, polices detectees, fichiers refuses et liens vers des sites de polices. Partage avec les reglages du plugin.
-export function renderFontInfo(parent: HTMLElement, app: App, host: TypographyHost, redraw: () => void): void {
+// Bouton Ajouter une police, dossier des polices et fichiers refuses. Partage avec les reglages du plugin.
+export function renderFontTools(parent: HTMLElement, app: App, host: TypographyHost, redraw: () => void): void {
   const box = parent.createDiv({ cls: `mmw-typo-info` });
-  const folder = box.createDiv({ cls: `mmw-typo-folderrow` });
-  folder.createSpan({ cls: `mmw-typo-folder`, text: t(`Dossier des polices : {0}`, host.folder()) });
-  const change = folder.createEl(`button`, { text: t(`Changer de dossier`) });
+  const row = box.createDiv({ cls: `mmw-typo-folderrow` });
+  const add = row.createEl(`button`, { cls: `mod-cta`, text: t(`Ajouter une police`) });
+  add.addEventListener(`click`, () => new AddFontModal(app, host, redraw).open());
+  row.createSpan({ cls: `mmw-typo-folder`, text: t(`Dossier des polices : {0}`, host.folder()) });
+  const change = row.createEl(`button`, { text: t(`Changer de dossier`) });
   change.addEventListener(`click`, () => new FolderPicker(app, (path) => void host.setFolder(path).then(redraw)).open());
-  const reload = folder.createEl(`button`, { text: t(`Relire le dossier`) });
+  const reload = row.createEl(`button`, { text: t(`Relire le dossier`) });
   reload.addEventListener(`click`, () => void host.refresh().then(redraw));
-
-  const families = host.families();
-  if (families.length === 0) box.createDiv({ cls: `mmw-pnote`, text: t(`Aucune police ajoutée. Déposez des fichiers .ttf ou .otf (un par style : normal, italique, gras, gras italique) dans ce dossier.`) });
-  else {
-    const names: Record<string, string> = { regular: t(`normal`), italic: t(`italique`), bold: t(`gras`), boldItalic: t(`gras italique`) };
-    for (const f of families) box.createDiv({ cls: `mmw-typo-family`, text: `${f.name} (${variantsOf(f).map((v) => names[v]).join(`, `)})` });
-  }
   const problems = host.problems();
   if (problems.length > 0) {
     box.createDiv({ cls: `mmw-typo-problems-title`, text: t(`Fichiers non utilisables`) });
     for (const p of problems) box.createDiv({ cls: `mmw-typo-problem`, text: `${p.path.split(`/`).pop()} : ${problemText(p)}` });
   }
-  const sites = box.createDiv({ cls: `mmw-typo-sites` });
-  sites.createSpan({ text: t(`Trouver des polices :`) });
-  for (const [name, url] of FONT_SITES) sites.createEl(`a`, { text: name, href: url, attr: { target: `_blank`, rel: `noopener` } });
+}
+
+const CASE_CSS: Record<CaseMode, string> = { none: `none`, upper: `uppercase`, lower: `lowercase`, capitalize: `capitalize` };
+
+// Met en forme un texte d'exemple comme l'export le fera : police, taille, gras, italique, couleur, surlignage, casse, soulignement et cadre.
+// `scale` reduit toutes les tailles (apercu de page) ; `number` est le numero du titre (vide : aucun).
+function paintSample(host: HTMLElement, spec: TextSpec | HeadingSpec, base: number, text: string, opts: { scale?: number; number?: string; cap?: boolean } = {}): HTMLElement {
+  const heading = `frame` in spec;
+  const h = spec as HeadingSpec;
+  let points = (spec.points > 0 ? spec.points : base) * (opts.scale ?? 1);
+  if (opts.cap) points = Math.min(points, SAMPLE_MAX_POINTS);
+  const outer = host.createDiv({ cls: `mmw-sample` });
+  const inner = outer.createSpan({ text: `${opts.number ? `${opts.number} ` : ``}${text}` });
+  outer.style.fontSize = `${points}pt`;
+  outer.style.lineHeight = `1.25`;
+  // Police du coffre : le fichier de la variante est deja gras ou italique ; police d'origine : le navigateur choisit la variante.
+  const css = cssFamilyOf(styleOf(spec));
+  if (css) {
+    outer.style.fontFamily = `"${css}"`;
+    outer.style.fontWeight = `normal`;
+    outer.style.fontStyle = `normal`;
+  } else {
+    outer.style.fontFamily = `"${EXPORT_FONT_FAMILY}", serif`;
+    outer.style.fontWeight = spec.bold ? `700` : `400`;
+    outer.style.fontStyle = spec.italic ? `italic` : `normal`;
+  }
+  if (spec.color !== ``) outer.style.color = spec.color;
+  if (spec.highlight !== ``) inner.style.backgroundColor = spec.highlight;
+  if (heading) {
+    outer.style.textTransform = CASE_CSS[h.case];
+    if (h.underline) outer.style.textDecoration = `underline`;
+    if (h.frame !== `none`) {
+      outer.style.border = `${h.frameWidth}pt solid ${h.frameColor}`;
+      outer.style.padding = `${3 * (opts.scale ?? 1)}pt ${5 * (opts.scale ?? 1)}pt`;
+      if (h.frameFill !== ``) outer.style.backgroundColor = h.frameFill;
+      outer.style.display = h.frame === `full` ? `block` : `inline-block`;
+    }
+  }
+  return outer;
 }
 
 export class TypographyModal extends Modal {
@@ -107,8 +145,12 @@ export class TypographyModal extends Modal {
   onOpen(): void {
     this.titleEl.setText(t(`Polices et titres`));
     this.modalEl.addClass(`mmw-pmodal`, `mmw-typo`);
-    void this.host.prepareFolder().then(() => this.render());
     this.render();
+    // Les exemples attendent que la police d'origine soit chargee, puis que le dossier des polices soit lu.
+    void loadExportFont().then(async () => {
+      await this.host.prepareFolder();
+      this.render();
+    });
   }
 
   private overrides(): Overrides {
@@ -140,15 +182,33 @@ export class TypographyModal extends Modal {
     this.render();
   }
 
+  private specOf(style: TypographyStyle, group: string): TextSpec | HeadingSpec {
+    if (group === `body`) return style.body;
+    if (group === `title`) return style.title;
+    if (group === `caption`) return style.caption;
+    if (group === `footnote`) return style.footnote;
+    if (group === `decor`) return style.decor;
+    return style.headings[Number(group.slice(1)) - 1];
+  }
+
+  // Numero d'un titre de niveau `level` en tete de document (1, 1.1, 1.1.1 ou I, A, 1...), selon les niveaux numerotes.
+  private numberOf(style: TypographyStyle, level: number): string {
+    if (style.numbering === `none` || level < 1 || !style.headings[level - 1].numbered) return ``;
+    const path: number[] = [];
+    for (let i = 1; i <= level; i++) if (style.headings[i - 1].numbered) path.push(1);
+    return headingNumber(style.numbering, path);
+  }
+
   private render(): void {
     const { contentEl } = this;
-    const scroll = this.modalEl.scrollTop;
+    const scroll = contentEl.scrollTop;
     contentEl.empty();
     const style = this.effective();
     const over = this.target === `note` ? this.overrides() : {};
+    const head = contentEl.createDiv({ cls: `mmw-typo-head` });
 
     if (this.host.note) {
-      const tabs = contentEl.createDiv({ cls: `mmw-typo-scope` });
+      const tabs = head.createDiv({ cls: `mmw-typo-scope` });
       for (const [which, label] of [[`general`, t(`Toutes les notes`)], [`note`, t(`Cette note`)]] as const) {
         const b = tabs.createEl(`button`, { text: label });
         if (this.target === which) b.addClass(`mod-cta`);
@@ -157,8 +217,12 @@ export class TypographyModal extends Modal {
           this.render();
         });
       }
-      contentEl.createDiv({ cls: `mmw-pnote`, text: this.target === `general` ? t(`Style appliqué à toutes les notes qui n'ont pas de réglage propre.`) : t(`Seuls les réglages que vous changez ici sont gardés dans la note. Les autres suivent le style de toutes les notes.`) });
+      tabs.createSpan({ cls: `mmw-pnote`, text: this.target === `general` ? t(`Style appliqué à toutes les notes qui n'ont pas de réglage propre.`) : t(`Seuls les réglages que vous changez ici sont gardés dans la note. Les autres suivent le style de toutes les notes.`) });
     }
+    renderFontTools(head, this.app, this.host, () => this.render());
+
+    // Apercu de page : titres, texte, legende, note et en-tete tels que l'export les mettra en forme.
+    this.renderPage(contentEl.createDiv({ cls: `mmw-typo-sticky` }), style);
 
     // Numerotation des titres.
     const numbering = contentEl.createDiv({ cls: `mmw-typo-top` });
@@ -168,7 +232,12 @@ export class TypographyModal extends Modal {
     for (const [value, label] of schemes) select.createEl(`option`, { value, text: label });
     select.value = style.numbering;
     select.addEventListener(`change`, () => this.change(`numbering`, select.value));
-    this.markOver(numbering, `numbering` in over, () => this.resetPaths(`numbering`));
+    if (this.target === `note` && `numbering` in over) {
+      numbering.addClass(`mmw-typo-over`);
+      const b = numbering.createEl(`button`, { cls: `mmw-typo-reset`, attr: { "aria-label": t(`Suivre le style de toutes les notes`), title: t(`Suivre le style de toutes les notes`) } });
+      setIcon(b, `rotate-ccw`);
+      b.addEventListener(`click`, () => this.resetPaths(`numbering`));
+    }
 
     // Tailles proposees comme dans Word (la saisie reste libre).
     const list = contentEl.createEl(`datalist`, { attr: { id: `mmw-typo-sizes` } });
@@ -183,17 +252,24 @@ export class TypographyModal extends Modal {
       else this.host.note?.write({});
       this.render();
     });
-    renderFontInfo(contentEl, this.app, this.host, () => this.render());
-    this.modalEl.scrollTop = scroll;
+    contentEl.scrollTop = scroll;
   }
 
-  private specOf(style: TypographyStyle, group: string): TextSpec | HeadingSpec {
-    if (group === `body`) return style.body;
-    if (group === `title`) return style.title;
-    if (group === `caption`) return style.caption;
-    if (group === `footnote`) return style.footnote;
-    if (group === `decor`) return style.decor;
-    return style.headings[Number(group.slice(1)) - 1];
+  private renderPage(parent: HTMLElement, style: TypographyStyle): void {
+    const page = parent.createDiv({ cls: `mmw-typo-page` });
+    const scale = 0.8;
+    const run = (spec: TextSpec | HeadingSpec, base: number, text: string, level = 0): void => {
+      paintSample(page, spec, base, text, { scale, number: level > 0 ? this.numberOf(style, level) : `` });
+    };
+    const header = page.createDiv({ cls: `mmw-typo-page-band` });
+    paintSample(header, style.decor, BASE_POINTS.decor, t(`En-tête du document`), { scale });
+    run(style.title, BASE_POINTS.title, t(`Titre du document`));
+    run(style.headings[0], BASE_POINTS.h1, t(`Premier chapitre`), 1);
+    run(style.body, BASE_POINTS.body, t(`Un paragraphe de texte courant montre la police, la taille et la couleur du corps de texte, avec un mot en gras.`));
+    run(style.headings[1], BASE_POINTS.h2, t(`Première partie`), 2);
+    run(style.headings[2], BASE_POINTS.h3, t(`Détail`), 3);
+    run(style.caption, BASE_POINTS.caption, t(`Figure 1 : exemple de légende`));
+    run(style.footnote, BASE_POINTS.footnote, t(`1 Exemple de note de bas de page`));
   }
 
   private renderElement(parent: HTMLElement, el: Element, style: TypographyStyle, over: Overrides, families: LoadedFamily[]): void {
@@ -209,75 +285,92 @@ export class TypographyModal extends Modal {
     const summary = details.createEl(`summary`);
     summary.createSpan({ cls: `mmw-typo-label`, text: el.label });
     const family = families.find((f) => f.id === spec.family)?.name ?? (spec.family === `` ? t(`Police d'origine`) : spec.family);
-    summary.createSpan({ cls: `mmw-typo-recap`, text: `${family}, ${spec.points > 0 ? spec.points : base} pt${spec.bold ? `, ${t(`gras`)}` : ``}${spec.italic ? `, ${t(`italique`)}` : ``}` });
+    summary.createSpan({ cls: `mmw-typo-recap`, text: `${family}, ${spec.points > 0 ? spec.points : base} pt` });
+    const sample = summary.createDiv({ cls: `mmw-typo-sample` });
+    paintSample(sample, spec, base, el.sample, { number: el.heading && el.level > 0 ? this.numberOf(style, el.level) : ``, cap: true });
     const overridden = overridePaths().some((p) => p.startsWith(`${el.group}.`) && p in over);
     if (overridden) summary.addClass(`mmw-typo-over`);
 
-    const body = details.createDiv({ cls: `mmw-typo-body` });
-    const line = (): HTMLElement => body.createDiv({ cls: `mmw-typo-line` });
-    const field = (parent: HTMLElement, label: string): HTMLElement => {
-      const wrap = parent.createDiv({ cls: `mmw-typo-field` });
-      wrap.createSpan({ cls: `mmw-typo-field-name`, text: label });
+    // Tous les reglages de l'element sur une seule ligne qui passe a la suivante quand la largeur manque.
+    const line = details.createDiv({ cls: `mmw-typo-line` });
+    const field = (name: string): HTMLElement => {
+      const wrap = line.createDiv({ cls: `mmw-typo-field` });
+      wrap.createSpan({ cls: `mmw-typo-field-name`, text: name });
       return wrap;
     };
-    const toggle = (parent: HTMLElement, name: `bold` | `italic` | `underline` | `numbered`, label: string, title: string, value: boolean): void => {
-      const b = parent.createEl(`button`, { text: label, attr: { "aria-label": title, title } });
+    const iconToggle = (parent: HTMLElement, name: `bold` | `italic` | `underline` | `numbered`, icon: string, title: string, value: boolean): void => {
+      const b = parent.createEl(`button`, { cls: `mmw-typo-icon`, attr: { "aria-label": title, title } });
+      setIcon(b, icon);
       if (value) b.addClass(`mod-cta`);
       b.addEventListener(`click`, () => this.change(path(name), !value));
     };
+    const colorField = (name: string, prop: `color` | `highlight`, icon: string, current: string): void => {
+      const wrap = field(name);
+      const pair = wrap.createDiv({ cls: `mmw-typo-pair` });
+      const input = pair.createEl(`input`, { type: `color`, attr: { title: name, "aria-label": name } });
+      input.value = current !== `` ? current : prop === `color` ? `#000000` : `#ffff00`;
+      if (current === ``) input.addClass(`is-unset`);
+      input.addEventListener(`change`, () => this.change(path(prop), input.value));
+      const clear = pair.createEl(`button`, { cls: `mmw-typo-icon`, attr: { "aria-label": t(`Sans couleur`), title: t(`Sans couleur`) } });
+      setIcon(clear, current === `` ? icon : `x`);
+      clear.addEventListener(`click`, () => {
+        if (current !== ``) this.change(path(prop), ``);
+        else input.click();
+      });
+    };
 
-    // Ligne 1 : police, taille en points, gras et italique.
-    const first = line();
-    const font = field(first, t(`Police`)).createEl(`select`);
+    const font = field(t(`Police`)).createEl(`select`);
     font.createEl(`option`, { value: ``, text: t(`Police d'origine`) });
     for (const f of families) font.createEl(`option`, { value: f.id, text: f.name });
     if (spec.family !== `` && !families.some((f) => f.id === spec.family)) font.createEl(`option`, { value: spec.family, text: t(`{0} (absente du dossier)`, spec.family) });
     font.value = spec.family;
     font.addEventListener(`change`, () => this.change(path(`family`), font.value));
-    const sizeWrap = field(first, t(`Taille (pt)`));
-    const size = sizeWrap.createEl(`input`, { type: `number`, cls: `mmw-typo-size`, attr: { min: String(POINTS_MIN), max: String(POINTS_MAX), step: `0.5`, list: `mmw-typo-sizes`, placeholder: String(base) } });
+
+    const size = field(t(`Taille (pt)`)).createEl(`input`, { type: `number`, cls: `mmw-typo-size`, attr: { min: String(POINTS_MIN), max: String(POINTS_MAX), step: `0.5`, list: `mmw-typo-sizes`, placeholder: String(base) } });
     if (spec.points > 0) size.value = String(spec.points);
     size.addEventListener(`change`, () => {
       const v = Number.parseFloat(size.value);
       this.change(path(`points`), Number.isFinite(v) && v > 0 ? v : 0);
     });
-    const styles = first.createDiv({ cls: `mmw-typo-styles` });
-    toggle(styles, `bold`, `G`, t(`Gras`), spec.bold);
-    toggle(styles, `italic`, `I`, t(`Italique`), spec.italic);
 
-    if (el.heading) {
-      const h = spec as HeadingSpec;
-      // Ligne 2 : casse, soulignement et numerotation.
-      const second = line();
-      const casing = field(second, t(`Casse`)).createEl(`select`);
+    const styles = field(t(`Style`)).createDiv({ cls: `mmw-typo-pair` });
+    iconToggle(styles, `bold`, `bold`, t(`Gras`), spec.bold);
+    iconToggle(styles, `italic`, `italic`, t(`Italique`), spec.italic);
+    const h = el.heading ? (spec as HeadingSpec) : null;
+    if (h) iconToggle(styles, `underline`, `underline`, t(`Souligné`), h.underline);
+
+    colorField(t(`Couleur du texte`), `color`, `baseline`, spec.color);
+    if (el.group !== `decor`) colorField(t(`Surlignage`), `highlight`, `highlighter`, spec.highlight);
+
+    if (h) {
+      const casing = field(t(`Casse`)).createEl(`select`);
       const cases: [CaseMode, string][] = [[`none`, t(`Casse d'origine`)], [`upper`, t(`MAJUSCULES`)], [`lower`, t(`minuscules`)], [`capitalize`, t(`Initiales en majuscules`)]];
       for (const [value, label] of cases) casing.createEl(`option`, { value, text: label });
       casing.value = h.case;
       casing.addEventListener(`change`, () => this.change(path(`case`), casing.value));
-      const marks = second.createDiv({ cls: `mmw-typo-styles` });
-      toggle(marks, `underline`, `S`, t(`Souligné`), h.underline);
-      if (el.group !== `title`) toggle(marks, `numbered`, `N°`, t(`Numéroté`), h.numbered);
+      if (el.group !== `title`) {
+        const num = field(t(`Numéroté`)).createDiv({ cls: `mmw-typo-pair` });
+        iconToggle(num, `numbered`, `list-ordered`, t(`Numéroté`), h.numbered);
+      }
 
-      // Ligne 3 : cadre.
-      const third = line();
-      const frame = field(third, t(`Cadre`)).createEl(`select`);
+      const frame = field(t(`Cadre`)).createEl(`select`);
       const frames: [FrameMode, string][] = [[`none`, t(`Aucun`)], [`text`, t(`Ajusté au texte`)], [`full`, t(`Toute la largeur`)]];
       for (const [value, label] of frames) frame.createEl(`option`, { value, text: label });
       frame.value = h.frame;
       frame.addEventListener(`change`, () => this.change(path(`frame`), frame.value));
       if (h.frame !== `none`) {
         const widths = LINE_WIDTHS.includes(h.frameWidth) ? LINE_WIDTHS : [...LINE_WIDTHS, h.frameWidth].sort((a, b) => a - b);
-        const line1 = field(third, t(`Épaisseur du trait`)).createEl(`select`);
-        for (const w of widths) line1.createEl(`option`, { value: String(w), text: `${w} pt` });
-        line1.value = String(h.frameWidth);
-        line1.addEventListener(`change`, () => this.change(path(`frameWidth`), Number.parseFloat(line1.value)));
-        const stroke = field(third, t(`Couleur du trait`)).createEl(`input`, { type: `color` });
+        const thick = field(t(`Épaisseur du trait`)).createEl(`select`);
+        for (const w of widths) thick.createEl(`option`, { value: String(w), text: `${w} pt` });
+        thick.value = String(h.frameWidth);
+        thick.addEventListener(`change`, () => this.change(path(`frameWidth`), Number.parseFloat(thick.value)));
+        const stroke = field(t(`Couleur du trait`)).createEl(`input`, { type: `color` });
         stroke.value = h.frameColor;
         stroke.addEventListener(`change`, () => this.change(path(`frameColor`), stroke.value));
-        const fillWrap = field(third, t(`Fond`));
-        const filled = fillWrap.createEl(`input`, { type: `checkbox` });
+        const fillPair = field(t(`Fond du cadre`)).createDiv({ cls: `mmw-typo-pair` });
+        const filled = fillPair.createEl(`input`, { type: `checkbox` });
         filled.checked = h.frameFill !== ``;
-        const fill = fillWrap.createEl(`input`, { type: `color` });
+        const fill = fillPair.createEl(`input`, { type: `color` });
         fill.value = h.frameFill !== `` ? h.frameFill : `#f1f3f5`;
         fill.disabled = h.frameFill === ``;
         filled.addEventListener(`change`, () => this.change(path(`frameFill`), filled.checked ? fill.value : ``));
@@ -285,17 +378,8 @@ export class TypographyModal extends Modal {
       }
     }
     if (overridden) {
-      const b = body.createEl(`button`, { cls: `mmw-typo-reset`, text: t(`Suivre le style de toutes les notes`) });
+      const b = details.createEl(`button`, { cls: `mmw-typo-reset`, text: t(`Suivre le style de toutes les notes`) });
       b.addEventListener(`click`, () => this.resetPaths(el.group));
     }
-  }
-
-  // Repere d'une ligne que la note change (par rapport au style de toutes les notes), avec le bouton qui la remet comme lui.
-  private markOver(row: HTMLElement, overridden: boolean, reset: () => void): void {
-    if (this.target !== `note` || !overridden) return;
-    row.addClass(`mmw-typo-over`);
-    const b = row.createEl(`button`, { cls: `mmw-typo-reset`, attr: { "aria-label": t(`Suivre le style de toutes les notes`), title: t(`Suivre le style de toutes les notes`) } });
-    setIcon(b, `rotate-ccw`);
-    b.addEventListener(`click`, reset);
   }
 }

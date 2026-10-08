@@ -63,3 +63,9 @@ test(`le cadre d'un titre : valeurs nettoyees et reglage par note`, () => {
   const note = sanitizeOverrides({ "h1.frame": `text`, "h1.frameWidth": 1.5, "h1.frameColor": `#123456`, "h1.frameFill": ``, "body.frame": `full` });
   assert.deepEqual(note, { "h1.frame": `text`, "h1.frameWidth": 1.5, "h1.frameColor": `#123456`, "h1.frameFill": `` });
 });
+
+test(`couleur et surlignage du texte : valeurs nettoyees`, () => {
+  const s = sanitizeTypography({ body: { color: `#ABCDEF`, highlight: `jaune` }, caption: { color: `` , highlight: `#FFFF00` } });
+  assert.deepEqual([s.body.color, s.body.highlight, s.caption.highlight], [`#abcdef`, ``, `#ffff00`]);
+  assert.deepEqual(sanitizeOverrides({ "body.color": `#123456`, "decor.highlight": `#fff000`, "body.color2": `#123456` }), { "body.color": `#123456`, "decor.highlight": `#fff000` });
+});

@@ -35,6 +35,7 @@ import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
 import { FontStore } from "./font-store";
+import { importFonts } from "./font-import";
 import type { TypographyHost } from "./typography-modal";
 
 // Part de la largeur, en pourcentage, donnee au volet de la vue Liste a son ouverture.
@@ -899,6 +900,11 @@ export default class MindmapWritingPlugin extends Plugin {
           if (!this.app.vault.getAbstractFileByPath(path)) await this.app.vault.createFolder(path);
         }
         await this.fonts.refresh();
+      },
+      importFiles: async (files) => {
+        const report = await importFonts(this.app, this.settings.fontFolder, files);
+        await this.fonts.refresh(true);
+        return report;
       },
       refresh: async () => {
         await this.fonts.refresh(true);
