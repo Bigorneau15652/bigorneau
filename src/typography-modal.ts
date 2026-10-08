@@ -252,6 +252,14 @@ export class TypographyModal extends Modal {
       else this.host.note?.write({});
       this.render();
     });
+    // Une seule police pour tous les elements (corps, titres, legendes, notes, en-tete et pied de page).
+    const everywhere = foot.createEl(`select`, { attr: { "aria-label": t(`Police à appliquer partout`) } });
+    everywhere.createEl(`option`, { value: ``, text: t(`Police d'origine`) });
+    for (const f of families) everywhere.createEl(`option`, { value: f.id, text: f.name });
+    const apply = foot.createEl(`button`, { text: t(`Appliquer cette police partout`) });
+    apply.addEventListener(`click`, () => {
+      for (const el of elements()) this.change(`${el.group}.family`, everywhere.value);
+    });
     contentEl.scrollTop = scroll;
   }
 

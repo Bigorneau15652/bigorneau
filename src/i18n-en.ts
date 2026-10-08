@@ -871,6 +871,8 @@ const PAIRS: [string, string][] = [
   [`Exemple d'en-tête`, `Sample header`],
   [`En-tête du document`, `Document header`],
   [`Pied de page du document`, `Document footer`],
+  [`Police à appliquer partout`, `Font to apply everywhere`],
+  [`Appliquer cette police partout`, `Apply this font everywhere`],
   [`Premier chapitre`, `First chapter`],
   [`Un paragraphe de texte courant montre la police, la taille et la couleur du corps de texte, avec un mot en gras.`, `A paragraph of body text shows the font, size and colour of the body text, with a word in bold.`],
   [`Première partie`, `First part`],
