@@ -880,6 +880,7 @@ const PAIRS: [string, string][] = [
   [`Surlignage`, `Highlight`],
   [`Fond du cadre`, `Frame background`],
   [`Couleur du texte`, `Text colour`],
+  [`Cliquer pour modifier le nom de la figure`, `Click to edit the figure name`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

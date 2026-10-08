@@ -2370,6 +2370,7 @@ table.mmw-t-equal td {
 }
 
 .mmw-figure-host > .mmw-figure-caption {
+  cursor: text;
   position: static;
   width: 100%;
   clear: both;
@@ -2566,11 +2567,8 @@ table.mmw-t-equal td {
 .mmw-typo-sample {
   flex: 1 1 260px;
   min-width: 0;
-  max-height: 44px;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  padding: 2px 8px;
+  padding: 4px 8px;
   border-radius: 4px;
   background: #fff;
   color: #000;

@@ -91,6 +91,30 @@ export function parseFigureLine(line: string): { target: string; caption: string
   return { target: wiki ? wiki[1].trim() : md![2].trim(), caption: parts.join(`|`).trim() };
 }
 
+// Place du nom de la figure dans sa ligne (decalages de debut et de fin) : le texte entre la barre verticale du lien et la suivante ou les
+// crochets fermants, ou le texte entre les crochets d'une image Markdown. Null si la ligne n'a pas de nom.
+export function captionRange(line: string): { from: number; to: number } | null {
+  const fig = parseFigureLine(line);
+  if (!fig || fig.caption === ``) return null;
+  const md = /^!\[/.test(line) && !/^!\[\[/.test(line);
+  if (md) {
+    const end = line.indexOf(`]`, 2);
+    if (end < 0) return null;
+    const first = line.indexOf(`|`, 2);
+    return { from: 2, to: first >= 0 && first < end ? first : end };
+  }
+  const close = line.indexOf(`]]`);
+  if (close < 0) return null;
+  let at = line.indexOf(`|`);
+  while (at >= 0 && at < close) {
+    const next = line.indexOf(`|`, at + 1);
+    const to = next >= 0 && next < close ? next : close;
+    if (!/^\s*\d+(x\d+)?\s*$/.test(line.slice(at + 1, to))) return { from: at + 1, to };
+    at = next;
+  }
+  return null;
+}
+
 export function figureLines(text: string): FigureLine[] {
   const english = /^---[ \t]*\r?\n(?:[^\n]*\r?\n)*?lang:[ \t]*["']?en/i.test(text);
   const out: FigureLine[] = [];

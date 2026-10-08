@@ -5,7 +5,8 @@
 import { Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from "@codemirror/view";
 import { record } from "./diagnostics";
-import { figureLines, tableCaptionLines } from "./figure-insert";
+import { t } from "./i18n";
+import { captionRange, figureLines, tableCaptionLines } from "./figure-insert";
 
 const CAPTION_CLASS = `mmw-figure-caption`;
 // Delai avant le passage qui cherche les figures dans l'editeur.
@@ -37,6 +38,17 @@ class FigureCaptions {
       e.parentElement?.classList.remove(HOST_CLASS);
       e.remove();
     });
+  }
+
+  // Selectionne le nom de la figure de la ligne `line` (a partir de 0) : on tape directement le nouveau nom.
+  private editName(line: number): void {
+    const doc = this.view.state.doc;
+    if (!Number.isInteger(line) || line < 0 || line >= doc.lines) return;
+    const l = doc.line(line + 1);
+    const range = captionRange(l.text);
+    if (!range) return;
+    this.view.dispatch({ selection: { anchor: l.from + range.from, head: l.from + range.to }, scrollIntoView: true });
+    this.view.focus();
   }
 
   // Un seul passage pour une rafale de changements (un dessin Excalidraw qui s'affiche en provoque beaucoup).
@@ -111,7 +123,16 @@ class FigureCaptions {
         cap.className = CAPTION_CLASS;
         host.appendChild(cap);
         host.classList.add(HOST_CLASS);
+        // Un clic sur la legende selectionne le nom dans la ligne de la note : Obsidian en montre alors le texte, qui se corrige comme celui
+        // d'un dessin Excalidraw.
+        cap.title = t(`Cliquer pour modifier le nom de la figure`);
+        cap.addEventListener(`mousedown`, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.editName(Number(cap?.dataset.line));
+        });
       }
+      cap.dataset.line = String(line);
       const want = fig.text;
       if (cap.dataset.text !== want) {
         cap.dataset.text = want;
