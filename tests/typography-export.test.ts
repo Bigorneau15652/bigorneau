@@ -32,7 +32,7 @@ test(`numerotation decimale et en plan, dans le titre et dans le plan de navigat
 
 test(`casse, taille et soulignement d'un niveau de titre`, () => {
   let t = setPath(defaultTypography(), `h2.case`, `upper`);
-  t = setPath(t, `h2.size`, 50);
+  t = setPath(t, `h2.points`, 21);
   t = setPath(t, `h2.underline`, true);
   const c = composeNote(NOTE, `N.md`, undefined, style(t));
   const h2 = c.typeset.rows.filter((r) => r.kind === `heading`)[1];
@@ -74,4 +74,28 @@ test(`la table des matieres reprend les numeros et garde la casse d'origine`, ()
   const c = composeNote(`${NOTE}`.replace(`# Energie`, `---\ntoc: true\n---\n# Energie`), `N.md`, undefined, style(t));
   const toc = c.typeset.rows.filter((r) => r.kind === `toc`).map((r) => r.text.replace(/ /g, ` `));
   assert.ok(toc.includes(`1 Energie`) && toc.includes(`1.1 Bâtiments`), toc.join(`|`));
+});
+
+test(`un titre encadre : cadre ajuste au texte ou sur toute la largeur, avec trait et fond`, async () => {
+  let t = setPath(defaultTypography(), `h2.frame`, `text`);
+  t = setPath(t, `h2.frameWidth`, 1.5);
+  t = setPath(t, `h2.frameColor`, `#ff0000`);
+  t = setPath(t, `h2.frameFill`, `#ffff00`);
+  t = setPath(t, `h1.frame`, `full`);
+  const c = composeNote(NOTE, `N.md`, undefined, style(t));
+  const rows = c.typeset.rows.filter((r) => r.kind === `heading`);
+  const h2 = rows[1];
+  assert.ok(h2.box && h2.box.top && h2.box.bottom && h2.box.line === 1.5 && h2.box.color === `#ff0000` && h2.box.fill === `#ffff00`);
+  // Cadre ajuste : plus etroit que la colonne ; cadre pleine largeur : la colonne entiere.
+  const column = c.setup.width - c.setup.marginLeft - c.setup.marginRight;
+  assert.ok(h2.box.width < column / 2);
+  assert.equal(rows[0].box?.width, column);
+  // Le texte est en retrait du cadre, qui ajoute de l'air en haut et en bas.
+  assert.ok(h2.x > 0 && h2.height > 14 * 1.1);
+  assert.equal(rows[2].box?.width !== undefined, true);
+  const none = composeNote(NOTE, `N.md`).typeset.rows.filter((r) => r.kind === `heading`)[1];
+  assert.equal(none.box, undefined);
+  const pdf = Buffer.from(await composeToPdf(c, { creator: `t`, created: new Date(0) })).toString(`latin1`);
+  assert.match(pdf, /1 0 0 RG 1\.5 w/);
+  assert.match(pdf, /1 1 0 rg/);
 });

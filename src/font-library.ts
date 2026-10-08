@@ -49,6 +49,17 @@ function signature(bytes: Uint8Array): string {
   return String.fromCharCode(...Array.from(bytes.subarray(0, 4)));
 }
 
+// Nom de la famille d'un fichier. Les graisses autres que normal et gras (Light, Thin, Medium, Black...) forment chacune leur famille
+// (« Lato Light »), sinon elles se disputeraient la place du style normal de la famille de base.
+function familyName(font: OpenTypeFont, path: string): { name: string; base: boolean } {
+  const family = font.family.trim() !== `` ? font.family.trim() : (path.split(`/`).pop() ?? path).replace(/\.[^.]+$/, ``);
+  const words = font.subfamily
+    .split(/\s+/)
+    .filter((w) => w !== `` && !/^(italic|oblique|regular|normal|roman)$/i.test(w));
+  if (words.length === 0 || (words.length === 1 && /^bold$/i.test(words[0]))) return { name: family, base: true };
+  return { name: `${family} ${words.join(` `)}`, base: false };
+}
+
 // Regroupe les fichiers en familles. Les fichiers sont pris dans l'ordre des chemins pour que le resultat ne depende pas de l'ordre de
 // lecture du coffre.
 export function buildLibrary(files: FontFile[], parse: (bytes: Uint8Array) => OpenTypeFont = (b) => new OpenTypeFont(b)): FontLibrary {
@@ -86,14 +97,15 @@ export function buildLibrary(files: FontFile[], parse: (bytes: Uint8Array) => Op
       problems.push({ path: file.path, kind: `variable` });
       continue;
     }
-    const name = font.family.trim() !== `` ? font.family.trim() : (file.path.split(`/`).pop() ?? file.path).replace(/\.[^.]+$/, ``);
+    const { name, base } = familyName(font, file.path);
     const id = familyId(name);
     let family = families.get(id);
     if (!family) {
       family = { id, name, fonts: {}, paths: {} };
       families.set(id, family);
     }
-    const variant = variantFrom(font.isBold, font.isItalic);
+    // Une famille « de graisse » (Light, Thin, Medium...) n'a ni gras ni normal : son style de base est normal, avec ou sans italique.
+    const variant = base ? variantFrom(font.isBold, font.isItalic) : variantFrom(false, font.isItalic);
     if (family.fonts[variant]) {
       problems.push({ path: file.path, kind: `duplicate` });
       continue;

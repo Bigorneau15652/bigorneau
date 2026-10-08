@@ -5,13 +5,14 @@
 import { FontStyle, isFamilyRegistered, userStyle, variantFrom, variantOf, withVariant } from "./export/font-metrics";
 
 export type CaseMode = `none` | `upper` | `lower` | `capitalize`;
+export type FrameMode = `none` | `text` | `full`;
 export type NumberScheme = `none` | `decimal` | `outline`;
 
 export interface TextSpec {
   // Identifiant de famille de police ajoutee au coffre ; vide : la police d'origine (Libertinus).
   family: string;
-  // Pourcentage a ajouter a la taille d'origine (0 : taille d'origine, -20 : un cinquieme de moins).
-  size: number;
+  // Hauteur de la police en points, comme dans Word (0 : taille d'origine de l'element).
+  points: number;
   bold: boolean;
   italic: boolean;
 }
@@ -21,6 +22,12 @@ export interface HeadingSpec extends TextSpec {
   underline: boolean;
   // Le titre de ce niveau est numerote quand une numerotation est choisie.
   numbered: boolean;
+  // Cadre : aucun, ajuste au texte ou sur toute la largeur de la colonne ; epaisseur du trait en points, couleur du trait et du fond
+  // (#rrggbb ; fond vide : transparent).
+  frame: FrameMode;
+  frameWidth: number;
+  frameColor: string;
+  frameFill: string;
 }
 
 export interface TypographyStyle {
@@ -36,11 +43,18 @@ export interface TypographyStyle {
 }
 
 export const HEADING_LEVELS = 6;
-export const SIZE_MIN = -50;
-export const SIZE_MAX = 300;
+// Hauteurs permises, en points (comme Word : 1 a 1638 ; ici de quoi couvrir un usage raisonnable).
+export const POINTS_MIN = 4;
+export const POINTS_MAX = 200;
+export const FRAME_WIDTH_MIN = 0.25;
+export const FRAME_WIDTH_MAX = 6;
 
-const text = (bold = false): TextSpec => ({ family: ``, size: 0, bold, italic: false });
-const heading = (): HeadingSpec => ({ ...text(true), case: `none`, underline: false, numbered: true });
+// Hauteur d'origine de chaque element, en points : celle que l'export donne quand rien n'est regle. Pour l'en-tete et le pied de page,
+// c'est la taille M ; les zones en XS, S ou L restent proportionnelles.
+export const BASE_POINTS: Record<string, number> = { body: 11, title: 22, h1: 17, h2: 14, h3: 12, h4: 11, h5: 11, h6: 11, caption: 10, footnote: 9, decor: 10 };
+
+const text = (bold = false): TextSpec => ({ family: ``, points: 0, bold, italic: false });
+const heading = (): HeadingSpec => ({ ...text(true), case: `none`, underline: false, numbered: true, frame: `none`, frameWidth: 0.75, frameColor: `#000000`, frameFill: `` });
 
 // Style d'origine : celui que l'export avait avant que l'on puisse le changer.
 export const defaultTypography = (): TypographyStyle => ({
@@ -54,13 +68,15 @@ export const defaultTypography = (): TypographyStyle => ({
 });
 
 const CASES: CaseMode[] = [`none`, `upper`, `lower`, `capitalize`];
+const FRAMES: FrameMode[] = [`none`, `text`, `full`];
+const HEX = /^#[0-9a-fA-F]{6}$/;
 const SCHEMES: NumberScheme[] = [`none`, `decimal`, `outline`];
 
 const asText = (raw: unknown, base: TextSpec): TextSpec => {
   const r = typeof raw === `object` && raw !== null ? (raw as Record<string, unknown>) : {};
   return {
     family: typeof r.family === `string` ? r.family : base.family,
-    size: typeof r.size === `number` && Number.isFinite(r.size) ? Math.max(SIZE_MIN, Math.min(SIZE_MAX, Math.round(r.size))) : base.size,
+    points: typeof r.points === `number` && Number.isFinite(r.points) ? (r.points <= 0 ? 0 : Math.max(POINTS_MIN, Math.min(POINTS_MAX, Math.round(r.points * 2) / 2))) : base.points,
     bold: typeof r.bold === `boolean` ? r.bold : base.bold,
     italic: typeof r.italic === `boolean` ? r.italic : base.italic,
   };
@@ -73,6 +89,10 @@ const asHeading = (raw: unknown, base: HeadingSpec): HeadingSpec => {
     case: CASES.includes(r.case as CaseMode) ? (r.case as CaseMode) : base.case,
     underline: typeof r.underline === `boolean` ? r.underline : base.underline,
     numbered: typeof r.numbered === `boolean` ? r.numbered : base.numbered,
+    frame: FRAMES.includes(r.frame as FrameMode) ? (r.frame as FrameMode) : base.frame,
+    frameWidth: typeof r.frameWidth === `number` && Number.isFinite(r.frameWidth) ? Math.max(FRAME_WIDTH_MIN, Math.min(FRAME_WIDTH_MAX, Math.round(r.frameWidth * 4) / 4)) : base.frameWidth,
+    frameColor: typeof r.frameColor === `string` && HEX.test(r.frameColor) ? r.frameColor.toLowerCase() : base.frameColor,
+    frameFill: typeof r.frameFill === `string` && (r.frameFill === `` || HEX.test(r.frameFill)) ? r.frameFill.toLowerCase() : base.frameFill,
   };
 };
 
@@ -99,8 +119,8 @@ export function sanitizeTypography(raw: unknown): TypographyStyle {
 export type Overrides = Record<string, string | number | boolean>;
 
 const GROUPS = [`body`, `title`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `caption`, `footnote`, `decor`] as const;
-const TEXT_FIELDS = [`family`, `size`, `bold`, `italic`] as const;
-const HEADING_FIELDS = [...TEXT_FIELDS, `case`, `underline`, `numbered`] as const;
+const TEXT_FIELDS = [`family`, `points`, `bold`, `italic`] as const;
+const HEADING_FIELDS = [...TEXT_FIELDS, `case`, `underline`, `numbered`, `frame`, `frameWidth`, `frameColor`, `frameFill`] as const;
 
 const isHeadingGroup = (g: string): boolean => g === `title` || /^h[1-6]$/.test(g);
 
@@ -149,7 +169,7 @@ export function sanitizeOverrides(raw: unknown): Overrides {
     if (!VALID.has(path) || (typeof value !== `string` && typeof value !== `number` && typeof value !== `boolean`)) continue;
     // Une valeur du mauvais type ou hors des choix possibles est ecartee : on la fait passer par le nettoyage de style.
     const probe = getPath(setPath(base, path, value), path);
-    if (probe === value || (path.endsWith(`.size`) && typeof value === `number`)) out[path] = probe as string | number | boolean;
+    if (probe === value || (typeof value === `number` && typeof probe === `number`)) out[path] = probe as string | number | boolean;
   }
   return out;
 }
@@ -163,8 +183,8 @@ export function applyOverrides(style: TypographyStyle, overrides: Overrides | un
 
 // ---------------------------------------------------------------------------------------------------- effets sur le texte
 
-// Facteur de taille d'un element : 1 pour la taille d'origine.
-export const sizeFactor = (spec: TextSpec): number => 1 + spec.size / 100;
+// Facteur de taille d'un element dont la hauteur d'origine est `base` points : 1 pour la taille d'origine.
+export const sizeFactor = (spec: TextSpec, base: number): number => (spec.points > 0 ? spec.points / base : 1);
 
 // Texte dans la casse demandee. Le texte peut contenir les reperes de la mise en forme (caracteres d'usage prive), que la casse ne touche pas.
 export function applyCase(value: string, mode: CaseMode): string {

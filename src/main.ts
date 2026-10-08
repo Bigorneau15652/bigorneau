@@ -875,7 +875,6 @@ export default class MindmapWritingPlugin extends Plugin {
 
   private persistLater = debounce(() => void this.saveData(this.settings), 400, true);
 
-  // Enregistre les reglages et, si demande, redessine les cartes ouvertes.
   // Polices et titres : style general, polices du coffre et dossier des polices (fenetre « Polices et titres » et reglages).
   typographyHost(): Omit<TypographyHost, `note`> {
     return {
@@ -888,21 +887,26 @@ export default class MindmapWritingPlugin extends Plugin {
       families: () => this.fonts.library.families,
       problems: () => this.fonts.library.problems,
       folder: () => this.settings.fontFolder,
+      setFolder: async (path) => {
+        this.settings.fontFolder = normalizePath(path);
+        void this.saveSettings(false);
+        await this.fonts.refresh(true);
+      },
       prepareFolder: async () => {
-        const folder = normalizePath(this.settings.fontFolder);
         let path = ``;
-        for (const part of folder.split(`/`)) {
+        for (const part of normalizePath(this.settings.fontFolder).split(`/`)) {
           path = path === `` ? part : `${path}/${part}`;
           if (!this.app.vault.getAbstractFileByPath(path)) await this.app.vault.createFolder(path);
         }
-        await this.fonts.refresh(true);
-    },
+        await this.fonts.refresh();
+      },
       refresh: async () => {
         await this.fonts.refresh(true);
     },
     };
   }
 
+  // Enregistre les reglages et, si demande, redessine les cartes ouvertes.
   async saveSettings(redraw = true) {
     this.applyBodySettings();
     this.persistLater();

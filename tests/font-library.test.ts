@@ -39,3 +39,22 @@ test(`l'identifiant d'une famille ne depend ni des accents ni de la casse`, () =
   assert.equal(familyId(`Été Gras & Co`), `ete-gras-co`);
   assert.equal(familyId(`???`), `police`);
 });
+
+test(`les graisses autres que normal et gras forment leurs propres familles`, () => {
+  const fake = (family: string, subfamily: string, isBold: boolean, isItalic: boolean) => ({ family, subfamily, isBold, isItalic, embeddingRestricted: false, isVariable: false });
+  const table: Record<string, ReturnType<typeof fake>> = {
+    "a/Lato-Regular.ttf": fake(`Lato`, `Regular`, false, false),
+    "a/Lato-Italic.ttf": fake(`Lato`, `Italic`, false, true),
+    "a/Lato-Bold.ttf": fake(`Lato`, `Bold`, true, false),
+    "a/Lato-BoldItalic.ttf": fake(`Lato`, `Bold Italic`, true, true),
+    "a/Lato-Light.ttf": fake(`Lato`, `Light`, false, false),
+    "a/Lato-LightItalic.ttf": fake(`Lato`, `Light Italic`, false, true),
+    "a/Lato-Thin.ttf": fake(`Lato`, `Thin`, false, false),
+    "a/Lato-Black.ttf": fake(`Lato`, `Black`, true, false),
+  };
+  const files = Object.keys(table).map((path) => ({ path, bytes: new TextEncoder().encode(path) }));
+  const lib = buildLibrary(files, (bytes) => table[new TextDecoder().decode(bytes)] as never);
+  assert.deepEqual(lib.problems, []);
+  const byName = Object.fromEntries(lib.families.map((f) => [f.name, variantsOf(f)]));
+  assert.deepEqual(byName, { Lato: [`regular`, `italic`, `bold`, `boldItalic`], "Lato Black": [`regular`], "Lato Light": [`regular`, `italic`], "Lato Thin": [`regular`] });
+});

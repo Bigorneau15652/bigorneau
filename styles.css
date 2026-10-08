@@ -2463,47 +2463,82 @@ table.mmw-t-equal td {
   gap: 6px;
   margin-bottom: 8px;
 }
-.mmw-typo-row {
+.mmw-typo-top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
-  padding: 6px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--background-modifier-border);
 }
 .mmw-typo-label {
-  flex: 0 0 210px;
   font-weight: 600;
 }
-.mmw-typo-controls {
+.mmw-typo-section {
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.mmw-typo-section > summary {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 7px 0;
+  cursor: pointer;
 }
-.mmw-typo-size {
-  display: inline-flex;
-  align-items: center;
+.mmw-typo-recap {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.mmw-typo-body {
+  padding: 2px 0 10px 16px;
+}
+.mmw-typo-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+.mmw-typo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mmw-typo-field-name {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.mmw-typo-styles {
+  display: flex;
   gap: 4px;
 }
-.mmw-typo-size-value {
-  min-width: 52px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+.mmw-typo-size {
+  width: 80px;
 }
-.mmw-typo-over .mmw-typo-label {
+.mmw-typo-over {
   color: var(--text-accent);
 }
 .mmw-typo-reset {
-  padding: 2px 6px;
+  margin-top: 2px;
 }
 .mmw-typo-info {
   margin-top: 14px;
 }
+.mmw-typo-folderrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 6px;
+}
 .mmw-typo-folder {
   font-weight: 600;
-  margin-bottom: 4px;
+}
+.mmw-typo-sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 10px;
 }
 .mmw-typo-problems-title {
   margin-top: 8px;
@@ -2517,4 +2552,13 @@ table.mmw-t-equal td {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+
+.mmw-row-box {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0 solid #000;
+  pointer-events: none;
 }
