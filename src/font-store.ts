@@ -9,12 +9,16 @@ const faceSet = (): { add(f: FontFace): void; delete(f: FontFace): void } => doc
 
 const KNOWN = [...FONT_EXTENSIONS, ...REJECTED_EXTENSIONS];
 
+// Rend la main a Obsidian entre deux fichiers : sans cela, lire de nombreuses polices gele l'interface pendant tout le chargement.
+const pause = (): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, 0));
+
 export class FontStore {
   library: FontLibrary = { families: [], problems: [] };
   private signature = ``;
   private faces: FontFace[] = [];
   private listeners = new Set<() => void>();
   private running: Promise<boolean> | null = null;
+  private destroyed = false;
 
   constructor(private app: App, private folder: () => string) {}
 
@@ -60,18 +64,22 @@ export class FontStore {
       } catch {
         read.push({ path: f.path, bytes: new Uint8Array(0) });
       }
+      await pause();
     }
+    if (this.destroyed) return false;
     this.library = buildLibrary(read);
     this.signature = signature;
     clearFontFamilies();
     for (const family of this.library.families) registerFontFamily(family.id, family.fonts);
-    await this.registerFaces(read);
+    // La composition peut deja se servir des polices : on previent tout de suite, puis une seconde fois quand l'apercu a les siennes.
     for (const l of this.listeners) l();
+    if (await this.registerFaces(read)) for (const l of this.listeners) l();
     return true;
   }
 
-  // Polices de l'apercu : le navigateur doit connaitre chaque fichier sous un nom de famille CSS.
-  private async registerFaces(read: FontFile[]): Promise<void> {
+  // Polices de l'apercu : le navigateur doit connaitre chaque fichier sous un nom de famille CSS. Une seule a la fois, avec une pause
+  // entre deux, pour ne pas figer l'interface. Renvoie vrai quand au moins une police a ete ajoutee.
+  private async registerFaces(read: FontFile[]): Promise<boolean> {
     for (const face of this.faces) faceSet().delete(face);
     this.faces = [];
     const bytes = new Map(read.map((f) => [f.path, f.bytes]));
@@ -80,18 +88,23 @@ export class FontStore {
         const data = bytes.get(path);
         if (!data) continue;
         try {
-          const face = new FontFace(cssFamily(family.id, variant), data.slice().buffer);
+          // Le navigateur copie les octets : inutile d'en faire une copie de plus.
+          const face = new FontFace(cssFamily(family.id, variant), data as unknown as BufferSource);
           await face.load();
+          if (this.destroyed) return false;
           faceSet().add(face);
           this.faces.push(face);
         } catch {
           // Le navigateur refuse ce fichier : la composition l'utilise quand meme, l'apercu affiche une autre police.
         }
+        await pause();
       }
     }
+    return this.faces.length > 0;
   }
 
   destroy(): void {
+    this.destroyed = true;
     for (const face of this.faces) faceSet().delete(face);
     this.faces = [];
     clearFontFamilies();
