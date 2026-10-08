@@ -74,6 +74,15 @@ export function panelOrder(ids: string[], saved: string[]): string[] {
   return out;
 }
 
+// Fonctions dans l'ordre du panneau, sans les separations ni les identifiants qui ne correspondent a aucune fonction.
+export function orderedFunctions<T extends { id: string }>(all: T[], saved: string[]): T[] {
+  const byId = new Map(all.map((f) => [f.id, f]));
+  return panelOrder(all.map((f) => f.id), saved).flatMap((id) => {
+    const f = byId.get(id);
+    return f ? [f] : [];
+  });
+}
+
 // Identifiants des boutons affiches : l'ordre du panneau, sans les boutons masques.
 export function visibleIds(ids: string[], saved: string[], hidden: string[]): string[] {
   return panelOrder(ids, saved).filter((id) => !hidden.includes(id));

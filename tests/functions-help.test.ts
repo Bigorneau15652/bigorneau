@@ -120,3 +120,21 @@ test(`les mesures gardent la derniere duree, la plus longue et le nombre de pass
   assert.ok(formatSamples(samplesList()).includes(`essai : 5 ms (maximum 12.3 ms, 2 fois)`));
   assert.equal(formatSamples([]), ``);
 });
+
+test(`les fonctions du panneau suivent l'ordre enregistre sans les separations ni les identifiants inconnus`, async () => {
+  const { orderedFunctions } = await import(`../src/functions`);
+  const all = [`a`, `b`, `c`].map((id) => ({ id }));
+  // Cas du panneau vide depuis la 0.13.0 : l'ordre enregistre contient des separations, qui ne sont pas des fonctions.
+  const list = orderedFunctions(all, [`c`, `sep:1`, `zzz`, `a`, `sep:2`]);
+  assert.deepEqual(list.map((f) => f.id), [`c`, `a`, `b`]);
+  assert.ok(list.every((f) => f !== undefined));
+  assert.deepEqual(orderedFunctions(all, []).map((f) => f.id), [`a`, `b`, `c`]);
+});
+
+test(`les erreurs interceptees sont gardees, les dernieres seulement`, async () => {
+  const { noteError, errorsList } = await import(`../src/diagnostics`);
+  for (let i = 0; i < 12; i++) noteError(`essai`, new Error(`erreur ${i}`));
+  const list = errorsList();
+  assert.equal(list.length, 8);
+  assert.ok(list[7].startsWith(`essai : erreur 11`));
+});

@@ -8,7 +8,7 @@ import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
 import { DiagnosticModal } from "./diagnostic-modal";
-import { record } from "./diagnostics";
+import { noteError, record } from "./diagnostics";
 import { FunctionRegistry, isSeparator, panelOrder, PanelFunction } from "./functions";
 import { HelpRegistry } from "./help";
 import { PLUGIN_HELP } from "./help-data";
@@ -669,17 +669,19 @@ export default class MindmapWritingPlugin extends Plugin {
       }
       this.scripts.setExternal(found);
     } catch (e) {
+      noteError(`Lecture des scripts ajoutés à la main`, e);
       new Notice(t(`Les scripts ajoutés à la main n'ont pas pu être lus : {0}`, e instanceof Error ? e.message : String(e)), 8000);
     }
     try {
       await this.scripts.loadEnabled();
     } catch (e) {
+      noteError(`Chargement des scripts`, e);
       new Notice(t(`Les scripts n'ont pas pu être chargés : {0}`, e instanceof Error ? e.message : String(e)), 8000);
     }
     try {
       await this.placeDefaultSeparators();
-    } catch {
-      // La disposition de depart sera reposee au prochain demarrage.
+    } catch (e) {
+      noteError(`Disposition de départ du panneau`, e);
     }
     this.panel.sync();
     record(`Chargement des scripts`, performance.now() - started, `${this.scripts.info().filter((i) => i.loaded).length} chargés`);

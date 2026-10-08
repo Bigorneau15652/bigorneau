@@ -3,7 +3,8 @@
 // la palette. Le panneau est pose dans chaque editeur Markdown ouvert.
 import { App, Editor, getIconIds, MarkdownView, Notice, Platform, setIcon, setTooltip } from "obsidian";
 import { CUSTOM_ICON_IDS } from "./custom-icons";
-import { displayItems, FunctionRegistry, isSeparator, moveId, panelOrder, PanelFunction, reorderVisible, visibleIds } from "./functions";
+import { noteError } from "./diagnostics";
+import { displayItems, FunctionRegistry, isSeparator, moveId, orderedFunctions, panelOrder, PanelFunction, reorderVisible, visibleIds } from "./functions";
 import { currentLang, t } from "./i18n";
 import { SNAIL_ICON } from "./snail-icon";
 import type { MmSettings } from "./settings";
@@ -61,8 +62,8 @@ export class ButtonPanel {
   // Fonctions disponibles sur cet appareil, dans l'ordre complet enregistre.
   private available(): PanelFunction<FunctionContext>[] {
     const all = this.host.functions.all().filter((f) => f.button !== false && (!f.available || f.available()));
-    const order = panelOrder(all.map((f) => f.id), this.host.settings.panelOrder);
-    return order.map((id) => all.find((f) => f.id === id) as PanelFunction<FunctionContext>);
+    // L'ordre enregistre contient aussi les separations : elles ne sont pas des fonctions.
+    return orderedFunctions(all, this.host.settings.panelOrder);
   }
 
   // Pose, met a jour ou retire le panneau de chaque editeur Markdown ouvert.
@@ -78,7 +79,12 @@ export class ButtonPanel {
         continue;
       }
       view.contentEl.addClass(`mmw-has-panel`);
-      this.render(existing ?? view.contentEl.createDiv({ cls: `mmw-panel` }), view);
+      // Un echec sur une note ne doit ni empecher les autres ni interrompre l'appelant (la sauvegarde des reglages, le chargement des scripts).
+      try {
+        this.render(existing ?? view.contentEl.createDiv({ cls: `mmw-panel` }), view);
+      } catch (e) {
+        noteError(`Panneau de boutons`, e);
+      }
     }
   }
 
@@ -100,15 +106,15 @@ export class ButtonPanel {
     const buttons = shown.filter((id) => !isSeparator(id));
     // Rien n'est reconstruit tant que ni les boutons, ni leur ordre, ni la langue n'ont change.
     // Une fonction dont le calcul d'etat echoue ne doit jamais vider le panneau : son bouton est alors simplement sans etat.
-    const stateOf = (fn: PanelFunction<FunctionContext>): boolean | null => {
-      if (!fn.active) return null;
+    const stateOf = (fn: PanelFunction<FunctionContext> | undefined): boolean | null => {
+      if (!fn?.active) return null;
       try {
         return fn.active({ app: this.host.app, view, editor: view.editor });
       } catch {
         return false;
       }
     };
-    const states = buttons.map((id) => stateOf(functions.find((f) => f.id === id) as PanelFunction<FunctionContext>));
+    const states = buttons.map((id) => stateOf(functions.find((f) => f.id === id)));
     const signature = JSON.stringify([items, currentLang(), states]);
     if (panel.dataset.signature === signature) return;
     panel.dataset.signature = signature;
@@ -127,7 +133,8 @@ export class ButtonPanel {
         list.createDiv({ cls: `mmw-panel-separator` });
         continue;
       }
-      const fn = functions.find((f) => f.id === id) as PanelFunction<FunctionContext>;
+      const fn = functions.find((f) => f.id === id);
+      if (!fn) continue;
       const btn = list.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
       btn.type = `button`;
       btn.dataset.id = fn.id;

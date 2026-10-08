@@ -1,7 +1,7 @@
 // Fenetre « Diagnostic de Bigorneau » : version, scripts (etat et erreurs), nombre de volets, reglages utiles et temps mesures. Le texte
 // se copie pour etre envoye avec une description du probleme.
 import { App, Modal, Notice, Setting } from "obsidian";
-import { formatSamples, samplesList } from "./diagnostics";
+import { errorsList, formatSamples, samplesList } from "./diagnostics";
 import { excalidrawInstalled } from "./drawing";
 import { currentLang, t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
@@ -17,6 +17,12 @@ export function diagnosticText(app: App, plugin: MindmapWritingPlugin): string {
   lines.push(`Scripts :`);
   for (const s of plugin.scripts.info()) lines.push(`- ${s.name[lang]} (${s.version}) : ${s.enabled ? `actif` : `inactif`}, ${s.loaded ? `chargé` : `non chargé`}, état ${s.status}${s.detail ? ` (${s.detail})` : ``}`);
   lines.push(``);
+  const errs = errorsList();
+  if (errs.length > 0) {
+    lines.push(`Erreurs interceptées :`);
+    for (const e of errs) lines.push(`- ${e}`);
+    lines.push(``);
+  }
   lines.push(`Temps mesurés :`);
   const measures = formatSamples(samplesList());
   lines.push(measures === `` ? `(aucune mesure pour l'instant : utilisez le plugin quelques instants, puis rouvrez cette fenêtre)` : measures);
