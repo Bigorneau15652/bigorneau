@@ -285,6 +285,11 @@ export class ExportPreviewView extends ItemView {
       }
       return;
     }
+    if (row.bullet) {
+      const b = el.createSpan({ cls: `mmw-row-bullet mmw-row-bullet-${row.bullet}` });
+      b.style.left = `${row.x - 16}pt`;
+      b.style.setProperty(`--mmw-bullet-size`, `${row.fontSize * (row.bullet.startsWith(`diamond`) ? 0.46 : 0.36)}pt`);
+    }
     if (row.marker !== undefined) {
       const m = el.createSpan({ cls: row.kind === `footnote` ? `mmw-row-marker mmw-row-note-marker` : `mmw-row-marker`, text: row.marker });
       m.style.left = `${row.kind === `footnote` ? 0 : row.x - 16}pt`;

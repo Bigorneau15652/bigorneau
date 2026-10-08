@@ -100,6 +100,8 @@ const FOLD_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" s
 const SVG_NS = `http://www.w3.org/2000/svg`;
 // Vue Liste : marge interieure du cadre a gauche (le cadre n'a pas de marge en haut : le titre y reste colle), largeurs minimale et
 // maximale d'une ligne (un titre plus long est coupe par des points de suspension), et place reservee a la glissiere.
+// Distance (en pixels) a partir de laquelle un appui suivi d'un mouvement devient un glisser : en dessous, c'est un simple clic.
+const NODE_DRAG_THRESHOLD = 10;
 const LIST_PAD_X = 8;
 const LIST_MIN_WIDTH = 260;
 const LIST_MAX_WIDTH = 480;
@@ -273,6 +275,10 @@ export class MapRenderer {
     this.on(this.mapEl, `pointerdown`, (e) => this.onPointerDown(e as PointerEvent));
     this.on(this.mapEl, `pointermove`, (e) => this.onPointerMove(e as PointerEvent));
     this.on(this.mapEl, `pointerup`, (e) => this.onPointerUp(e as PointerEvent));
+    // Quand le systeme annule le geste ou reprend la capture de la souris, aucun relachement n'arrive : sans cela, le fantome du
+    // glisser resterait affiche et le suivant s'ajouterait au premier.
+    this.on(this.mapEl, `pointercancel`, () => this.abandonDrag());
+    this.on(this.mapEl, `lostpointercapture`, () => this.abandonDrag());
     this.on(this.mapEl, `wheel`, (e) => this.onWheel(e as WheelEvent), { passive: false });
     this.on(this.mapEl, `keydown`, (e) => this.onKey(e as KeyboardEvent));
     this.on(this.mapEl, `contextmenu`, (e) => {
@@ -1416,6 +1422,7 @@ export class MapRenderer {
     if (target.closest(`.mmw-rename, .mmw-dialog`)) return;
     if (target.closest(`.mmw-link-hint, .mmw-picker`)) return;
     this.controls.closePopup();
+    this.abandonDrag();
     this.mapEl.focus();
     const linkMark = target.closest(`.mmw-link-mark, .mmw-int-mark`) as HTMLElement | null;
     if (linkMark && !this.linking) {
@@ -1837,7 +1844,7 @@ export class MapRenderer {
     const d = this.nodeDrag!;
     if (!d.started) {
       // La racine ne se deplace pas : seul le clic (saisie du titre) lui est utile.
-      if (d.key === `r` || (isFloatKey(d.key) && !isFloatRoot(d.key)) || Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= 5) return;
+      if (d.key === `r` || (isFloatKey(d.key) && !isFloatRoot(d.key)) || Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= NODE_DRAG_THRESHOLD) return;
       this.startNodeDrag();
       if (!d.started) return;
     }
@@ -1997,6 +2004,13 @@ export class MapRenderer {
     this.previewOrigin = moved.origin;
     this.previewDragKey = moved.key;
     this.rebuild();
+  }
+
+  // Abandonne un glisser de case reste en suspens et retire tout fantome oublie dans la carte.
+  private abandonDrag(): void {
+    if (this.nodeDrag) this.finishNodeDrag(true);
+    for (const ghost of Array.from(this.mapEl.querySelectorAll(`.mmw-ghost`))) ghost.remove();
+    this.mapEl.classList.remove(`mmw-dragging`);
   }
 
   // Fin du glisser : depose la case a l'emplacement montre, ou annule.

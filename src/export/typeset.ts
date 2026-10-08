@@ -2,6 +2,7 @@
 // avec la feuille de style du premier gabarit (A4, recto simple). La repartition des lignes en pages est faite par paginate.ts.
 // Phase 3 : notes de bas de page, penalites de pagination (lignes veuves et orphelines, titres), chapitres courants. Les
 // tableaux, formules et figures sont encore des reperes provisoires.
+import { BulletId, BulletShape, bulletAt, bulletMark, DEFAULT_BULLETS } from "../bullets";
 import { defaultParagraphSettings, PARAGRAPH_SPACE_POINTS, ParagraphSettings } from "../paragraph-format";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
 import { applyCase, BASE_POINTS, CaseMode, defaultTypography, HeadingSpec, headingNumber, inFamilyOf, sizeFactor, styleOf, TextSpec, TypographyStyle } from "../text-style";
@@ -70,6 +71,8 @@ export interface PageStyle {
   media: `frame` | `text`;
   // Protrusion (microtypographie) : la ponctuation et les tirets en bout de ligne justifiee depassent un peu dans la marge.
   protrusion: boolean;
+  // Puce de chaque niveau d'une liste a puces (six niveaux), puis le trait d'union.
+  bullets: BulletId[];
   // Table des matieres generale au debut du document, et niveaux de titres qu'elle liste (1 a 6). Une propriete de la note
   // (toc, toc-depth) l'emporte sur ces choix.
   toc: boolean;
@@ -93,6 +96,7 @@ export const DEFAULT_PAGE_STYLE: PageStyle = {
   pageRefs: false,
   media: `frame`,
   protrusion: true,
+  bullets: [...DEFAULT_BULLETS],
   toc: false,
   tocDepth: 3,
   chapterToc: false,
@@ -154,6 +158,8 @@ export interface Row {
   align: `left` | `center`;
   // Puce ou numero place dans la marge d'un element de liste, ou numero d'une note de bas de page.
   marker?: string;
+  // Forme dessinee a la place du caractere de puce (disque, carre, losange).
+  bullet?: BulletShape;
   quality?: RowQuality;
   // Titre du chapitre en cours et indication qu'il s'agit de la premiere ligne de son titre.
   chapter?: string;
@@ -390,7 +396,7 @@ class Typesetter {
     return p;
   }
 
-  private addLines(lines: TypesetLine[], kind: RowKind, x: number, width: number, fontSize: number, height: number, opts: { marker?: string; keep?: boolean; shift?: `right` | `center` } = {}): void {
+  private addLines(lines: TypesetLine[], kind: RowKind, x: number, width: number, fontSize: number, height: number, opts: { marker?: string; bullet?: BulletShape; keep?: boolean; shift?: `right` | `center` } = {}): void {
     let prevHyphen = false;
     lines.forEach((l, i) => {
       this.stats.lines++;
@@ -419,6 +425,7 @@ class Typesetter {
         breakAfter: opts.keep ? INF_PENALTY : this.penaltyFor(i, lines.length, l.hyphenated),
         align: `left`,
         ...(i === 0 && opts.marker ? { marker: opts.marker } : {}),
+        ...(i === 0 && opts.bullet ? { bullet: opts.bullet } : {}),
         runs: l.runs,
         ...(l.notes.length > 0 ? { notes: l.notes, sups: l.sups } : {}),
         quality: { badness: l.badness, hyphenated: l.hyphenated, overfull: l.overfull, loose, tight },
@@ -495,7 +502,7 @@ class Typesetter {
   }
 
   // Compose un texte en lignes et les ajoute ; renvoie le nombre de lignes ajoutees.
-  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle; shift?: `right` | `center`; case?: CaseMode; prefix?: string; underline?: boolean; frame?: HeadingSpec; spec?: TextSpec }): number {
+  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; bullet?: BulletShape; keep?: boolean; notes?: boolean; style?: FontStyle; shift?: `right` | `center`; case?: CaseMode; prefix?: string; underline?: boolean; frame?: HeadingSpec; spec?: TextSpec }): number {
     let input = opts.notes === false ? parseInline(text) : this.inline(text);
     if (opts.case !== undefined && opts.case !== `none`) input = { ...input, text: applyCase(input.text, opts.case) };
     if (opts.prefix) input = { ...input, text: `${opts.prefix}${NO_BREAK_SPACE}${input.text}` };
@@ -514,7 +521,7 @@ class Typesetter {
     this.missing.push(...r.missing);
     if (r.pass > 0) this.stats.passes[r.pass - 1]++;
     this.stats.paragraphs++;
-    this.addLines(r.lines, kind, x, width, opts.fontSize, this.setup.leading * (opts.fontSize / this.setup.fontSize), { marker: opts.marker, keep: opts.keep, ...(opts.shift ? { shift: opts.shift } : {}) });
+    this.addLines(r.lines, kind, x, width, opts.fontSize, this.setup.leading * (opts.fontSize / this.setup.fontSize), { marker: opts.marker, ...(opts.bullet ? { bullet: opts.bullet } : {}), keep: opts.keep, ...(opts.shift ? { shift: opts.shift } : {}) });
     if (opts.underline) for (let k = first; k < this.sink.length; k++) this.sink[k].underline = true;
     this.paintRows(first, opts.spec ?? this.ty.body);
     if (opts.frame && opts.frame.frame !== `none`) this.boxRows(first, opts.frame);
@@ -668,8 +675,11 @@ class Typesetter {
           counters.length = item.depth + 1;
           counters[item.depth] = (counters[item.depth] ?? 0) + 1;
           const x = 6 + item.depth * 18;
-          const marker = b.ordered ? `${counters[item.depth]}.` : `–`;
-          this.paragraph(item.text, `list`, x + 16, this.textWidth - x - 16, { indent: 0, justify: false, hyphenate: true, fontSize: size, marker });
+          // Liste a puces : le symbole depend du niveau (reglage de l'export) ; liste numerotee : le numero.
+          const mark = b.ordered ? { glyph: `${counters[item.depth]}.` } : bulletMark(bulletAt(this.style.bullets ?? DEFAULT_BULLETS, item.depth));
+          const marker = mark && `glyph` in mark ? mark.glyph : undefined;
+          const bullet = mark && `shape` in mark ? mark.shape : undefined;
+          this.paragraph(item.text, `list`, x + 16, this.textWidth - x - 16, { indent: 0, justify: false, hyphenate: true, fontSize: size, ...(marker !== undefined ? { marker } : {}), ...(bullet ? { bullet } : {}) });
         }
         this.space(lead * 0.5);
         break;

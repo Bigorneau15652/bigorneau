@@ -1532,6 +1532,32 @@
   position: relative;
 }
 
+/* Puces dessinees de l'apercu des pages : disque, carre et losange, pleins ou vides. */
+.mmw-row-bullet {
+  position: absolute;
+  top: calc(50% + 0.05em);
+  margin-top: calc(var(--mmw-bullet-size) / -2);
+  width: var(--mmw-bullet-size);
+  height: var(--mmw-bullet-size);
+  margin-left: 0.12em;
+  box-sizing: border-box;
+  background: currentColor;
+}
+.mmw-row-bullet-disc,
+.mmw-row-bullet-circle {
+  border-radius: 50%;
+}
+.mmw-row-bullet-circle,
+.mmw-row-bullet-squareOpen,
+.mmw-row-bullet-diamondOpen {
+  background: transparent;
+  border: 0.06em solid currentColor;
+}
+.mmw-row-bullet-diamond,
+.mmw-row-bullet-diamondOpen {
+  transform: rotate(45deg) scale(0.72);
+}
+
 .mmw-row-quote {
   background: linear-gradient(#999, #999) 12pt 0 / 2px 100% no-repeat;
 }
