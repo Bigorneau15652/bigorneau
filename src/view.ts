@@ -137,7 +137,6 @@ export class MindmapView extends ItemView {
       onInternalLinks: (links, event) => this.goToLinks(links, event),
       onBack: () => void this.goBack(),
       onAddFixed: () => void this.addFixedNote(),
-      ...(Platform.isDesktop ? { onOpenExport: () => void this.plugin.openExportPreview(), onExportPdf: () => void this.plugin.exportPdf() } : {}),
     });
     await this.refresh();
   }
