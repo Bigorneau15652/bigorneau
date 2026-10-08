@@ -12,7 +12,7 @@ import { configImages, findPageConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX }
 import type { MathRenderer } from "./script-formulas";
 import type { MmSettings } from "./settings";
 
-export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportFigureCaption` | `exportPageRefs` | `exportMedia` | `exportHeader` | `exportFooter` | `exportFlushBottom` | `exportChapterBreak` | `exportFootnoteNumbering` | `exportProtrusion` | `exportToc` | `exportTocDepth` | `exportChapterToc` | `exportChapterTocDepth` | `typography`>): PageStyle {
+export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportFigureCaption` | `exportPageRefs` | `exportMedia` | `exportHeader` | `exportFooter` | `exportFlushBottom` | `exportChapterBreak` | `exportFootnoteNumbering` | `exportProtrusion` | `exportBullets` | `exportToc` | `exportTocDepth` | `exportChapterToc` | `exportChapterTocDepth` | `typography`>): PageStyle {
   return {
     ...DEFAULT_PAGE_STYLE,
     header: settings.exportHeader,
@@ -25,6 +25,7 @@ export function pageStyleOf(settings: Pick<MmSettings, `exportFloats` | `exportF
     pageRefs: settings.exportPageRefs,
     media: settings.exportMedia,
     protrusion: settings.exportProtrusion,
+    bullets: settings.exportBullets,
     toc: settings.exportToc,
     tocDepth: settings.exportTocDepth,
     chapterToc: settings.exportChapterToc,

@@ -205,8 +205,8 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `export-settings`,
     title: { fr: `Réglages de l'export`, en: `Export settings` },
     text: {
-      fr: `Le chapitre « Export PDF » des réglages couvre l'auteur du PDF, l'en-tête, le pied de page, l'alignement des pages en bas, le saut de page avant chaque chapitre, la numérotation des notes de bas de page, la protrusion, les tables des matières, la place des figures et des tableaux, les renvois et les médias.`,
-      en: `The "PDF export" chapter of the settings covers the author of the PDF, the header, the footer, aligning pages at the bottom, a page break before each chapter, footnote numbering, protrusion, the tables of contents, the placement of figures and tables, the references and the media.`,
+      fr: `Le chapitre « Export PDF » des réglages couvre l'auteur du PDF, l'en-tête, le pied de page, l'alignement des pages en bas, le saut de page avant chaque chapitre, la numérotation des notes de bas de page, la protrusion, les puces des listes à puces (un symbole par niveau, six niveaux), les tables des matières, la place des figures et des tableaux, les renvois et les médias.`,
+      en: `The "PDF export" chapter of the settings covers the author of the PDF, the header, the footer, aligning pages at the bottom, a page break before each chapter, footnote numbering, protrusion, the bullets of bulleted lists (one symbol per level, six levels), the tables of contents, the placement of figures and tables, the references and the media.`,
     },
     keywords: { fr: `reglages options en-tete pied de page numerotation`, en: `settings options header footer numbering` },
   },

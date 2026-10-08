@@ -2,6 +2,7 @@
 // Le fichier est ecrit directement, sans bibliotheque : polices OpenType incorporees (Libertinus Serif et Mono, contours CFF), texte reel
 // et copiable (table ToUnicode, ligatures comprises), signets hierarchiques qui reprennent les titres, liens web cliquables,
 // metadonnees. Chaque ligne est placee a la position que calcule la composition, comme dans l'apercu.
+import { BulletShape } from "../bullets";
 import { fontFor, resolvedVariant, userStyle, FontStyle, parseUserStyle, variantOf } from "./font-metrics";
 import { ImageAsset } from "./image";
 import { OpenTypeFont } from "./font";
@@ -49,6 +50,32 @@ const num = (n: number): string => {
   const s = n.toFixed(3);
   return s.includes(`.`) ? s.replace(/0+$/, ``).replace(/\.$/, ``) : s;
 };
+
+// Puce dessinee (disque, carre, losange, pleins ou vides) : `x` est le bord gauche de la puce, `y` la ligne de base dans le repere du PDF
+// (origine en bas). La forme est centree a la hauteur des minuscules, et sa taille suit celle du texte.
+function bulletOps(shape: BulletShape, x: number, y: number, fontSize: number, color: string | undefined): string {
+  const diamond = shape === `diamond` || shape === `diamondOpen`;
+  const filled = shape === `disc` || shape === `square` || shape === `diamond`;
+  const line = Math.max(0.5, fontSize * 0.06);
+  const outer = (fontSize * (diamond ? 0.46 : 0.36)) / 2;
+  // Une forme vide est tracee a l'interieur de sa boite : le trait est rentre de la moitie de son epaisseur.
+  const r = filled ? outer : outer - line / 2;
+  const cx = x + 0.12 * fontSize + outer;
+  const cy = y + 0.3 * fontSize;
+  let path: string;
+  if (shape === `disc` || shape === `circle`) {
+    // Cercle en quatre courbes de Bezier.
+    const k = 0.5523 * r;
+    const p = (dx: number, dy: number): string => `${num(cx + dx)} ${num(cy + dy)}`;
+    path = `${p(r, 0)} m ${p(r, k)} ${p(k, r)} ${p(0, r)} c ${p(-k, r)} ${p(-r, k)} ${p(-r, 0)} c ${p(-r, -k)} ${p(-k, -r)} ${p(0, -r)} c ${p(k, -r)} ${p(r, -k)} ${p(r, 0)} c h`;
+  } else if (diamond) {
+    path = `${num(cx)} ${num(cy + r)} m ${num(cx + r)} ${num(cy)} l ${num(cx)} ${num(cy - r)} l ${num(cx - r)} ${num(cy)} l h`;
+  } else {
+    path = `${num(cx - r)} ${num(cy - r)} ${num(2 * r)} ${num(2 * r)} re`;
+  }
+  if (filled) return `q ${color ? `${color} rg ` : ``}${path} f Q`;
+  return `q ${color ? `${color} RG ` : ``}${num(line)} w ${path} S Q`;
+}
 
 // Chaine PDF : en ASCII simple entre parentheses, sinon en UTF-16BE avec marque d'ordre.
 function pdfText(s: string): string {
@@ -332,6 +359,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
           drawRuns(ops, links, [run], left + row.x - 16, baseline, row.fontSize, 0, rowColor);
         }
       }
+      if (row.bullet) ops.push(bulletOps(row.bullet, left + row.x - 16, H - baseline, row.fontSize, rowColor));
       const runs = runsOf(row);
       let x = left + row.x;
       if (row.align === `center`) x += (row.width - natural(runs, row.fontSize, row.wordSpacing)) / 2;

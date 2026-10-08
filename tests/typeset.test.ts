@@ -33,8 +33,10 @@ test(`seule la premiere ligne d'un paragraphe a un retrait et les lignes justifi
 
 test(`les puces et numeros sont places en marge des elements de liste`, () => {
   const t = typesetDoc(buildExportDoc(note(0), `A.md`));
+  // Les puces par defaut du premier niveau sont des formes dessinees (disques) ; les numeros restent du texte.
   const markers = t.rows.filter((r) => r.marker !== undefined).map((r) => r.marker);
-  assert.deepEqual(markers, [`–`, `–`, `–`, `1.`, `2.`]);
+  assert.deepEqual(markers, [`1.`, `2.`]);
+  assert.equal(t.rows.filter((r) => r.bullet !== undefined).length, 3);
 });
 
 test(`une note en anglais n'a pas les espaces fines francaises`, () => {

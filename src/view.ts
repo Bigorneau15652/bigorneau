@@ -1117,10 +1117,20 @@ export class MindmapView extends ItemView {
     else view.editor.redo();
   }
 
-  private async onSelect(key: string | null) {
+  // Les selections sont traitees l'une apres l'autre : sans cela, un deuxieme clic arrive pendant l'ouverture de la note de la premiere
+  // selection, ne retrouve pas encore la fenetre de note et en cree une autre a chaque clic.
+  private selectQueue: Promise<void> = Promise.resolve();
+
+  private onSelect(key: string | null): Promise<void> {
     this.rememberNoteCursor(this.selectedKey);
     this.selectedKey = key;
-    if (key) await this.revealInNote(key, this.plugin.settings.focusNoteOnSelect);
+    this.selectQueue = this.selectQueue
+      .then(async () => {
+        // Seule la derniere selection compte : si elle a change pendant l'attente, celle-ci est sautee.
+        if (key && this.selectedKey === key) await this.revealInNote(key, this.plugin.settings.focusNoteOnSelect);
+      })
+      .catch(() => undefined);
+    return this.selectQueue;
   }
 
   private async ensureNoteLeaf(file: TFile): Promise<WorkspaceLeaf> {

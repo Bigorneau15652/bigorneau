@@ -1,3 +1,4 @@
+import { BULLET_IDS, BULLET_LEVELS, BulletId, isBulletId } from "./bullets";
 import { App, Platform, PluginSettingTab, Setting, TFolder } from "obsidian";
 import { DEFAULT_ICON, IconKind, ICONS, iconSvg } from "./icons";
 import { setLanguage, t } from "./i18n";
@@ -517,6 +518,36 @@ export class MmSettingTab extends PluginSettingTab {
       (v) => (s.exportFootnoteNumbering = v === `perChapter` ? `perChapter` : `continuous`)
     );
     this.exportToggle(el, t(`Protrusion`), t(`La ponctuation et les tirets en bout de ligne dépassent légèrement dans la marge, ce qui rend le bord du texte plus net à l'œil.`), s.exportProtrusion, (v) => (s.exportProtrusion = v));
+
+    new Setting(el).setName(t(`Listes à puces`)).setHeading();
+    el.createDiv({ cls: `setting-item-description`, text: t(`Puce de chaque niveau d'une liste à puces dans l'export (PDF et aperçu des pages). Au-delà du sixième niveau, la puce est le trait d'union. L'affichage des notes dans Obsidian ne change pas.`) });
+    const bulletLabels: Record<BulletId, string> = {
+      disc: t(`● Disque plein`),
+      circle: t(`○ Disque vide`),
+      square: t(`■ Carré plein`),
+      squareOpen: t(`□ Carré vide`),
+      diamond: t(`◆ Losange plein`),
+      diamondOpen: t(`◇ Losange vide`),
+      hyphen: t(`- Trait d'union`),
+      dash: t(`– Tiret long`),
+      asterisk: t(`* Astérisque`),
+      dot: t(`· Point médian`),
+      chevron: t(`› Chevron`),
+      arrow: t(`→ Flèche`),
+      none: t(`Aucune puce`),
+    };
+    for (let level = 0; level < BULLET_LEVELS; level++) {
+      this.exportChoice(
+        el,
+        t(`Puce du niveau {0}`, level + 1),
+        ``,
+        BULLET_IDS.map((id): [string, string] => [id, bulletLabels[id]]),
+        s.exportBullets[level],
+        (v) => {
+          if (isBulletId(v)) s.exportBullets = s.exportBullets.map((b, i) => (i === level ? v : b));
+        }
+      );
+    }
 
     new Setting(el).setName(t(`Table des matières`)).setHeading();
     this.exportToggle(el, t(`Table des matières générale`), t(`Placée sous le titre de la note. La propriété toc: true ou toc: false de la note l'emporte sur ce réglage.`), s.exportToc, (v) => (s.exportToc = v));
