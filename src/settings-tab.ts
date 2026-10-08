@@ -1,5 +1,7 @@
 import { BULLET_IDS, BULLET_LEVELS, BulletId, isBulletId } from "./bullets";
-import { App, Platform, PluginSettingTab, Setting, TFolder } from "obsidian";
+import { FolderPicker } from "./folder-picker";
+import { ConfirmModal, NameModal } from "./profile-modals";
+import { App, normalizePath, Notice, Platform, PluginSettingTab, Setting, TFolder } from "obsidian";
 import { DEFAULT_ICON, IconKind, ICONS, iconSvg } from "./icons";
 import { setLanguage, t } from "./i18n";
 import { comboLabel, eventToCombo } from "./keys";
@@ -57,6 +59,7 @@ export class MmSettingTab extends PluginSettingTab {
     this.chapter(`notes`, t(`Nouvelles notes`), t(`Dossier des notes créées depuis la carte`), (el) => this.buildNotes(el));
     this.chapter(`export`, t(`Export PDF`), t(`Mise en page, tables des matières, figures et médias de l'export PDF de haute qualité`), (el) => this.buildExport(el));
     this.chapter(`panel`, t(`Panneau de boutons`), t(`Boutons des fonctions, à droite de la zone de rédaction`), (el) => this.buildPanel(el));
+    this.chapter(`profiles`, t(`Profils`), t(`Enregistrer, charger, renommer et supprimer des copies nommées de vos réglages`), (el) => this.buildProfiles(el));
     this.chapter(`keys`, t(`Navigation au clavier`), t(`Raccourcis pour passer d'un chapitre à l'autre depuis la note`), (el) => this.buildKeys(el));
   }
 
@@ -615,6 +618,64 @@ export class MmSettingTab extends PluginSettingTab {
     this.exportToggle(el, t(`Afficher le panneau sur tablette et téléphone`), t(`Par défaut, le panneau est masqué sur ces appareils, faute de place.`), s.panelOnMobile, (v) => (s.panelOnMobile = v));
     new Setting(el).setName(t(`Boutons`)).setHeading();
     renderButtonList(el, this.plugin);
+  }
+
+  // Profils : copies nommees de tous les reglages (carte, export, polices et titres, puces, panneau de boutons), gardees dans le coffre.
+  private buildProfiles(el: HTMLElement): void {
+    const plugin = this.plugin;
+    el.createDiv({
+      cls: `setting-item-description`,
+      text: t(`Un profil garde tous les réglages du plugin : apparence de la carte, mise en forme et options de l'export, polices et titres, puces, panneau de boutons et position de la note. Il ne contient pas le nom de l'auteur, les dossiers, les scripts ni les notes fixes ouvertes. Les profils sont des fichiers du coffre : vous pouvez les copier sur un autre ordinateur.`),
+    });
+    const bar = el.createDiv({ cls: `mmw-typo-folderrow` });
+    bar.createEl(`button`, { cls: `mod-cta`, text: t(`Sauvegarder un profil`) }).addEventListener(`click`, () => plugin.openSaveProfile(() => void fill()));
+    bar.createSpan({ cls: `mmw-typo-folder`, text: t(`Dossier des profils : {0}`, plugin.settings.profileFolder) });
+    bar.createEl(`button`, { text: t(`Changer de dossier`) }).addEventListener(`click`, () =>
+      new FolderPicker(this.app, (path) => {
+        plugin.settings.profileFolder = normalizePath(path);
+        void plugin.saveSettings(false);
+        this.display();
+      }).open()
+    );
+    bar.createEl(`button`, { text: t(`Créer les dossiers`) }).addEventListener(`click`, () => void plugin.createFolders(true).then(() => void fill()));
+    const list = el.createDiv({ cls: `mmw-profile-list` });
+    const fill = async (): Promise<void> => {
+      const names = await plugin.profiles.list();
+      list.empty();
+      if (names.length === 0) {
+        list.createDiv({ cls: `mmw-pnote`, text: t(`Aucun profil pour l'instant. Réglez le plugin comme vous le souhaitez, puis cliquez sur Sauvegarder un profil.`) });
+        return;
+      }
+      for (const name of names) {
+        const row = list.createDiv({ cls: `mmw-profile-row` });
+        row.createSpan({ cls: `mmw-profile-label`, text: name });
+        row.createEl(`button`, { text: t(`Charger`) }).addEventListener(`click`, () => plugin.confirmLoadProfile(name, () => this.display()));
+        row.createEl(`button`, { text: t(`Renommer`) }).addEventListener(`click`, () =>
+          new NameModal(this.app, {
+            title: t(`Renommer le profil « {0} »`, name),
+            value: name,
+            confirm: t(`Renommer`),
+            existing: () => plugin.profiles.list(),
+            self: name,
+            onSubmit: async (to, overwrite) => {
+              const result = await plugin.profiles.rename(name, to, overwrite);
+              if (result !== `renamed`) new Notice(t(`Le profil n'a pas pu être renommé.`));
+              void fill();
+            },
+          }).open()
+        );
+        row.createEl(`button`, { cls: `mod-warning`, text: t(`Supprimer`) }).addEventListener(`click`, () =>
+          new ConfirmModal(this.app, {
+            title: t(`Supprimer le profil « {0} »`, name),
+            text: t(`Le fichier du profil est supprimé du coffre. Cette action est définitive.`),
+            confirm: t(`Supprimer`),
+            danger: true,
+            onConfirm: () => void plugin.profiles.remove(name).then(() => fill()),
+          }).open()
+        );
+      }
+    };
+    void fill();
   }
 
   private buildKeys(el: HTMLElement): void {

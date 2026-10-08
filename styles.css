@@ -2691,3 +2691,31 @@ table.mmw-t-equal td {
   border: 0 solid #000;
   pointer-events: none;
 }
+
+/* Profils : saisie du nom et liste des profils dans les reglages. */
+.mmw-profile-name {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.mmw-profile-message {
+  min-height: 1.4em;
+  color: var(--text-error);
+}
+.mmw-profile-list {
+  margin-top: 10px;
+}
+.mmw-profile-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.mmw-profile-label {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -32,6 +32,9 @@ import { figureCaptionExtension, tableNumberExtension } from "./figure-caption-w
 import { listMarkerWidgetExtension, paragraphMarkerHideExtension, tableMarkerHideExtension } from "./table-marker-hide";
 import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
+import { ConfirmModal, NameModal, ProfilePicker } from "./profile-modals";
+import { AUTO_BACKUP_NAME } from "./profile";
+import { ensureFolder, ProfileStore } from "./profile-store";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
 import { FontStore } from "./font-store";
@@ -55,6 +58,8 @@ export default class MindmapWritingPlugin extends Plugin {
   panel = new ButtonPanel(this);
   // Polices ajoutees au coffre (dossier des polices).
   fonts = new FontStore(this.app, () => this.settings.fontFolder);
+  // Profils : copies nommees des reglages, gardees dans le coffre.
+  profiles = new ProfileStore(this.app, () => this.settings.profileFolder, () => this.settings);
   // Scripts : les scripts officiels sont integres au plugin ; les autres sont des fichiers ajoutes a la main.
   scriptStore = new ScriptStore(this.app, `bigorneau`);
   scripts: ScriptManager = new ScriptManager(
@@ -190,6 +195,8 @@ export default class MindmapWritingPlugin extends Plugin {
     this.helpEntries.add(PLUGIN_HELP);
     this.app.workspace.onLayoutReady(() => void this.startScripts());
     // Polices du coffre : lues au demarrage, puis des qu'un fichier du dossier des polices est ajoute, change, renomme ou supprime.
+    // Premier lancement : les dossiers du plugin (polices, profils) sont crees dans le coffre.
+    this.app.workspace.onLayoutReady(() => void this.createFolders(false));
     // Le chargement attend quelques secondes apres l'ouverture de l'espace de travail : Obsidian et les autres plugins finissent d'abord.
     this.app.workspace.onLayoutReady(() => {
       const timer = window.setTimeout(() => void this.fonts.refresh(), FONT_LOAD_DELAY);
@@ -433,6 +440,16 @@ export default class MindmapWritingPlugin extends Plugin {
         table.classList.toggle(`mmw-t-stripes`, style.stripes === true);
         table.classList.toggle(`mmw-t-equal`, style.equal === true);
       }
+    });
+    this.addCommand({
+      id: `save-profile`,
+      name: t(`Sauvegarder un profil`),
+      callback: () => this.openSaveProfile(),
+    });
+    this.addCommand({
+      id: `load-profile`,
+      name: t(`Charger un profil`),
+      callback: () => void this.openLoadProfile(),
     });
     this.addCommand({
       id: `diagnostic`,
@@ -835,6 +852,80 @@ export default class MindmapWritingPlugin extends Plugin {
       () => new Notice(t(`Description copiée dans le presse-papiers : {0} tableau(x).`, tables.length)),
       () => new Notice(out)
     );
+  }
+
+  // Cree les dossiers du plugin dans le coffre (polices, profils). Sans `force`, seulement la premiere fois : un dossier supprime
+  // exprès n'est pas recree a chaque demarrage.
+  async createFolders(force: boolean): Promise<void> {
+    if (!force && this.settings.foldersCreated) return;
+    try {
+      await ensureFolder(this.app, this.settings.fontFolder);
+      await ensureFolder(this.app, this.settings.profileFolder);
+    } catch {
+      new Notice(t(`Impossible de créer les dossiers de Bigorneau dans le coffre.`));
+      return;
+    }
+    this.settings.foldersCreated = true;
+    await this.saveSettings(false);
+    if (force) new Notice(t(`Dossiers créés : {0} et {1}.`, this.settings.fontFolder, this.settings.profileFolder));
+  }
+
+  // Fenetre d'enregistrement d'un profil : les reglages actuels, sous le nom choisi (remplacement apres confirmation).
+  openSaveProfile(done: () => void = () => undefined): void {
+    new NameModal(this.app, {
+      title: t(`Sauvegarder un profil`),
+      value: ``,
+      confirm: t(`Enregistrer`),
+      existing: () => this.profiles.list(),
+      onSubmit: async (name, overwrite) => {
+        try {
+          await ensureFolder(this.app, this.settings.profileFolder);
+          const result = await this.profiles.save(name, overwrite);
+          if (result === `saved`) new Notice(t(`Profil « {0} » enregistré.`, name));
+          else if (result === `exists`) new Notice(t(`Un profil de ce nom existe déjà.`));
+        } catch {
+          new Notice(t(`Impossible d'enregistrer le profil.`));
+        }
+        done();
+      },
+    }).open();
+  }
+
+  // Choix d'un profil dans la liste, puis chargement apres confirmation.
+  async openLoadProfile(done: () => void = () => undefined): Promise<void> {
+    const names = await this.profiles.list();
+    if (names.length === 0) {
+      new Notice(t(`Aucun profil dans le dossier {0}.`, this.settings.profileFolder));
+      return;
+    }
+    new ProfilePicker(this.app, names, (name) => this.confirmLoadProfile(name, done)).open();
+  }
+
+  confirmLoadProfile(name: string, done: () => void = () => undefined): void {
+    new ConfirmModal(this.app, {
+      title: t(`Charger le profil « {0} »`, name),
+      text: t(`Vos réglages actuels seront remplacés par ceux du profil. Ils sont d'abord sauvegardés dans le profil « {0} », que vous pourrez recharger pour revenir en arrière. Le nom de l'auteur, les dossiers et les scripts ne changent pas.`, AUTO_BACKUP_NAME),
+      confirm: t(`Charger`),
+      onConfirm: () => void this.loadProfile(name).then(done),
+    }).open();
+  }
+
+  async loadProfile(name: string): Promise<void> {
+    let next: MmSettings | null = null;
+    try {
+      next = await this.profiles.load(name);
+    } catch {
+      next = null;
+    }
+    if (!next) {
+      new Notice(t(`Le profil « {0} » est illisible.`, name));
+      return;
+    }
+    Object.assign(this.settings, next);
+    setLanguage(this.settings.language);
+    await this.saveSettings();
+    this.refreshExportPreviews();
+    new Notice(t(`Profil « {0} » chargé.`, name));
   }
 
   openDiagnostic(): void {

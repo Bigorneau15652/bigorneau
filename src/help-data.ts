@@ -211,6 +211,15 @@ export const PLUGIN_HELP: HelpEntry[] = [
     keywords: { fr: `reglages options en-tete pied de page numerotation`, en: `settings options header footer numbering` },
   },
   {
+    id: `profiles`,
+    title: { fr: `Profils`, en: `Profiles` },
+    text: {
+      fr: `Un profil est une copie nommée de tous les réglages du plugin : apparence de la carte, mise en forme et options de l'export, polices et titres, puces, panneau de boutons et position de la note. Le chapitre « Profils » des réglages permet de sauvegarder le profil actuel, de charger, de renommer et de supprimer un profil, et de choisir le dossier des profils (Bigorneau/Profils par défaut). Les commandes « Sauvegarder un profil » et « Charger un profil » de la palette de commandes font la même chose sans ouvrir les réglages. Enregistrer sous un nom existant demande confirmation avant de remplacer. Avant de charger un profil, les réglages actuels sont gardés dans le profil « Sauvegarde automatique ». Un profil ne contient pas le nom de l'auteur, les dossiers, les scripts ni les notes fixes ouvertes. Les profils sont des fichiers du coffre : copiez-les sur un autre ordinateur pour retrouver vos réglages.`,
+      en: `A profile is a named copy of all the settings of the plugin: look of the map, layout and options of the export, fonts and headings, bullets, button panel and position of the note. The "Profiles" chapter of the settings lets you save the current profile, load, rename and delete a profile, and choose the profiles folder (Bigorneau/Profils by default). The commands "Save a profile" and "Load a profile" of the command palette do the same without opening the settings. Saving under an existing name asks for confirmation before replacing. Before a profile is loaded, the current settings are kept in the profile "Sauvegarde automatique". A profile does not contain the author name, the folders, the scripts or the open fixed notes. Profiles are files of the vault: copy them to another computer to get your settings back.`,
+    },
+    keywords: { fr: `profil profils sauvegarder charger renommer supprimer reglages copie dossier`, en: `profile profiles save load rename delete settings copy folder` },
+  },
+  {
     id: `panel`,
     title: { fr: `Panneau de boutons`, en: `Button panel` },
     text: {

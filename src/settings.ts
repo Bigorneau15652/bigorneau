@@ -188,6 +188,9 @@ export interface MmSettings {
   exportChapterTocDepth: number;
   // Dossier du coffre ou l'on depose les polices (.ttf, .otf) et style general des polices et des titres (menu « Polices et titres »).
   fontFolder: string;
+  // Dossier des profils (copies nommees des reglages), et vrai une fois les dossiers du plugin crees dans le coffre (premier lancement).
+  profileFolder: string;
+  foldersCreated: boolean;
   typography: TypographyStyle;
   // Panneau de boutons a droite de la zone de redaction : affichage, affichage sur tablette et telephone, ordre des boutons
   // (identifiants de fonctions) et boutons masques.
@@ -290,6 +293,8 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportChapterToc: false,
   exportChapterTocDepth: 3,
   fontFolder: `Bigorneau/Polices`,
+  profileFolder: `Bigorneau/Profils`,
+  foldersCreated: false,
   typography: defaultTypography(),
   panelVisible: true,
   panelOnMobile: false,
@@ -413,6 +418,8 @@ export function migrateSettings(stored: unknown): MmSettings {
   for (const k of [`exportTocDepth`, `exportChapterTocDepth`] as const) {
     if (!Number.isInteger(merged[k]) || merged[k] < 1 || merged[k] > 6) merged[k] = 3;
   }
+  merged.profileFolder = typeof merged.profileFolder === `string` && merged.profileFolder.trim() !== `` ? merged.profileFolder.trim().replace(/^\/+|\/+$/g, ``) : DEFAULT_SETTINGS.profileFolder;
+  merged.foldersCreated = merged.foldersCreated === true;
   merged.fontFolder = typeof merged.fontFolder === `string` && merged.fontFolder.trim() !== `` ? merged.fontFolder.trim().replace(/^\/+|\/+$/g, ``) : DEFAULT_SETTINGS.fontFolder;
   merged.typography = sanitizeTypography(data.typography);
   merged.settingsVersion = SETTINGS_VERSION;
