@@ -1,4 +1,5 @@
 // Reglages du plugin (sans dependance a Obsidian pour pouvoir etre teste hors de l'application).
+import { defaultTypography, sanitizeTypography, TypographyStyle } from "./text-style";
 
 export type LongTitles = `ellipsis` | `wrap`;
 export type BranchStyle = `elbow` | `curve` | `straight`;
@@ -182,6 +183,9 @@ export interface MmSettings {
   exportTocDepth: number;
   exportChapterToc: boolean;
   exportChapterTocDepth: number;
+  // Dossier du coffre ou l'on depose les polices (.ttf, .otf) et style general des polices et des titres (menu « Polices et titres »).
+  fontFolder: string;
+  typography: TypographyStyle;
   // Panneau de boutons a droite de la zone de redaction : affichage, affichage sur tablette et telephone, ordre des boutons
   // (identifiants de fonctions) et boutons masques.
   panelVisible: boolean;
@@ -281,6 +285,8 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportTocDepth: 3,
   exportChapterToc: false,
   exportChapterTocDepth: 3,
+  fontFolder: `Bigorneau/Polices`,
+  typography: defaultTypography(),
   panelVisible: true,
   panelOnMobile: false,
   panelOrder: [],
@@ -402,6 +408,8 @@ export function migrateSettings(stored: unknown): MmSettings {
   for (const k of [`exportTocDepth`, `exportChapterTocDepth`] as const) {
     if (!Number.isInteger(merged[k]) || merged[k] < 1 || merged[k] > 6) merged[k] = 3;
   }
+  merged.fontFolder = typeof merged.fontFolder === `string` && merged.fontFolder.trim() !== `` ? merged.fontFolder.trim().replace(/^\/+|\/+$/g, ``) : DEFAULT_SETTINGS.fontFolder;
+  merged.typography = sanitizeTypography(data.typography);
   merged.settingsVersion = SETTINGS_VERSION;
   return merged;
 }

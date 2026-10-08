@@ -1,6 +1,7 @@
 // Export de haute qualite : de la note au fichier PDF, sans rien qui depende d'Obsidian (se teste avec node --test).
 import { layoutDecor } from "./page-decor";
 import { findPageConfig } from "../page-config";
+import { applyOverrides, defaultTypography } from "../text-style";
 import { buildExportDoc } from "./doc-tree";
 import { languageOf } from "./typeset";
 import { anchorPages, groupColumns, paginate, Page } from "./paginate";
@@ -96,7 +97,8 @@ export function imageTargets(text: string, fileName: string): { target: string; 
 export function composeNote(text: string, fileName: string, explicitSetup: PageSetup | undefined = undefined, style: PageStyle = DEFAULT_PAGE_STYLE, assets: ComposeAssets = {}): Composed {
   const images = assets.images;
   const noteConfig = findPageConfig(text);
-  const options = { ...(images ? { images } : {}), ...(assets.formulas ? { formulas: assets.formulas } : {}), ...(noteConfig ? { paragraphs: noteConfig.config.paragraphs } : {}) };
+  const typography = applyOverrides(style.typography ?? defaultTypography(), noteConfig?.config.typography);
+  const options = { typography, ...(images ? { images } : {}), ...(assets.formulas ? { formulas: assets.formulas } : {}), ...(noteConfig ? { paragraphs: noteConfig.config.paragraphs } : {}) };
   const doc = buildExportDoc(text, fileName);
   // Mise en page de la note (format, orientation, marges, colonnes), sauf si une feuille est imposee : alors une seule colonne.
   const found = noteConfig;
@@ -146,7 +148,7 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
     const format = new Intl.DateTimeFormat(english ? `en-GB` : `fr-FR`, { dateStyle: `long` });
     const date = assets.date ?? format.format(new Date());
     const dated = (ms: number | undefined): string => (ms === undefined ? `` : format.format(new Date(ms)));
-    const decor = layoutDecor(found.config, pages, { setup, title: doc.title, author: doc.author ?? assets.defaultAuthor ?? ``, date, created: dated(assets.created), modified: dated(assets.modified), ...(images ? { images } : {}) });
+    const decor = layoutDecor(found.config, pages, { setup, title: doc.title, author: doc.author ?? assets.defaultAuthor ?? ``, typography: typography.decor, date, created: dated(assets.created), modified: dated(assets.modified), ...(images ? { images } : {}) });
     pages = pages.map((p, i) => {
       const { header: _header, footer: _footer, ...rest } = p;
       return { ...rest, decor: decor.pages[i] };

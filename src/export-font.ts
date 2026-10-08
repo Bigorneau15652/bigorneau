@@ -1,11 +1,11 @@
 // Chargement des polices de l'export (Libertinus Serif : normal, italique, gras, gras italique ; Libertinus Mono) dans le navigateur
 // d'Obsidian, pour que l'apercu s'affiche avec les memes polices que celles qui ont servi a mesurer le texte.
-import { FONT_STYLES, fontBytes, FontStyle } from "./export/font-metrics";
+import { BuiltinStyle, FONT_STYLES, fontBytes } from "./export/font-metrics";
 
 export const EXPORT_FONT_FAMILY = `MMW Libertinus Serif`;
 export const EXPORT_MONO_FAMILY = `MMW Libertinus Mono`;
 
-const DESCRIPTORS: Record<FontStyle, { weight: string; style: string }> = {
+const DESCRIPTORS: Record<BuiltinStyle, { weight: string; style: string }> = {
   regular: { weight: `400`, style: `normal` },
   italic: { weight: `400`, style: `italic` },
   bold: { weight: `700`, style: `normal` },

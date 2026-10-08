@@ -15,9 +15,11 @@ import { pageZoneAt, setPageZone } from "./page-zone";
 import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
 import { defaultParagraphSettings, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
 import type { OfficialScript } from "./scripts";
+import { TypographyHost, TypographyModal } from "./typography-modal";
 
 // `defaultAuthor` donne le reglage « Auteur du PDF » du plugin, propose quand la note n'a pas de propriete author.
-export const createPageScript = (defaultAuthor: () => string): OfficialScript => ({
+// `typography` donne le style general des polices et des titres, et les polices du coffre.
+export const createPageScript = (defaultAuthor: () => string, typography: Omit<TypographyHost, `note`>): OfficialScript => ({
   origin: `builtin`,
   id: `page-layout`,
   name: { fr: `Mise en page`, en: `Page layout` },
@@ -120,6 +122,29 @@ export const createPageScript = (defaultAuthor: () => string): OfficialScript =>
             editor.replaceRange(change.insert, editor.offsetToPos(change.from), editor.offsetToPos(change.to));
           },
         }).open();
+      },
+    });
+    // Septieme bouton : polices, tailles, casse, soulignement et numerotation du corps de texte et des titres.
+    api.addFunction({
+      id: `page-typography`,
+      name: { fr: `Polices et titres : police, taille, casse, soulignement et numérotation`, en: `Fonts and headings: font, size, case, underline and numbering` },
+      icon: [`type`, `a-large-small`, `heading`],
+      needsEditor: false,
+      active: ({ editor }) => (editor ? Object.keys(readPageConfig(editor.getValue()).typography ?? {}).length > 0 : false),
+      run: ({ editor }) => {
+        const host: TypographyHost = { ...typography };
+        if (editor) {
+          host.note = {
+            read: () => readPageConfig(editor.getValue()).typography ?? {},
+            write: (overrides) => {
+              const config = readPageConfig(editor.getValue());
+              if (Object.keys(overrides).length > 0) config.typography = overrides;
+              else delete config.typography;
+              applyPageConfig(editor, config);
+            },
+          };
+        }
+        new TypographyModal(api.app, host).open();
       },
     });
     // Sixieme bouton : listes des figures et des tableaux, placees ou l'on veut par une etiquette cachee.

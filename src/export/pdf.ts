@@ -2,7 +2,7 @@
 // Le fichier est ecrit directement, sans bibliotheque : polices OpenType incorporees (Libertinus Serif et Mono, contours CFF), texte reel
 // et copiable (table ToUnicode, ligatures comprises), signets hierarchiques qui reprennent les titres, liens web cliquables,
 // metadonnees. Chaque ligne est placee a la position que calcule la composition, comme dans l'apercu.
-import { FONT_STYLES, fontFor, FontStyle } from "./font-metrics";
+import { fontFor, resolvedVariant, userStyle, FontStyle, parseUserStyle, variantOf } from "./font-metrics";
 import { ImageAsset } from "./image";
 import { OpenTypeFont } from "./font";
 import type { DecorLeaf } from "./page-decor";
@@ -125,9 +125,19 @@ function baselineIn(top: number, height: number, size: number, font: OpenTypeFon
   return top + (height - (asc + desc)) / 2 + asc;
 }
 
+// Style sous lequel une police est incorporee : pour une famille ajoutee, la variante reellement fournie par ses fichiers.
+function canonicalStyle(style: FontStyle): FontStyle {
+  const u = parseUserStyle(style);
+  if (!u) return style;
+  const variant = resolvedVariant(u.family, u.variant);
+  return variant ? userStyle(u.family, variant) : variantOf(style);
+}
+
 export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOptions): Promise<Uint8Array> {
   const uses = new Map<FontStyle, FontUse>();
-  const use = (s: FontStyle): FontUse => {
+  const use = (requested: FontStyle): FontUse => {
+    // Une variante absente de la famille (gras, italique) est remplacee par une autre : la police n'est incorporee qu'une fois.
+    const s = canonicalStyle(requested);
     let u = uses.get(s);
     if (!u) {
       u = { font: fontFor(s), name: `F${uses.size + 1}`, glyphs: new Map() };
@@ -302,6 +312,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
       let x = left + row.x;
       if (row.align === `center`) x += (row.width - natural(runs, row.fontSize, row.wordSpacing)) / 2;
       const written = drawRuns(ops, links, runs, x, baseline, row.fontSize, row.wordSpacing);
+      if (row.underline && written > 0) ops.push(`q ${num(x)} ${num(H - baseline - row.fontSize * 0.1 - 0.4)} ${num(written)} ${num(Math.max(0.4, row.fontSize * 0.04))} re f Q`);
       if (row.toc) {
         // Entree de la table des matieres : numero de page a droite, points de conduite, zone cliquable sur toute la ligne.
         const right = left + row.x + row.width;
@@ -436,7 +447,15 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
   const info = reserve();
   const outlineRoot = reserve();
   const fontIds = new Map<FontStyle, number>();
-  for (const s of FONT_STYLES) if (uses.has(s)) fontIds.set(s, reserve());
+  // Numero d'ordre de chaque famille ajoutee, pour des noms de police distincts dans le PDF.
+  const userNumbers = new Map<string, number>();
+  const userNumber = (family: string): number => {
+    if (!userNumbers.has(family)) userNumbers.set(family, userNumbers.size + 1);
+    return userNumbers.get(family) as number;
+  };
+  // Nom de police PDF : lettres, chiffres et tirets seulement.
+  const pdfName = (name: string): string => name.replace(/[^A-Za-z0-9]/g, ``).slice(0, 40) || `Font`;
+  for (const s of uses.keys()) fontIds.set(s, reserve());
   const pageIds = pages.map(() => reserve());
   const contentIds = pages.map(() => reserve());
 
@@ -449,26 +468,30 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
     const toUni = reserve();
     const f = u.font;
     // Les polices sont des sous-ensembles latins : leur nom porte la marque de sous-ensemble de six majuscules.
-    const baseName = {
-      regular: `MMWSRG+LibertinusSerif-Regular`,
-      italic: `MMWSIT+LibertinusSerif-Italic`,
-      bold: `MMWSBD+LibertinusSerif-Bold`,
-      boldItalic: `MMWSBI+LibertinusSerif-BoldItalic`,
-      mono: `MMWMRG+LibertinusMono-Regular`,
-    }[styleName];
+    const user = parseUserStyle(styleName);
+    const baseName = user
+      ? `MMWU${String(userNumber(user.family)).padStart(2, `0`)}+${pdfName(f.postScriptName || f.family || user.family)}-${user.variant}`
+      : {
+          regular: `MMWSRG+LibertinusSerif-Regular`,
+          italic: `MMWSIT+LibertinusSerif-Italic`,
+          bold: `MMWSBD+LibertinusSerif-Bold`,
+          boldItalic: `MMWSBI+LibertinusSerif-BoldItalic`,
+          mono: `MMWMRG+LibertinusMono-Regular`,
+        }[styleName as `regular`];
+    const truetype = f.flavor === `truetype`;
     define(type0, async () => `<< /Type /Font /Subtype /Type0 /BaseFont /${baseName} /Encoding /Identity-H /DescendantFonts [${cid} 0 R] /ToUnicode ${toUni} 0 R >>`);
     const gids = [...u.glyphs.keys()].sort((a, b) => a - b);
     define(cid, async () => {
       const w = gids.map((g) => `${g} [${num((f.advance(g) * 1000) / f.unitsPerEm)}]`).join(` `);
-      return `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /${baseName} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${desc} 0 R /DW 500 /W [${w}] >>`;
+      return `<< /Type /Font /Subtype /${truetype ? `CIDFontType2` : `CIDFontType0`} /BaseFont /${baseName} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${desc} 0 R /DW 500 ${truetype ? `/CIDToGIDMap /Identity ` : ``}/W [${w}] >>`;
     });
-    const bold = styleName === `bold` || styleName === `boldItalic`;
-    const italic = styleName === `italic` || styleName === `boldItalic`;
+    const bold = variantOf(styleName) === `bold` || variantOf(styleName) === `boldItalic` || f.isBold;
+    const italic = variantOf(styleName) === `italic` || variantOf(styleName) === `boldItalic` || f.isItalic;
     define(desc, async () => {
       const bbox = f.bbox.map((v) => num((v * 1000) / f.unitsPerEm)).join(` `);
-      return `<< /Type /FontDescriptor /FontName /${baseName} /Flags ${styleName === `mono` ? 33 : 34 | (italic ? 64 : 0)} /FontBBox [${bbox}] /ItalicAngle ${num(f.italicAngle)} /Ascent ${num((f.ascender * 1000) / f.unitsPerEm)} /Descent ${num((f.descender * 1000) / f.unitsPerEm)} /CapHeight ${num((f.capHeight * 1000) / f.unitsPerEm)} /StemV ${bold ? 140 : 80} /FontFile3 ${file} 0 R >>`;
+      return `<< /Type /FontDescriptor /FontName /${baseName} /Flags ${styleName === `mono` ? 33 : 34 | (italic ? 64 : 0)} /FontBBox [${bbox}] /ItalicAngle ${num(f.italicAngle)} /Ascent ${num((f.ascender * 1000) / f.unitsPerEm)} /Descent ${num((f.descender * 1000) / f.unitsPerEm)} /CapHeight ${num((f.capHeight * 1000) / f.unitsPerEm)} /StemV ${bold ? 140 : 80} /${truetype ? `FontFile2` : `FontFile3`} ${file} 0 R >>`;
     });
-    define(file, async () => stream(`/Subtype /CIDFontType0C`, f.cff));
+    define(file, async () => stream(truetype ? `/Length1 ${f.cff.length}` : `/Subtype /CIDFontType0C`, f.cff));
     define(toUni, async () => stream(``, encoder.encode(toUnicodeCMap(u.glyphs))));
   }
 

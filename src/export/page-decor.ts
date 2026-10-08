@@ -3,6 +3,7 @@
 // et le PDF. Le numero est dessine en dernier, donc au premier plan.
 import { measureText, FontStyle } from "./font-metrics";
 import type { ImageAsset } from "./image";
+import { sizeFactor, styleOf, TextSpec } from "../text-style";
 import type { Page } from "./paginate";
 import type { PageSetup } from "./typeset";
 import { displaySize } from "./image";
@@ -36,6 +37,8 @@ export interface DecorContext {
   created: string;
   modified: string;
   images?: Map<string, ImageAsset>;
+  // Police et taille du texte de l'en-tete, du pied de page et du bord (reglage « Polices et titres »).
+  typography?: TextSpec;
 }
 
 export interface DecorResult {
@@ -97,8 +100,8 @@ function pieces(source: string, band: Band, rotated: boolean, textColor: string,
     }
     const text = t.kind === `text` ? t.text : valueOf(t.name, values);
     if (text === ``) continue;
-    const size = SIZE_POINTS[t.size];
-    const style: FontStyle = t.bold && t.italic ? `boldItalic` : t.bold ? `bold` : t.italic ? `italic` : `regular`;
+    const size = SIZE_POINTS[t.size] * (ctx.typography ? sizeFactor(ctx.typography) : 1);
+    const style: FontStyle = ctx.typography ? styleOf({ ...ctx.typography, bold: ctx.typography.bold || t.bold, italic: ctx.typography.italic || t.italic }) : t.bold && t.italic ? `boldItalic` : t.bold ? `bold` : t.italic ? `italic` : `regular`;
     const w = measureText(text, size, style).width;
     if (t.kind === `variable` && t.name === `page`) {
       const shape = band.pageShape;

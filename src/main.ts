@@ -34,6 +34,8 @@ import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
 import { DEFAULT_SETTINGS, FixedEntry, migrateSettings, MmSettings } from "./settings";
 import { MmSettingTab } from "./settings-tab";
+import { FontStore } from "./font-store";
+import type { TypographyHost } from "./typography-modal";
 
 // Part de la largeur, en pourcentage, donnee au volet de la vue Liste a son ouverture.
 const LIST_PANE_PERCENT = 28;
@@ -48,6 +50,8 @@ export default class MindmapWritingPlugin extends Plugin {
   functions = new FunctionRegistry<FunctionContext>();
   helpEntries = new HelpRegistry();
   panel = new ButtonPanel(this);
+  // Polices ajoutees au coffre (dossier des polices).
+  fonts = new FontStore(this.app, () => this.settings.fontFolder);
   // Scripts : les scripts officiels sont integres au plugin ; les autres sont des fichiers ajoutes a la main.
   scriptStore = new ScriptStore(this.app, `bigorneau`);
   scripts: ScriptManager = new ScriptManager(
@@ -62,7 +66,7 @@ export default class MindmapWritingPlugin extends Plugin {
       saveState: () => void this.saveSettings(false),
     },
     { enabled: {}, approved: {} },
-    [FORMULAS_SCRIPT, createPageScript(() => this.settings.exportAuthor)]
+    [FORMULAS_SCRIPT, createPageScript(() => this.settings.exportAuthor, this.typographyHost())]
   );
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
@@ -182,6 +186,21 @@ export default class MindmapWritingPlugin extends Plugin {
     // Panneau de boutons : pose dans chaque editeur Markdown, mis a jour quand les volets changent.
     this.helpEntries.add(PLUGIN_HELP);
     this.app.workspace.onLayoutReady(() => void this.startScripts());
+    // Polices du coffre : lues au demarrage, puis des qu'un fichier du dossier des polices est ajoute, change, renomme ou supprime.
+    this.app.workspace.onLayoutReady(() => void this.fonts.refresh());
+    const refreshFonts = debounce(() => void this.fonts.refresh(), 600, true);
+    const fontFileChanged = (file: { path: string }): void => {
+      if (this.fonts.isFontPath(file.path)) refreshFonts();
+    };
+    this.registerEvent(this.app.vault.on(`create`, fontFileChanged));
+    this.registerEvent(this.app.vault.on(`modify`, fontFileChanged));
+    this.registerEvent(this.app.vault.on(`delete`, fontFileChanged));
+    this.registerEvent(
+      this.app.vault.on(`rename`, (file, oldPath) => {
+        if (this.fonts.isFontPath(file.path) || this.fonts.isFontPath(oldPath)) refreshFonts();
+      })
+    );
+    this.register(this.fonts.onChange(() => this.refreshExportPreviews()));
     // Obsidian signale souvent plusieurs changements de volets de suite : un seul recalcul du panneau.
     const syncPanelSoon = debounce(() => this.panel.sync(), 60, true);
     this.registerEvent(this.app.workspace.on(`layout-change`, () => syncPanelSoon()));
@@ -444,6 +463,7 @@ export default class MindmapWritingPlugin extends Plugin {
 
   onunload() {
     void this.saveData(this.settings);
+    this.fonts.destroy();
     this.forEachView((v) => v.clearActive());
     for (const cm of this.editorViews) if (this.fixedFor(cm)) clearFixedState(cm);
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MINDMAP);
@@ -856,6 +876,33 @@ export default class MindmapWritingPlugin extends Plugin {
   private persistLater = debounce(() => void this.saveData(this.settings), 400, true);
 
   // Enregistre les reglages et, si demande, redessine les cartes ouvertes.
+  // Polices et titres : style general, polices du coffre et dossier des polices (fenetre « Polices et titres » et reglages).
+  typographyHost(): Omit<TypographyHost, `note`> {
+    return {
+      general: () => this.settings.typography,
+      setGeneral: (style) => {
+        this.settings.typography = style;
+        void this.saveSettings(false);
+        this.refreshExportPreviews();
+    },
+      families: () => this.fonts.library.families,
+      problems: () => this.fonts.library.problems,
+      folder: () => this.settings.fontFolder,
+      prepareFolder: async () => {
+        const folder = normalizePath(this.settings.fontFolder);
+        let path = ``;
+        for (const part of folder.split(`/`)) {
+          path = path === `` ? part : `${path}/${part}`;
+          if (!this.app.vault.getAbstractFileByPath(path)) await this.app.vault.createFolder(path);
+        }
+        await this.fonts.refresh(true);
+    },
+      refresh: async () => {
+        await this.fonts.refresh(true);
+    },
+    };
+  }
+
   async saveSettings(redraw = true) {
     this.applyBodySettings();
     this.persistLater();
@@ -902,7 +949,7 @@ export default class MindmapWritingPlugin extends Plugin {
   // carte, et ne se fait pas pour un apercu cache.
   private refreshExportPreviewsSoon = debounce(() => this.refreshExportPreviews(), 1500, true);
 
-  private refreshExportPreviews() {
+  refreshExportPreviews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_EXPORT)) {
       if (leaf.view instanceof ExportPreviewView) leaf.view.requestRefresh();
     }

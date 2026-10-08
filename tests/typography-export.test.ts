@@ -1,0 +1,77 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { OpenTypeFont } from "../src/export/font";
+import { clearFontFamilies, registerFontFamily } from "../src/export/font-metrics";
+import { composeNote, composeToPdf } from "../src/export/compose";
+import { DEFAULT_PAGE_STYLE } from "../src/export/typeset";
+import { defaultTypography, setPath } from "../src/text-style";
+import { formatPageMarker, defaultConfig } from "../src/page-config";
+
+const load = (name: string): OpenTypeFont => new OpenTypeFont(new Uint8Array(readFileSync(`tests/fonts/${name}`)));
+const NOTE = `# Energie\nUn texte.\n## Bâtiments\nAutre texte.\n## Réseaux\nEncore.\n### Détail\nFin.\n# Eau\nDernier.`;
+const style = (t: ReturnType<typeof defaultTypography>) => ({ ...DEFAULT_PAGE_STYLE, typography: t });
+const headingRows = (c: ReturnType<typeof composeNote>) => c.typeset.rows.filter((r) => r.kind === `heading`).map((r) => r.text);
+
+test(`sans reglage, les titres et les tailles restent ceux d'origine`, () => {
+  const c = composeNote(NOTE, `N.md`);
+  assert.deepEqual(headingRows(c), [`Energie`, `Bâtiments`, `Réseaux`, `Détail`, `Eau`]);
+  assert.equal(c.typeset.rows.find((r) => r.kind === `heading`)?.fontSize, 17);
+});
+
+test(`numerotation decimale et en plan, dans le titre et dans le plan de navigation`, () => {
+  const dec = composeNote(NOTE, `N.md`, undefined, style(setPath(defaultTypography(), `numbering`, `decimal`)));
+  assert.deepEqual(headingRows(dec).map((t) => t.replace(/ /g, ` `)), [`1 Energie`, `1.1 Bâtiments`, `1.2 Réseaux`, `1.2.1 Détail`, `2 Eau`]);
+  assert.equal(dec.typeset.rows.find((r) => r.kind === `heading`)?.heading?.title, `1 Energie`);
+  const plan = composeNote(NOTE, `N.md`, undefined, style(setPath(defaultTypography(), `numbering`, `outline`)));
+  assert.deepEqual(headingRows(plan).map((t) => t.replace(/ /g, ` `)), [`I. Energie`, `A. Bâtiments`, `B. Réseaux`, `1. Détail`, `II. Eau`]);
+  // Un niveau non numerote est ignore et ne compte pas.
+  const t2 = setPath(setPath(defaultTypography(), `numbering`, `decimal`), `h2.numbered`, false);
+  assert.deepEqual(headingRows(composeNote(NOTE, `N.md`, undefined, style(t2))).map((t) => t.replace(/ /g, ` `)), [`1 Energie`, `Bâtiments`, `Réseaux`, `1.1 Détail`, `2 Eau`]);
+});
+
+test(`casse, taille et soulignement d'un niveau de titre`, () => {
+  let t = setPath(defaultTypography(), `h2.case`, `upper`);
+  t = setPath(t, `h2.size`, 50);
+  t = setPath(t, `h2.underline`, true);
+  const c = composeNote(NOTE, `N.md`, undefined, style(t));
+  const h2 = c.typeset.rows.filter((r) => r.kind === `heading`)[1];
+  assert.equal(h2.text, `BÂTIMENTS`);
+  assert.equal(h2.fontSize, 21);
+  assert.equal(h2.underline, true);
+  // Le plan de navigation garde le titre tel qu'il est ecrit.
+  assert.equal(h2.heading?.title, `Bâtiments`);
+});
+
+test(`une famille ajoutee sert au corps de texte et aux titres, et le PDF l'incorpore`, async () => {
+  clearFontFamilies();
+  registerFontFamily(`test-serif`, { regular: load(`TestSerif-Regular.ttf`), bold: load(`TestSerif-Bold.ttf`), italic: load(`TestSerif-Italic.ttf`), boldItalic: load(`TestSerif-BoldItalic.ttf`) });
+  let t = setPath(defaultTypography(), `body.family`, `test-serif`);
+  t = setPath(t, `h1.family`, `test-serif`);
+  const c = composeNote(NOTE, `N.md`, undefined, style(t));
+  const text = c.typeset.rows.find((r) => r.kind === `text`);
+  assert.equal(text?.runs?.[0].style, `u:test-serif:regular`);
+  const h1 = c.typeset.rows.find((r) => r.kind === `heading`);
+  assert.equal(h1?.runs?.[0].style, `u:test-serif:bold`);
+  const pdf = Buffer.from(await composeToPdf(c, { creator: `t`, created: new Date(0) })).toString(`latin1`);
+  assert.match(pdf, /FontFile2/);
+  assert.match(pdf, /\/BaseFont \/MMWU\d+\+\S+-regular/);
+  // Une famille retiree du coffre retombe sur la police d'origine sans planter.
+  clearFontFamilies();
+  const back = composeNote(NOTE, `N.md`, undefined, style(t));
+  assert.equal(back.typeset.rows.find((r) => r.kind === `text`)?.runs?.[0].style, `regular`);
+});
+
+test(`une note peut changer des champs du style general sans toucher aux autres`, () => {
+  const marker = formatPageMarker({ ...defaultConfig(), typography: { "h1.case": `upper`, numbering: `decimal` } });
+  const general = setPath(defaultTypography(), `h2.case`, `lower`);
+  const c = composeNote(`${marker}\n${NOTE}`, `N.md`, undefined, style(general));
+  assert.deepEqual(headingRows(c).map((t) => t.replace(/ /g, ` `)), [`1 ENERGIE`, `1.1 bâtiments`, `1.2 réseaux`, `1.2.1 Détail`, `2 EAU`]);
+});
+
+test(`la table des matieres reprend les numeros et garde la casse d'origine`, () => {
+  const t = setPath(setPath(defaultTypography(), `numbering`, `decimal`), `h1.case`, `upper`);
+  const c = composeNote(`${NOTE}`.replace(`# Energie`, `---\ntoc: true\n---\n# Energie`), `N.md`, undefined, style(t));
+  const toc = c.typeset.rows.filter((r) => r.kind === `toc`).map((r) => r.text.replace(/ /g, ` `));
+  assert.ok(toc.includes(`1 Energie`) && toc.includes(`1.1 Bâtiments`), toc.join(`|`));
+});

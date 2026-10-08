@@ -10,6 +10,7 @@ import { columnsOf, FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, PageSetup, Row } from "./export/typeset";
 import { loadAssets, pageStyleOf } from "./export-context";
+import { cssFamilyOf } from "./font-store";
 import { warningLines } from "./export-report";
 import { MATH_SERVICE, MathRenderer } from "./script-formulas";
 import { loadExportFont } from "./export-font";
@@ -108,6 +109,13 @@ export class ExportPreviewView extends ItemView {
       if (run.style === `mono`) span.addClass(`mmw-run-mono`);
       if (run.style === `bold` || run.style === `boldItalic`) span.addClass(`mmw-run-bold`);
       if (run.style === `italic` || run.style === `boldItalic`) span.addClass(`mmw-run-italic`);
+      // Police ajoutee au coffre : le fichier de la variante est deja gras ou italique, le navigateur n'a rien a y ajouter.
+      const css = cssFamilyOf(run.style);
+      if (css) {
+        span.style.fontFamily = `"${css}"`;
+        span.style.fontWeight = `normal`;
+        span.style.fontStyle = `normal`;
+      }
       if (run.link) {
         span.addClass(`mmw-export-link`);
         const url = run.link;
@@ -148,8 +156,12 @@ export class ExportPreviewView extends ItemView {
       el.style.fontSize = `${item.size}pt`;
       el.style.lineHeight = `${item.size * 1.14}pt`;
       el.style.color = item.color;
-      if (item.style.startsWith(`bold`)) el.style.fontWeight = `700`;
-      if (item.style.endsWith(`talic`)) el.style.fontStyle = `italic`;
+      const css = cssFamilyOf(item.style);
+      if (css) el.style.fontFamily = `"${css}"`;
+      else if (!item.style.startsWith(`u:`)) {
+        if (item.style.startsWith(`bold`)) el.style.fontWeight = `700`;
+        if (item.style.endsWith(`talic`)) el.style.fontStyle = `italic`;
+      }
     } else if (item.kind === `image`) {
       const url = this.images.get(item.target)?.previewUrl;
       if (!url) return;
@@ -212,6 +224,7 @@ export class ExportPreviewView extends ItemView {
     if (row.kind === `space` || row.kind === `float`) return;
     el.style.fontSize = `${row.fontSize}pt`;
     el.style.lineHeight = `${row.height}pt`;
+    if (row.underline) el.style.textDecoration = `underline`;
     if (row.x >= 0) {
       el.style.paddingLeft = `${row.x}pt`;
       el.style.width = `${row.width + row.x}pt`;
@@ -308,6 +321,7 @@ export class ExportPreviewView extends ItemView {
       return;
     }
     const fontOk = await loadExportFont();
+    await this.plugin.fonts.refresh();
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.read(file));
     if (token !== this.token) return;
 

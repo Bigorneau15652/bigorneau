@@ -5,8 +5,67 @@ import { OpenTypeFont } from "./font";
 import { FONT_FILES } from "./fonts-libertinus";
 
 // Les quatre styles de Libertinus Serif et Libertinus Mono (chasse fixe pour le code et les tableaux).
-export type FontStyle = `regular` | `italic` | `bold` | `boldItalic` | `mono`;
-export const FONT_STYLES: FontStyle[] = [`regular`, `italic`, `bold`, `boldItalic`, `mono`];
+export type BuiltinStyle = `regular` | `italic` | `bold` | `boldItalic` | `mono`;
+export const FONT_STYLES: BuiltinStyle[] = [`regular`, `italic`, `bold`, `boldItalic`, `mono`];
+
+// Variante d'une famille : normal, italique, gras, gras italique.
+export type Variant = `regular` | `italic` | `bold` | `boldItalic`;
+
+// Style d'une police ajoutee par l'utilisateur : u:identifiant-de-famille:variante. Un style est ainsi un simple texte, qui traverse la
+// mise en page (paragraphes, lignes, PDF) sans qu'elle ait a connaitre les familles.
+export type UserStyle = `u:${string}:${Variant}`;
+export type FontStyle = BuiltinStyle | UserStyle;
+
+const USER_STYLE = /^u:(.+):(regular|italic|bold|boldItalic)$/;
+
+export function parseUserStyle(style: string): { family: string; variant: Variant } | null {
+  const m = USER_STYLE.exec(style);
+  return m ? { family: m[1], variant: m[2] as Variant } : null;
+}
+
+export const userStyle = (family: string, variant: Variant): UserStyle => `u:${family}:${variant}`;
+
+// Variante d'un style (le style de chasse fixe compte comme normal).
+export function variantOf(style: FontStyle): Variant {
+  const u = parseUserStyle(style);
+  if (u) return u.variant;
+  return style === `mono` ? `regular` : (style as Variant);
+}
+
+export const variantFrom = (bold: boolean, italic: boolean): Variant => (bold ? (italic ? `boldItalic` : `bold`) : italic ? `italic` : `regular`);
+
+// Meme famille, autre variante (gras, italique...).
+export function withVariant(style: FontStyle, variant: Variant): FontStyle {
+  const u = parseUserStyle(style);
+  return u ? userStyle(u.family, variant) : variant;
+}
+
+// Polices ajoutees par l'utilisateur, par famille. Une variante absente est remplacee par la plus proche (gras italique -> gras ->
+// italique -> normal) : une famille qui n'a qu'un style reste utilisable, sans gras ni italique.
+const families = new Map<string, Partial<Record<Variant, OpenTypeFont>>>();
+const FALLBACK_ORDER: Record<Variant, Variant[]> = {
+  regular: [`regular`, `italic`, `bold`, `boldItalic`],
+  italic: [`italic`, `regular`, `boldItalic`, `bold`],
+  bold: [`bold`, `regular`, `boldItalic`, `italic`],
+  boldItalic: [`boldItalic`, `bold`, `italic`, `regular`],
+};
+
+export function registerFontFamily(id: string, fonts: Partial<Record<Variant, OpenTypeFont>>): void {
+  families.set(id, fonts);
+}
+
+export function clearFontFamilies(): void {
+  families.clear();
+}
+
+export const isFamilyRegistered = (id: string): boolean => families.has(id);
+
+// Variante de la famille qui sera reellement utilisee pour `variant` (pour ecrire le bon nom de police dans le PDF).
+export function resolvedVariant(familyId: string, variant: Variant): Variant | null {
+  const fam = families.get(familyId);
+  if (!fam) return null;
+  return FALLBACK_ORDER[variant].find((v) => fam[v] !== undefined) ?? null;
+}
 
 export const FINE_SPACE = ` `;
 export const NO_BREAK_SPACE = ` `;
@@ -14,11 +73,11 @@ export const NO_BREAK_SPACE = ` `;
 // Caractere de remplacement quand la police n'a pas le caractere demande.
 const FALLBACK = 0x3f;
 
-const fonts = new Map<FontStyle, OpenTypeFont>();
-const bytes = new Map<FontStyle, Uint8Array>();
+const fonts = new Map<BuiltinStyle, OpenTypeFont>();
+const bytes = new Map<BuiltinStyle, Uint8Array>();
 
 // Octets du fichier de police d'un style (decodes une seule fois).
-export function fontBytes(style: FontStyle): Uint8Array {
+export function fontBytes(style: BuiltinStyle): Uint8Array {
   let b = bytes.get(style);
   if (!b) {
     const binary = atob(FONT_FILES[style]);
@@ -30,6 +89,14 @@ export function fontBytes(style: FontStyle): Uint8Array {
 }
 
 export function fontFor(style: FontStyle = `regular`): OpenTypeFont {
+  const u = parseUserStyle(style);
+  if (u) {
+    const fam = families.get(u.family);
+    const found = fam ? FALLBACK_ORDER[u.variant].map((v) => fam[v]).find((f) => f !== undefined) : undefined;
+    // Famille inconnue (police retiree du coffre) : la police d'origine, a la meme variante.
+    return found ?? fontFor(u.variant);
+  }
+  style = style as BuiltinStyle;
   let f = fonts.get(style);
   if (!f) {
     f = new OpenTypeFont(fontBytes(style));
