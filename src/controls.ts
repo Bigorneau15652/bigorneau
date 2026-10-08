@@ -32,10 +32,6 @@ export interface ControlActions {
   toggleView: () => void;
   // Ouvre une note fixe : copie du chapitre selectionne dans son propre volet.
   addFixed: () => void;
-  // Apercu de l'export de haute qualite (ordinateur seulement : absent sur tablette et telephone).
-  openExport?: () => void;
-  // Export de la note en PDF (ordinateur seulement).
-  exportPdf?: () => void;
 }
 
 type PopupKind = `menu` | `style` | `view` | `tags` | null;
@@ -612,22 +608,6 @@ export class MapControls {
         this.closePopup();
         a.addFixed();
       }),
-      ...(a.openExport
-        ? [
-            this.menuItem(ICONS.file, t(`Aperçu de l'export`), () => {
-              this.closePopup();
-              a.openExport?.();
-            }),
-          ]
-        : []),
-      ...(a.exportPdf
-        ? [
-            this.menuItem(ICONS.file, t(`Exporter en PDF…`), () => {
-              this.closePopup();
-              a.exportPdf?.();
-            }),
-          ]
-        : []),
       this.menuItem(ICONS.tag, t(`Étiquettes…`), () => {
         this.open = `tags`;
         this.refresh();

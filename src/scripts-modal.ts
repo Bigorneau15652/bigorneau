@@ -2,6 +2,7 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { currentLang, t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
+import { renderButtonList } from "./panel-buttons";
 import { API_VERSION, ExternalScript, ScriptInfo } from "./scripts";
 
 export class ScriptsModal extends Modal {
@@ -10,7 +11,7 @@ export class ScriptsModal extends Modal {
   }
 
   onOpen(): void {
-    this.titleEl.setText(t(`Scripts`));
+    this.titleEl.setText(t(`Scripts et boutons`));
     this.draw();
   }
 
@@ -25,6 +26,9 @@ export class ScriptsModal extends Modal {
     contentEl.createEl(`p`, { cls: `mmw-scripts-intro`, text: t(`Les scripts ajoutent des fonctions à Bigorneau : chacun apporte des boutons et des commandes. Désactiver un script le rend inactif tout de suite, mais son code ne se décharge qu'au redémarrage d'Obsidian.`) });
     const list = contentEl.createDiv({ cls: `mmw-scripts-list` });
     for (const info of this.plugin.scripts.info()) this.row(list, info);
+    // Boutons du panneau : visibles ou non, ordre, separations (memes reglages que dans les reglages d'Obsidian).
+    new Setting(contentEl).setName(t(`Boutons du panneau`)).setHeading();
+    renderButtonList(contentEl.createDiv(), this.plugin);
     new Setting(contentEl)
       .setName(t(`Ajouter un fichier de script`))
       .setDesc(t(`Un script a les mêmes pouvoirs que le plugin : il peut lire et modifier toutes vos notes, et sur ordinateur accéder aux fichiers de la machine. N'ajoutez que des scripts dont vous connaissez l'origine. Chaque script doit être confirmé avant son premier lancement, et de nouveau s'il change.`))
