@@ -20,7 +20,12 @@ export interface TextSpec {
   highlight: string;
 }
 
+export type HeadingAlign = `left` | `center` | `right`;
+const ALIGNS: HeadingAlign[] = [`left`, `center`, `right`];
+
 export interface HeadingSpec extends TextSpec {
+  // Place du titre dans la largeur de la colonne (un titre justifie n'a pas de sens : sa derniere ligne reste a gauche).
+  align: HeadingAlign;
   case: CaseMode;
   underline: boolean;
   // Le titre de ce niveau est numerote quand une numerotation est choisie.
@@ -57,7 +62,7 @@ export const FRAME_WIDTH_MAX = 6;
 export const BASE_POINTS: Record<string, number> = { body: 11, title: 22, h1: 17, h2: 14, h3: 12, h4: 11, h5: 11, h6: 11, caption: 10, footnote: 9, decor: 10 };
 
 const text = (bold = false): TextSpec => ({ family: ``, points: 0, bold, italic: false, color: ``, highlight: `` });
-const heading = (): HeadingSpec => ({ ...text(true), case: `none`, underline: false, numbered: true, frame: `none`, frameWidth: 0.75, frameColor: `#000000`, frameFill: `` });
+const heading = (): HeadingSpec => ({ ...text(true), align: `left`, case: `none`, underline: false, numbered: true, frame: `none`, frameWidth: 0.75, frameColor: `#000000`, frameFill: `` });
 
 // Style d'origine : celui que l'export avait avant que l'on puisse le changer.
 export const defaultTypography = (): TypographyStyle => ({
@@ -91,6 +96,7 @@ const asHeading = (raw: unknown, base: HeadingSpec): HeadingSpec => {
   const r = typeof raw === `object` && raw !== null ? (raw as Record<string, unknown>) : {};
   return {
     ...asText(raw, base),
+    align: ALIGNS.includes(r.align as HeadingAlign) ? (r.align as HeadingAlign) : base.align,
     case: CASES.includes(r.case as CaseMode) ? (r.case as CaseMode) : base.case,
     underline: typeof r.underline === `boolean` ? r.underline : base.underline,
     numbered: typeof r.numbered === `boolean` ? r.numbered : base.numbered,
@@ -125,7 +131,7 @@ export type Overrides = Record<string, string | number | boolean>;
 
 const GROUPS = [`body`, `title`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `caption`, `footnote`, `decor`] as const;
 const TEXT_FIELDS = [`family`, `points`, `bold`, `italic`, `color`, `highlight`] as const;
-const HEADING_FIELDS = [...TEXT_FIELDS, `case`, `underline`, `numbered`, `frame`, `frameWidth`, `frameColor`, `frameFill`] as const;
+const HEADING_FIELDS = [...TEXT_FIELDS, `align`, `case`, `underline`, `numbered`, `frame`, `frameWidth`, `frameColor`, `frameFill`] as const;
 
 const isHeadingGroup = (g: string): boolean => g === `title` || /^h[1-6]$/.test(g);
 

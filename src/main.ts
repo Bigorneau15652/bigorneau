@@ -982,6 +982,12 @@ export default class MindmapWritingPlugin extends Plugin {
         void this.saveSettings(false);
         this.refreshExportPreviews();
     },
+      paragraphs: () => this.settings.paragraphs,
+      setParagraphs: (p) => {
+        this.settings.paragraphs = p;
+        void this.saveSettings(false);
+        this.refreshExportPreviews();
+      },
       families: () => this.fonts.library.families,
       problems: () => this.fonts.library.problems,
       folder: () => this.settings.fontFolder,

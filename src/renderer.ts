@@ -41,6 +41,8 @@ export interface MapCallbacks {
   onUndo: () => void;
   onRedo: () => void;
   onOpenSettings: () => void;
+  onSaveProfile: () => void;
+  onLoadProfile: () => void;
   // Appele quand l'utilisateur change de noeud principal selectionne (null : plus aucun noeud).
   onSelect?: (key: string | null) => void;
   // Appele a chaque changement de la selection (une ou plusieurs cases).
@@ -255,6 +257,8 @@ export class MapRenderer {
       undo: () => this.callbacks.onUndo(),
       redo: () => this.callbacks.onRedo(),
       openSettings: () => this.callbacks.onOpenSettings(),
+      saveProfile: () => this.callbacks.onSaveProfile(),
+      loadProfile: () => this.callbacks.onLoadProfile(),
       change: (patch) => this.callbacks.onChange(patch),
       style: (patch, individual) => this.callbacks.onStyle(patch, individual),
       resetStyle: (individual) => this.callbacks.onResetStyle(individual),

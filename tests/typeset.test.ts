@@ -26,7 +26,8 @@ test(`seule la premiere ligne d'un paragraphe a un retrait et les lignes justifi
   const t = typesetDoc(buildExportDoc(note(1), `A.md`));
   const text = t.rows.filter((r) => r.kind === `text`);
   assert.ok(text.length >= 3);
-  assert.equal(text[0].x, 11);
+  // Retrait d'origine : 0,5 cm (taille S).
+  assert.equal(text[0].x, 14.17);
   assert.ok(text.slice(1).every((r) => r.x === 0));
   assert.ok(text.some((r) => r.wordSpacing !== 0));
 });

@@ -2,10 +2,12 @@
 // reglages de page, et exception pour le seul paragraphe ou se trouve le curseur (etiquette cachee au debut de sa ligne).
 import { App, Modal, Setting } from "obsidian";
 import { t } from "./i18n";
-import { ParagraphFormat, ParaAlign, ParaMode, ParaSize, ParagraphSettings, sanitizeParagraphSettings } from "./paragraph-format";
+import { effectiveParagraphs, ParagraphFormat, ParaAlign, ParaMode, ParaSize, ParagraphSettings, sanitizeParagraphSettings } from "./paragraph-format";
 import type { PageModalHost } from "./page-modal";
 
 export interface ParagraphModalHost extends PageModalHost {
+  // Paragraphes de toutes les notes, que la note suit tant qu'elle n'a pas choisi les siens.
+  general(): ParagraphSettings;
   // Exception du paragraphe sous le curseur, pose et retrait de l'etiquette.
   current(): ParagraphFormat | null;
   setException(format: ParagraphFormat | null): void;
@@ -24,11 +26,11 @@ export class ParagraphModal extends Modal {
 
   constructor(app: App, private host: ParagraphModalHost, private part: ParagraphScope = `document`) {
     super(app);
-    this.settings = host.read().paragraphs;
+    this.settings = effectiveParagraphs(host.general(), host.read().paragraphs);
     const now = host.current();
     if (now) {
       this.align = now.align ?? SAME;
-      this.style = now.mode === `space` ? `space-${now.size ?? `m`}` : (now.mode ?? SAME);
+      this.style = now.mode === `space` ? `space-${now.size ?? `m`}` : now.mode === `indent` && now.indentSize ? `indent-${now.indentSize}` : (now.mode ?? SAME);
     }
   }
 
@@ -38,7 +40,7 @@ export class ParagraphModal extends Modal {
   }
 
   private save(patch: Partial<ParagraphSettings>): void {
-    this.settings = sanitizeParagraphSettings({ ...this.settings, ...patch });
+    this.settings = sanitizeParagraphSettings({ ...this.settings, ...patch, set: true });
     const config = this.host.read();
     config.paragraphs = this.settings;
     this.host.write(config);
@@ -51,6 +53,9 @@ export class ParagraphModal extends Modal {
     if (this.style.startsWith(`space-`)) {
       f.mode = `space`;
       f.size = this.style.slice(6) as ParaSize;
+    } else if (this.style.startsWith(`indent-`)) {
+      f.mode = `indent`;
+      f.indentSize = this.style.slice(7) as ParaSize;
     } else if (this.style !== SAME) f.mode = this.style as ParaMode | `none`;
     return Object.keys(f).length ? f : null;
   }
@@ -67,6 +72,10 @@ export class ParagraphModal extends Modal {
         new Setting(contentEl).setName(t(`Taille de l'espace`)).setDesc(t(`S : 4 pt, M : 8 pt, L : 14 pt. Pas de retrait : l'alignement reste le même.`)).addDropdown((d) =>
           d.addOptions({ s: `S`, m: `M`, l: `L` }).setValue(this.settings.size).onChange((v) => this.save({ size: v as ParaSize }))
         );
+      } else {
+        new Setting(contentEl).setName(t(`Taille du retrait`)).setDesc(t(`S : 0,5 cm, M : 1 cm, L : 1,5 cm.`)).addDropdown((d) =>
+          d.addOptions({ s: `S`, m: `M`, l: `L` }).setValue(this.settings.indentSize).onChange((v) => this.save({ indentSize: v as ParaSize }))
+        );
       }
       new Setting(contentEl).setName(t(`Alignement`)).addDropdown((d) => d.addOptions(align).setValue(this.settings.align).onChange((v) => this.save({ align: v as ParaAlign })));
       return;
@@ -80,6 +89,9 @@ export class ParagraphModal extends Modal {
         .addOptions({
           [SAME]: t(`Comme le document`),
           indent: t(`Retrait de la première ligne`),
+          "indent-s": t(`Retrait : S`),
+          "indent-m": t(`Retrait : M`),
+          "indent-l": t(`Retrait : L`),
           "space-s": t(`Espace avant : S`),
           "space-m": t(`Espace avant : M`),
           "space-l": t(`Espace avant : L`),

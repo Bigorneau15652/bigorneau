@@ -13,7 +13,7 @@ import { listMarkersIn, placeListMarker, removeListMarker } from "./illustration
 import { PageZoneModal } from "./page-zone-modal";
 import { pageZoneAt, setPageZone } from "./page-zone";
 import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
-import { defaultParagraphSettings, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
+import { defaultParagraphSettings, isParagraphSet, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
 import type { OfficialScript } from "./scripts";
 import { TypographyHost, TypographyModal } from "./typography-modal";
 
@@ -76,6 +76,7 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
       return {
         read: () => readPageConfig(editor.getValue()),
         write: (c) => applyPageConfig(editor, c),
+        general: () => typography.paragraphs(),
         current: () => paragraphMarkerAt(editor.getValue(), offset()),
         setException: (format) => {
           const change = setParagraphMarker(editor.getValue(), offset(), format);
@@ -140,6 +141,15 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
               const config = readPageConfig(editor.getValue());
               if (Object.keys(overrides).length > 0) config.typography = overrides;
               else delete config.typography;
+              applyPageConfig(editor, config);
+            },
+            paragraphs: () => {
+              const p = readPageConfig(editor.getValue()).paragraphs;
+              return isParagraphSet(p) ? p : undefined;
+            },
+            setParagraphs: (p) => {
+              const config = readPageConfig(editor.getValue());
+              config.paragraphs = p ?? defaultParagraphSettings();
               applyPageConfig(editor, config);
             },
           };

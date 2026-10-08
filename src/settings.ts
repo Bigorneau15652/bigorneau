@@ -1,5 +1,6 @@
 // Reglages du plugin (sans dependance a Obsidian pour pouvoir etre teste hors de l'application).
 import { BulletId, DEFAULT_BULLETS, sanitizeBullets } from "./bullets";
+import { defaultParagraphSettings, ParagraphSettings, sanitizeParagraphSettings } from "./paragraph-format";
 import { defaultTypography, sanitizeTypography, TypographyStyle } from "./text-style";
 
 export type LongTitles = `ellipsis` | `wrap`;
@@ -180,6 +181,8 @@ export interface MmSettings {
   exportProtrusion: boolean;
   // Puces des listes a puces dans l'export, de l'index 0 (premier niveau) au sixieme niveau ; au-dela, le trait d'union.
   exportBullets: BulletId[];
+  // Paragraphes de toutes les notes : retrait ou espace, taille du retrait, alignement. Une note peut avoir les siens.
+  paragraphs: ParagraphSettings;
   // Tables des matieres : generale au debut du document, et de chaque chapitre ; niveaux de titres listes (1 a 6). Les proprietes
   // toc, toc-depth, chapter-toc et chapter-toc-depth d'une note l'emportent sur ces reglages.
   exportToc: boolean;
@@ -288,6 +291,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportFootnoteNumbering: `continuous`,
   exportProtrusion: true,
   exportBullets: [...DEFAULT_BULLETS],
+  paragraphs: defaultParagraphSettings(),
   exportToc: false,
   exportTocDepth: 3,
   exportChapterToc: false,
@@ -394,6 +398,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   if (![`continuous`, `perChapter`].includes(merged.exportFootnoteNumbering)) merged.exportFootnoteNumbering = `continuous`;
   merged.exportProtrusion = merged.exportProtrusion !== false;
   merged.exportBullets = sanitizeBullets(data.exportBullets);
+  merged.paragraphs = sanitizeParagraphSettings(data.paragraphs);
   merged.exportToc = merged.exportToc === true;
   merged.exportChapterToc = merged.exportChapterToc === true;
   merged.panelLayoutDone = merged.panelLayoutDone === true;

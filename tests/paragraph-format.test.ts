@@ -47,9 +47,10 @@ test(`l'etiquette est retiree du texte et attachee a son paragraphe, seule sur s
 });
 
 test(`les reglages de paragraphes du document sont relus et bornes`, () => {
-  assert.deepEqual(sanitizeParagraphSettings({ mode: `space`, size: `l`, align: `right` }), { mode: `space`, size: `l`, align: `right` });
-  assert.deepEqual(sanitizeParagraphSettings({ mode: `x`, size: `xl`, align: `bas` }), { mode: `indent`, size: `m`, align: `justify` });
-  assert.deepEqual(sanitizeParagraphSettings(null), { mode: `indent`, size: `m`, align: `justify` });
+  assert.deepEqual(sanitizeParagraphSettings({ mode: `space`, size: `l`, align: `right` }), { mode: `space`, size: `l`, indentSize: `s`, align: `right` });
+  assert.deepEqual(sanitizeParagraphSettings({ mode: `x`, size: `xl`, indentSize: `l`, align: `bas` }), { mode: `indent`, size: `m`, indentSize: `l`, align: `justify` });
+  assert.deepEqual(sanitizeParagraphSettings(null), { mode: `indent`, size: `m`, indentSize: `s`, align: `justify` });
+  assert.deepEqual(sanitizeParagraphSettings({ set: true }), { mode: `indent`, size: `m`, indentSize: `s`, align: `justify`, set: true });
 });
 
 const firstLines = (text: string): { x: number; width: number; kind: string; height: number }[] => composeNote(text, `N.md`).typeset.rows.filter((r) => r.kind === `text`);
@@ -59,7 +60,7 @@ test(`par defaut, un retrait et du texte justifie ; le mode espace supprime le r
   const indent = composeNote(note(() => undefined, body), `N.md`).typeset.rows;
   const firstIndent = indent.find((r) => r.kind === `text`);
   assert.ok(firstIndent && firstIndent.x > 0);
-  const space = composeNote(note((c) => (c.paragraphs = { mode: `space`, size: `l`, align: `justify` }), body), `N.md`).typeset.rows;
+  const space = composeNote(note((c) => (c.paragraphs = { mode: `space`, size: `l`, indentSize: `s`, align: `justify` }), body), `N.md`).typeset.rows;
   const firstSpace = space.find((r) => r.kind === `text`);
   assert.ok(firstSpace && firstSpace.x === 0);
   // Un seul espace de 14 points entre les deux paragraphes.
