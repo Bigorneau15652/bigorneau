@@ -5,6 +5,7 @@
 // Ce module ne depend pas d'Obsidian : il sert a l'export et aux fenetres de reglage.
 
 import { defaultLayout, PageLayout, sanitizeLayout } from "./page-layout";
+import { Overrides, sanitizeOverrides } from "./text-style";
 import { defaultParagraphSettings, ParagraphSettings, sanitizeParagraphSettings } from "./paragraph-format";
 
 export type SizeCode = `xs` | `s` | `m` | `l`;
@@ -75,6 +76,8 @@ export interface PageConfig {
   layout: PageLayout;
   // Paragraphes : retrait ou espace entre paragraphes, alignement.
   paragraphs: ParagraphSettings;
+  // Polices et titres propres a cette note : seulement ce qui differe du style general (voir text-style.ts). Absent : rien ne differe.
+  typography?: Overrides;
 }
 
 export const VARIABLES = [`document`, `chapter`, `section`, `author`, `date`, `created`, `modified`, `page`, `pages`] as const;
@@ -156,6 +159,8 @@ function bandOf(v: unknown): Band {
 export function sanitizeConfig(raw: unknown): PageConfig {
   const r = isObject(raw) ? raw : {};
   const config: PageConfig = { header: bandOf(r.header), footer: bandOf(r.footer), edge: bandOf(r.edge), skipFirst: flag(r.skipFirst, false), layout: sanitizeLayout(r.layout), paragraphs: sanitizeParagraphSettings(r.paragraphs) };
+  const typography = sanitizeOverrides(r.typography);
+  if (Object.keys(typography).length > 0) config.typography = typography;
   const n = isObject(r.numbering) ? r.numbering : null;
   if (n && n.enabled === true) {
     const place = pick(n.place, [`header`, `footer`, `outer`], `footer`);

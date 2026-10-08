@@ -20,6 +20,7 @@ import {
 import { SHAPE_CHOICES, ShapeChoice, shapeChoice, shapePatch } from "./style";
 import { setSvg } from "./dom";
 import { renderButtonList } from "./panel-buttons";
+import { renderFontInfo, TypographyModal } from "./typography-modal";
 
 type KeyField = `keyPrev` | `keyNext` | `keyParent` | `keyChild`;
 type IconField = `iconExternal` | `iconInternal` | `iconWeb`;
@@ -522,6 +523,23 @@ export class MmSettingTab extends PluginSettingTab {
     this.exportLevels(el, t(`Niveaux de la table générale`), t(`Niveaux de titres listés. La propriété toc-depth de la note l'emporte sur ce réglage.`), s.exportTocDepth, (v) => (s.exportTocDepth = v));
     this.exportToggle(el, t(`Table des matières de chaque chapitre`), t(`Placée sous le titre de chaque chapitre de plus haut niveau, elle ne liste que les sous-titres de ce chapitre. La propriété chapter-toc de la note l'emporte sur ce réglage.`), s.exportChapterToc, (v) => (s.exportChapterToc = v));
     this.exportLevels(el, t(`Niveaux de la table d'un chapitre`), t(`Niveaux de titres listés, titre du chapitre compris. La propriété chapter-toc-depth de la note l'emporte sur ce réglage.`), s.exportChapterTocDepth, (v) => (s.exportChapterTocDepth = v));
+
+    new Setting(el).setName(t(`Polices et titres`)).setHeading();
+    new Setting(el)
+      .setName(t(`Dossier des polices`))
+      .setDesc(t(`Dossier du coffre où l'on dépose les fichiers .ttf ou .otf à utiliser dans l'export (par exemple téléchargés sur Google Fonts ou DaFont). La licence de chaque police est de votre responsabilité.`))
+      .addText((x) =>
+        x.setValue(s.fontFolder).onChange(async (v) => {
+          s.fontFolder = v.trim().replace(/^\/+|\/+$/g, ``) || `Bigorneau/Polices`;
+          await this.plugin.saveSettings(false);
+          await this.plugin.fonts.refresh(true);
+        })
+      );
+    new Setting(el)
+      .setName(t(`Police, taille, casse et numérotation des titres`))
+      .setDesc(t(`Réglage pour toutes les notes. Pour une seule note, utilisez le bouton Polices et titres du panneau.`))
+      .addButton((b) => b.setButtonText(t(`Ouvrir`)).onClick(() => new TypographyModal(this.app, this.plugin.typographyHost()).open()));
+    renderFontInfo(el, this.plugin.typographyHost(), () => this.display());
 
     new Setting(el).setName(t(`Figures, renvois et médias`)).setHeading();
     this.exportChoice(

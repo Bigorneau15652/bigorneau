@@ -1,7 +1,8 @@
-// Export de haute qualite, etage 3 : lecture d'une police OpenType (contours CFF) et mise en forme du texte.
-// Lit les tables head, hhea, hmtx, maxp, cmap, OS/2, GSUB (ligatures) et GPOS (crenage des paires), et fournit les glyphes d'un
-// texte avec leurs avances, ligatures formees et crenage applique. Le contenu du fichier CFF est repris tel quel pour
-// l'incorporer au PDF. Ce module ne depend ni d'Obsidian ni du navigateur.
+// Export de haute qualite, etage 3 : lecture d'une police OpenType (contours CFF ou TrueType) et mise en forme du texte.
+// Lit les tables head, hhea, hmtx, maxp, cmap, name, OS/2, GSUB (ligatures), GPOS (crenage des paires) et, a defaut, kern, et fournit
+// les glyphes d'un texte avec leurs avances, ligatures formees et crenage applique. Le contenu de la table CFF (police OpenType a
+// contours CFF) ou le fichier entier (police TrueType) est repris tel quel pour l'incorporer au PDF. Ce module ne depend ni d'Obsidian
+// ni du navigateur.
 
 export interface ShapedGlyph {
   gid: number;
@@ -41,8 +42,23 @@ export class OpenTypeFont {
   readonly italicAngle: number;
   capHeight: number;
   readonly numGlyphs: number;
-  // Contenu du fichier CFF (contours), a incorporer au PDF.
+  // Contours CFF (police OpenType) ou TrueType (glyf) : ce qui change l'objet de police du PDF.
+  readonly flavor: `cff` | `truetype`;
+  // Ce qu'il faut incorporer au PDF : la table CFF (police a contours CFF) ou le fichier entier (police TrueType).
   readonly cff: Uint8Array;
+  // Noms lus dans la table name : famille et sous-famille (Regular, Bold Italic...), et nom PostScript.
+  family = ``;
+  subfamily = ``;
+  postScriptName = ``;
+  // Gras et italique d'apres la police elle-meme (OS/2 et head).
+  isBold = false;
+  isItalic = false;
+  // Droits d'incorporation (OS/2 fsType) : vrai quand le fichier interdit de l'incorporer dans un document.
+  embeddingRestricted = false;
+  // Police variable : seule l'instance par defaut est utilisee.
+  isVariable = false;
+  // Crenage de l'ancienne table kern (paires de glyphes), utilise quand GPOS n'en donne pas.
+  private kernPairs = new Map<number, number>();
   readonly cmap = new Map<number, number>();
   private advances: number[] = [];
   private ligatures = new Map<number, LigatureRule[]>();
@@ -53,7 +69,11 @@ export class OpenTypeFont {
   constructor(readonly data: Uint8Array) {
     this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     const tag = String.fromCharCode(...data.subarray(0, 4));
-    if (tag !== `OTTO`) throw new Error(`police OpenType a contours CFF attendue`);
+    if (tag === `ttcf`) throw new Error(`collection de polices (.ttc) non prise en charge`);
+    const isCff = tag === `OTTO`;
+    const isTrueType = tag === `\u0000\u0001\u0000\u0000` || tag === `true`;
+    if (!isCff && !isTrueType) throw new Error(`police OpenType ou TrueType attendue (WOFF et WOFF2 ne sont pas pris en charge)`);
+    this.flavor = isCff ? `cff` : `truetype`;
     const tables = this.readDirectory();
     const t = (name: string): number => {
       const off = tables.get(name);
@@ -81,13 +101,95 @@ export class OpenTypeFont {
       this.advances.push(last);
     }
     this.readCmap(t(`cmap`));
-    const cff = tables.get(`CFF `);
-    if (!cff) throw new Error(`table CFF absente`);
-    this.cff = data.subarray(cff.offset, cff.offset + cff.length);
+    if (isCff) {
+      const cff = tables.get(`CFF `);
+      if (!cff) throw new Error(`table CFF absente (police OpenType a contours CFF2 non prise en charge)`);
+      this.cff = data.subarray(cff.offset, cff.offset + cff.length);
+    } else {
+      if (!tables.has(`glyf`) || !tables.has(`loca`)) throw new Error(`tables glyf et loca absentes`);
+      this.cff = data;
+    }
+    this.isVariable = tables.has(`fvar`);
+    this.readNames(tables.get(`name`));
+    const os2tab = tables.get(`OS/2`);
+    if (os2tab && os2tab.length >= 64) {
+      const fsType = this.view.getUint16(os2tab.offset + 8);
+      // Bit 1 : licence restreinte, incorporation interdite.
+      this.embeddingRestricted = (fsType & 0x0002) !== 0 && (fsType & 0x000c) === 0;
+      const selection = this.view.getUint16(os2tab.offset + 62);
+      this.isItalic = (selection & 0x0001) !== 0;
+      this.isBold = (selection & 0x0020) !== 0;
+    }
+    const macStyle = this.view.getUint16(head + 44);
+    if (macStyle & 1) this.isBold = true;
+    if (macStyle & 2) this.isItalic = true;
     const gsub = tables.get(`GSUB`);
     if (gsub) this.readGsub(gsub.offset);
     const gpos = tables.get(`GPOS`);
     if (gpos) this.readGpos(gpos.offset);
+    if (this.kernLookups.length === 0) {
+      const kern = tables.get(`kern`);
+      if (kern) this.readKern(kern.offset, kern.length);
+    }
+  }
+
+  // Noms de la police (table name) : famille typographique (ID 16) sinon famille (ID 1), sous-famille (17 ou 2), nom PostScript (6).
+  private readNames(table: { offset: number; length: number } | undefined): void {
+    if (!table) return;
+    const v = this.view;
+    const base = table.offset;
+    const count = v.getUint16(base + 2);
+    const strings = base + v.getUint16(base + 4);
+    const found = new Map<number, { text: string; rank: number }>();
+    for (let i = 0; i < count; i++) {
+      const o = base + 6 + 12 * i;
+      const platform = v.getUint16(o);
+      const encoding = v.getUint16(o + 2);
+      const language = v.getUint16(o + 4);
+      const id = v.getUint16(o + 6);
+      const length = v.getUint16(o + 8);
+      const offset = v.getUint16(o + 10);
+      const at = strings + offset;
+      if (at + length > this.data.length) continue;
+      let text = ``;
+      let rank = 0;
+      if (platform === 3 || platform === 0) {
+        // UTF-16 en grand-boutiste ; l'anglais americain (0x409) est prefere.
+        for (let k = 0; k + 1 < length; k += 2) text += String.fromCharCode(v.getUint16(at + k));
+        rank = platform === 3 && language === 0x409 ? 3 : 2;
+      } else if (platform === 1 && encoding === 0) {
+        for (let k = 0; k < length; k++) text += String.fromCharCode(this.data[at + k]);
+        rank = 1;
+      } else continue;
+      const old = found.get(id);
+      if (!old || rank > old.rank) found.set(id, { text, rank });
+    }
+    this.family = found.get(16)?.text ?? found.get(1)?.text ?? ``;
+    this.subfamily = found.get(17)?.text ?? found.get(2)?.text ?? ``;
+    this.postScriptName = found.get(6)?.text ?? ``;
+  }
+
+  // Table kern, format 0 : une liste de paires de glyphes avec leur ajustement horizontal.
+  private readKern(base: number, length: number): void {
+    const v = this.view;
+    if (length < 4 || v.getUint16(base) !== 0) return;
+    const tables = v.getUint16(base + 2);
+    let off = base + 4;
+    for (let t = 0; t < tables && off + 14 <= base + length; t++) {
+      const size = v.getUint16(off + 2);
+      const coverage = v.getUint16(off + 4);
+      // Horizontal (bit 0), sans valeurs minimales ni remplacement, format 0.
+      if ((coverage & 1) !== 0 && coverage >> 8 === 0) {
+        const pairs = v.getUint16(off + 6);
+        for (let i = 0; i < pairs; i++) {
+          const o = off + 14 + 6 * i;
+          if (o + 6 > base + length) break;
+          this.kernPairs.set(v.getUint16(o) * 65536 + v.getUint16(o + 2), v.getInt16(o + 4));
+        }
+      }
+      if (size === 0) break;
+      off += size;
+    }
   }
 
   private readDirectory(): Map<string, { offset: number; length: number }> {
@@ -398,6 +500,7 @@ export class OpenTypeFont {
   }
 
   private kerning(first: number, second: number): number {
+    if (this.kernPairs.size > 0) return this.kernPairs.get(first * 65536 + second) ?? 0;
     let total = 0;
     for (const lookup of this.kernLookups) {
       for (const sub of lookup.subtables) {

@@ -4,7 +4,8 @@
 // tableaux, formules et figures sont encore des reperes provisoires.
 import { defaultParagraphSettings, PARAGRAPH_SPACE_POINTS, ParagraphSettings } from "../paragraph-format";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
-import { FontStyle, measureText } from "./font-metrics";
+import { applyCase, CaseMode, defaultTypography, headingNumber, inFamilyOf, sizeFactor, styleOf, TypographyStyle } from "../text-style";
+import { FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
 import { LanguageCode } from "./hyphenate";
 import { displaySize, figureBounds, ImageAsset, isImageTarget, isWebTarget } from "./image";
 import { InlineContext, InlineText, normalizeHeading, parseInline, plainOf } from "./inline";
@@ -77,6 +78,8 @@ export interface PageStyle {
   // jusqu'au niveau indique. Propriete de la note : chapter-toc, chapter-toc-depth.
   chapterToc: boolean;
   chapterTocDepth: number;
+  // Polices et styles des titres (reglage general ; une note peut en changer des champs). Absent : le style d'origine.
+  typography?: TypographyStyle;
 }
 
 export const DEFAULT_PAGE_STYLE: PageStyle = {
@@ -184,6 +187,8 @@ export interface Row {
   math?: { asset: MathAsset; size: number };
   // Cadre d'un media : bords gauche et droit sur toute la largeur du texte, bord haut et bord bas sur la premiere et la derniere ligne.
   frame?: { width: number; top: boolean; bottom: boolean };
+  // Ligne soulignee sur toute la largeur de son texte (titres).
+  underline?: boolean;
   // Ligne sans hauteur qui marque le debut d'une zone d'une autre orientation (null : retour a la mise en page de la note). Elle sert a
   // couper le texte en parties mises en pages separement, voir compose.ts.
   zoneStart?: { zone: PageZone | null };
@@ -232,6 +237,8 @@ export interface TypesetOptions {
   pageOf?: (anchor: string) => number | undefined;
   // Reglage des paragraphes de la note : retrait ou espace entre paragraphes, alignement (voir paragraph-format.ts).
   paragraphs?: ParagraphSettings;
+  // Polices, tailles, casse et numerotation des titres, deja fusionnees avec les reglages de la note.
+  typography?: TypographyStyle;
   // Reglages de composition (une colonne de texte et ses marges) d'une zone d'orientation differente ; null : la note. Absent : les
   // etiquettes de zone sont ignorees (feuille imposee).
   zoneSetup?: (zone: PageZone | null) => PageSetup;
@@ -307,9 +314,13 @@ class Typesetter {
 
   private tableCount = 0;
   private inlineCtx: InlineContext;
+  private ty: TypographyStyle;
+  // Numero de chaque titre numerote (vide sans numerotation).
+  private numbers = new Map<DocSection, string>();
 
   constructor(private setup: PageSetup, private params: TexParams, private style: PageStyle, private language: LanguageCode, private defs: Record<string, string>, private anchors: Anchors, private opts: TypesetOptions, noteName: string) {
     this.textWidth = setup.width - setup.marginLeft - setup.marginRight;
+    this.ty = opts.typography ?? style.typography ?? defaultTypography();
     this.inlineCtx = {
       noteName,
       headingAnchor: (title) => this.anchors.headings.get(normalizeHeading(title)),
@@ -324,6 +335,19 @@ class Typesetter {
   // Texte d'un paragraphe prepare pour la composition : appels de notes, renvois internes, gras, italique, liens.
   private inline(text: string): InlineText {
     return parseInline(this.withNoteCalls(text), this.inlineCtx);
+  }
+
+  setNumbers(numbers: Map<DocSection, string>): void {
+    this.numbers = numbers;
+  }
+
+  // Police et corps du texte courant (liste, citation, paragraphe, cellule de tableau).
+  private get bodyStyle(): FontStyle {
+    return styleOf(this.ty.body);
+  }
+
+  private get bodySize(): number {
+    return this.setup.fontSize * sizeFactor(this.ty.body);
   }
 
   setChapterLevel(level: number): void {
@@ -425,9 +449,12 @@ class Typesetter {
 
   private registerNote(key: number, label: string, text: string): void {
     const s = this.setup;
+    const k = sizeFactor(this.ty.footnote);
+    const noteSize = s.noteFontSize * k;
     const r = typesetParagraph(parseInline(text), {
       language: this.language,
-      fontSize: s.noteFontSize,
+      fontSize: noteSize,
+      style: styleOf(this.ty.footnote),
       lineWidth: this.textWidth - NOTE_INDENT,
       indent: 0,
       align: `justify`,
@@ -441,8 +468,8 @@ class Typesetter {
       text: l.text,
       x: NOTE_INDENT + l.offset,
       width: this.textWidth - NOTE_INDENT - l.offset,
-      fontSize: s.noteFontSize,
-      height: s.noteLeading,
+      fontSize: noteSize,
+      height: s.noteLeading * k,
       wordSpacing: l.wordSpacing,
       breakAfter: 0,
       align: `left` as const,
@@ -457,8 +484,12 @@ class Typesetter {
   }
 
   // Compose un texte en lignes et les ajoute ; renvoie le nombre de lignes ajoutees.
-  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle; shift?: `right` | `center` }): number {
-    const r = typesetParagraph(opts.notes === false ? parseInline(text) : this.inline(text), {
+  private paragraph(text: string, kind: RowKind, x: number, width: number, opts: { indent: number; justify: boolean; hyphenate: boolean; fontSize: number; marker?: string; keep?: boolean; notes?: boolean; style?: FontStyle; shift?: `right` | `center`; case?: CaseMode; prefix?: string; underline?: boolean }): number {
+    let input = opts.notes === false ? parseInline(text) : this.inline(text);
+    if (opts.case !== undefined && opts.case !== `none`) input = { ...input, text: applyCase(input.text, opts.case) };
+    if (opts.prefix) input = { ...input, text: `${opts.prefix}${NO_BREAK_SPACE}${input.text}` };
+    const first = this.sink.length;
+    const r = typesetParagraph(input, {
       language: this.language,
       fontSize: opts.fontSize,
       lineWidth: width,
@@ -466,19 +497,21 @@ class Typesetter {
       align: opts.justify ? `justify` : `left`,
       hyphenate: opts.hyphenate,
       protrusion: this.style.protrusion,
-      style: opts.style ?? `regular`,
+      style: opts.style ?? this.bodyStyle,
       params: this.params,
     });
     this.missing.push(...r.missing);
     if (r.pass > 0) this.stats.passes[r.pass - 1]++;
     this.stats.paragraphs++;
     this.addLines(r.lines, kind, x, width, opts.fontSize, this.setup.leading * (opts.fontSize / this.setup.fontSize), { marker: opts.marker, keep: opts.keep, ...(opts.shift ? { shift: opts.shift } : {}) });
+    if (opts.underline) for (let k = first; k < this.sink.length; k++) this.sink[k].underline = true;
     return r.lines.length;
   }
 
   title(text: string): void {
     const first = this.sink.length;
-    this.paragraph(text, `title`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0], keep: true, notes: false, style: `bold` });
+    const spec = this.ty.title;
+    this.paragraph(text, `title`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0] * sizeFactor(spec), keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline });
     if (this.sink.length > first) this.sink[first].heading = { level: 0, title: plainOf(parseInline(text).text) };
     this.space(this.setup.leading * 1.2);
     // L'espace qui suit le titre reste avec lui.
@@ -486,7 +519,9 @@ class Typesetter {
   }
 
   heading(section: DocSection): void {
-    const size = HEADING_SIZES[Math.min(Math.max(section.level, 1), 5)];
+    const spec = this.ty.headings[Math.min(Math.max(section.level, 1), 6) - 1];
+    const size = HEADING_SIZES[Math.min(Math.max(section.level, 1), 5)] * sizeFactor(spec);
+    const number = this.numbers.get(section);
     const lead = this.setup.leading;
     const isChapter = section.level === this.chapterLevel;
     if (isChapter) {
@@ -497,9 +532,9 @@ class Typesetter {
     if (isChapter) this.firstChapter = false;
     this.space(lead * (section.level <= 1 ? 1.6 : section.level === 2 ? 1.2 : 0.8), { breakBefore });
     const before = this.sink.length;
-    this.paragraph(section.title || `(sans titre)`, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: `bold` });
+    this.paragraph(section.title || `(sans titre)`, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, ...(number ? { prefix: number } : {}) });
     if (this.sink.length > before) {
-      this.sink[before].heading = { level: section.level, title: plainOf(parseInline(section.title).text) || `(sans titre)` };
+      this.sink[before].heading = { level: section.level, title: `${number ? `${number} ` : ``}${plainOf(parseInline(section.title).text) || `(sans titre)`}` };
       const anchor = this.anchors.sections.get(section);
       if (anchor) this.sink[before].anchor = anchor;
       if (isChapter) this.sink[before].chapterStart = true;
@@ -565,7 +600,7 @@ class Typesetter {
   private blockContent(b: DocBlock): void {
     let paragraphDone = false;
     const lead = this.setup.leading;
-    const size = this.setup.fontSize;
+    const size = this.bodySize;
     const from = this.sink.length;
     switch (b.type) {
       case `paragraph`: {
@@ -645,7 +680,7 @@ class Typesetter {
   // Media : cadre (ou ligne de texte) avec la sorte de media, son titre, et son adresse cliquable quand c'est une adresse web.
   private media(b: Extract<DocBlock, { type: `media` }>): void {
     const lead = this.setup.leading;
-    const size = this.setup.fontSize;
+    const size = this.bodySize;
     const en = this.language === `en`;
     const labels: Record<string, string> = en ? { video: `Video`, audio: `Audio`, document: `PDF document`, embed: `Embedded content` } : { video: `Vidéo`, audio: `Audio`, document: `Document PDF`, embed: `Contenu intégré` };
     const web = isWebTarget(b.target);
@@ -692,9 +727,9 @@ class Typesetter {
     const sep = this.language === `en` ? `:` : ` :`;
     const body = text.trim();
     const source = `**${label}**${sep}${body === `` ? `` : ` ${body}`}`;
-    const size = this.setup.fontSize - 1;
+    const size = (this.setup.fontSize - 1) * sizeFactor(this.ty.caption);
     const first = this.sink.length;
-    this.paragraph(source, `caption`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: true, fontSize: size });
+    this.paragraph(source, `caption`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: true, fontSize: size, style: styleOf(this.ty.caption) });
     if (this.sink[first]) this.sink[first].alias = `lst:${label}`;
     const lines = this.sink.length - first;
     if (lines === 1) this.sink[first].align = `center`;
@@ -771,8 +806,8 @@ class Typesetter {
   }
 
   private table(b: Extract<DocBlock, { type: `table` }>): void {
-    const lead = this.setup.leading;
-    const size = this.setup.fontSize;
+    const lead = this.setup.leading * sizeFactor(this.ty.body);
+    const size = this.bodySize;
     const label = this.anchors.labels.get(b);
     const id = ++this.tableCount;
     const layout = layoutTable(
@@ -784,7 +819,7 @@ class Typesetter {
         leading: lead,
         prepare: (text) => this.inline(text),
         typeset: (text, width, style) => {
-          const r = typesetParagraph(text, { language: this.language, fontSize: size, lineWidth: width, indent: 0, align: `left`, hyphenate: true, style, params: this.params });
+          const r = typesetParagraph(text, { language: this.language, fontSize: size, lineWidth: width, indent: 0, align: `left`, hyphenate: true, style: inFamilyOf(this.bodyStyle, style), params: this.params });
           this.missing.push(...r.missing);
           if (r.pass > 0) {
             this.stats.passes[r.pass - 1]++;
@@ -847,7 +882,7 @@ class Typesetter {
     const entries: { level: number; title: string; anchor: string }[] = [];
     const walk = (s: DocSection): void => {
       const anchor = this.anchors.sections.get(s);
-      if (anchor && s.level <= depth) entries.push({ level: s.level, title: s.title || `(sans titre)`, anchor });
+      if (anchor && s.level <= depth) entries.push({ level: s.level, title: `${this.numbers.get(s) ? `${this.numbers.get(s)} ` : ``}${s.title || `(sans titre)`}`, anchor });
       s.sections.forEach(walk);
     };
     sections.forEach(walk);
@@ -871,11 +906,11 @@ class Typesetter {
   private entryRows(entries: { level: number; title: string; anchor: string }[], heading: string | undefined, boldTop: boolean, compact = heading === undefined): void {
     if (entries.length === 0) return;
     const lead = this.setup.leading;
-    const size = compact ? this.setup.fontSize - 1 : this.setup.fontSize;
+    const size = compact ? this.bodySize - 1 : this.bodySize;
     const top = Math.min(...entries.map((e) => e.level));
     if (heading !== undefined) {
       this.space(lead * 0.8);
-      this.paragraph(heading, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[1], keep: true, notes: false, style: `bold` });
+      this.paragraph(heading, `heading`, 0, this.textWidth, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[1] * sizeFactor(this.ty.headings[0]), keep: true, notes: false, style: styleOf(this.ty.headings[0]) });
       this.space(lead * 0.5);
       this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
     }
@@ -883,7 +918,7 @@ class Typesetter {
     for (const e of entries) {
       const x = (e.level - top) * 16;
       const first = this.sink.length;
-      this.paragraph(e.title, `toc`, x, this.textWidth - x - numberWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false, style: e.level === top && boldTop ? `bold` : `regular` });
+      this.paragraph(e.title, `toc`, x, this.textWidth - x - numberWidth, { indent: 0, justify: false, hyphenate: false, fontSize: size, notes: false, style: inFamilyOf(this.bodyStyle, e.level === top && boldTop ? `bold` : `regular`) });
       const last = this.sink[this.sink.length - 1];
       for (let k = first; k < this.sink.length - 1; k++) this.sink[k].breakAfter = INF_PENALTY;
       // Le titre peut etre sur plusieurs lignes : la zone cliquable et le numero sont sur la derniere.
@@ -932,11 +967,33 @@ function topLevel(sections: DocSection[]): number {
   return level;
 }
 
+// Numero de chaque titre selon la numerotation choisie : seuls les niveaux marques « numerotes » comptent, et le numero d'un titre
+// reprend celui de ses parents numerotes.
+function numberSections(sections: DocSection[], ty: TypographyStyle, top: number): Map<DocSection, string> {
+  const out = new Map<DocSection, string>();
+  if (ty.numbering === `none`) return out;
+  const counters = [0, 0, 0, 0, 0, 0];
+  const walk = (s: DocSection): void => {
+    const at = Math.min(Math.max(s.level, 1), 6) - 1;
+    if (ty.headings[at].numbered) {
+      counters[at]++;
+      for (let k = at + 1; k < 6; k++) counters[k] = 0;
+      const path: number[] = [];
+      for (let k = top - 1; k <= at; k++) if (ty.headings[k].numbered) path.push(Math.max(1, counters[k]));
+      out.set(s, headingNumber(ty.numbering, path));
+    }
+    s.sections.forEach(walk);
+  };
+  sections.forEach(walk);
+  return out;
+}
+
 // Compose le document en lignes (sans les repartir en pages).
 export function typesetDoc(doc: ExportDoc, setup: PageSetup = A4_SETUP, params: TexParams = DEFAULT_TEX_PARAMS, style: PageStyle = DEFAULT_PAGE_STYLE, opts: TypesetOptions = {}): TypesetDoc {
   const language = languageOf(doc.language);
   const t = new Typesetter(setup, params, style, language, doc.footnotes, collectAnchors(doc, language), opts, doc.title);
   t.setChapterLevel(topLevel(doc.sections));
+  t.setNumbers(numberSections(doc.sections, opts.typography ?? style.typography ?? defaultTypography(), topLevel(doc.sections)));
   t.title(doc.title);
   const plan = tocPlan(doc, style);
   t.setChapterTocDepth(plan.chapter);

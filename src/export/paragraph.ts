@@ -2,7 +2,7 @@
 // Lit la mise en forme du texte (gras, italique, liens), mesure les mots avec la police de chacun, place les points de
 // cesure, applique les conventions typographiques francaises, coupe le paragraphe en lignes (Knuth et Plass) et calcule
 // l'espacement de chaque ligne justifiee d'apres la largeur reelle du texte affiche (ligatures et crenage compris).
-import { FINE_SPACE, FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
+import { FINE_SPACE, FontStyle, measureText, NO_BREAK_SPACE, variantFrom, variantOf, withVariant } from "./font-metrics";
 import { getLanguage, HyphenationLanguage, hyphenPoints, LanguageCode } from "./hyphenate";
 import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON, MATH_END, MATH_ON } from "./inline";
 import type { MathAsset } from "./math";
@@ -99,10 +99,12 @@ interface CharMeta {
   link: number;
 }
 
+// Style du texte en gras ou en italique dans un paragraphe de police de base `base` : la famille reste la meme (celle du paragraphe).
 function combine(base: FontStyle, bold: boolean, italic: boolean): FontStyle {
-  const b = bold || base === `bold` || base === `boldItalic`;
-  const i = italic || base === `italic` || base === `boldItalic`;
-  return b ? (i ? `boldItalic` : `bold`) : i ? `italic` : `regular`;
+  const v = variantOf(base);
+  const b = bold || v === `bold` || v === `boldItalic`;
+  const i = italic || v === `italic` || v === `boldItalic`;
+  return withVariant(base, variantFrom(b, i));
 }
 
 function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: HyphenationLanguage): { items: Item[]; missing: number[] } {
