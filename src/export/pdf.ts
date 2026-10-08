@@ -215,6 +215,13 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
     return x - x0;
   };
 
+  // Surlignage : un fond de couleur derriere le texte, de la hauteur du corps.
+  const highlightRuns = (ops: string[], runs: LineRun[], x: number, baseline: number, size: number, wordSpacing: number, hex: string): void => {
+    const width = natural(runs, size, wordSpacing);
+    if (width <= 0) return;
+    ops.push(`q ${hexOperands(hex)} rg ${num(x)} ${num(H - baseline - 0.25 * size)} ${num(width)} ${num(1.1 * size)} re f Q`);
+  };
+
   const runsOf = (row: Row): LineRun[] => row.runs ?? [{ text: row.text, style: `regular` }];
   const natural = (runs: LineRun[], size: number, wordSpacing: number): number =>
     runs.reduce((a, r) => {
@@ -294,7 +301,11 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
         const inner = row.height - (row.inset?.top ?? 0) - (row.inset?.bottom ?? 0);
         const cellBase = baselineIn(rowTop + (row.inset?.top ?? 0), inner, row.fontSize, regular.font);
         if (row.shade?.text === `white`) ops.push(`q 1 g`);
-        for (const c of row.cells) drawRuns(ops, links, c.runs, left + row.x + c.x, cellBase, row.fontSize, 0);
+        const cellColor = row.shade?.text !== `white` && row.color ? hexOperands(row.color) : undefined;
+        for (const c of row.cells) {
+          if (row.highlight) highlightRuns(ops, c.runs, left + row.x + c.x, cellBase, row.fontSize, 0, row.highlight);
+          drawRuns(ops, links, c.runs, left + row.x + c.x, cellBase, row.fontSize, 0, cellColor);
+        }
         if (row.shade?.text === `white`) ops.push(`Q`);
         return;
       }
@@ -303,6 +314,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
         if (name) ops.push(`q ${num(row.image.width)} 0 0 ${num(row.image.height)} ${num(left + row.x)} ${num(H - rowTop - row.image.height)} cm /${name} Do Q`);
         return;
       }
+      const rowColor = row.color ? hexOperands(row.color) : undefined;
       const baseline = row.inset ? baselineIn(rowTop + row.inset.top, row.height - row.inset.top - row.inset.bottom, row.fontSize, regular.font) : baselineIn(rowTop, row.height, row.fontSize, regular.font);
       if (row.heading) headings.push({ level: row.heading.level, title: row.heading.title, page: pageIndex, x: left + row.x, y: rowTop });
       if (row.kind === `quote`) {
@@ -317,14 +329,15 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
           const markerBase = rowTop + (row.height - 1.14 * ms) / 2 + 0.894 * ms - 0.3 * ms;
           drawRuns(ops, links, [{ ...run, sup: false }], left, markerBase, ms, 0);
         } else {
-          drawRuns(ops, links, [run], left + row.x - 16, baseline, row.fontSize, 0);
+          drawRuns(ops, links, [run], left + row.x - 16, baseline, row.fontSize, 0, rowColor);
         }
       }
       const runs = runsOf(row);
       let x = left + row.x;
       if (row.align === `center`) x += (row.width - natural(runs, row.fontSize, row.wordSpacing)) / 2;
-      const written = drawRuns(ops, links, runs, x, baseline, row.fontSize, row.wordSpacing);
-      if (row.underline && written > 0) ops.push(`q ${num(x)} ${num(H - baseline - row.fontSize * 0.1 - 0.4)} ${num(written)} ${num(Math.max(0.4, row.fontSize * 0.04))} re f Q`);
+      if (row.highlight) highlightRuns(ops, runs, x, baseline, row.fontSize, row.wordSpacing, row.highlight);
+      const written = drawRuns(ops, links, runs, x, baseline, row.fontSize, row.wordSpacing, rowColor);
+      if (row.underline && written > 0) ops.push(`q ${rowColor ? `${rowColor} rg ` : ``}${num(x)} ${num(H - baseline - row.fontSize * 0.1 - 0.4)} ${num(written)} ${num(Math.max(0.4, row.fontSize * 0.04))} re f Q`);
       if (row.toc) {
         // Entree de la table des matieres : numero de page a droite, points de conduite, zone cliquable sur toute la ligne.
         const right = left + row.x + row.width;

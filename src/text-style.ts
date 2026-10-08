@@ -15,6 +15,9 @@ export interface TextSpec {
   points: number;
   bold: boolean;
   italic: boolean;
+  // Couleur du texte et surlignage derriere le texte (#rrggbb ; vide : couleur d'origine, pas de surlignage).
+  color: string;
+  highlight: string;
 }
 
 export interface HeadingSpec extends TextSpec {
@@ -53,7 +56,7 @@ export const FRAME_WIDTH_MAX = 6;
 // c'est la taille M ; les zones en XS, S ou L restent proportionnelles.
 export const BASE_POINTS: Record<string, number> = { body: 11, title: 22, h1: 17, h2: 14, h3: 12, h4: 11, h5: 11, h6: 11, caption: 10, footnote: 9, decor: 10 };
 
-const text = (bold = false): TextSpec => ({ family: ``, points: 0, bold, italic: false });
+const text = (bold = false): TextSpec => ({ family: ``, points: 0, bold, italic: false, color: ``, highlight: `` });
 const heading = (): HeadingSpec => ({ ...text(true), case: `none`, underline: false, numbered: true, frame: `none`, frameWidth: 0.75, frameColor: `#000000`, frameFill: `` });
 
 // Style d'origine : celui que l'export avait avant que l'on puisse le changer.
@@ -79,6 +82,8 @@ const asText = (raw: unknown, base: TextSpec): TextSpec => {
     points: typeof r.points === `number` && Number.isFinite(r.points) ? (r.points <= 0 ? 0 : Math.max(POINTS_MIN, Math.min(POINTS_MAX, Math.round(r.points * 2) / 2))) : base.points,
     bold: typeof r.bold === `boolean` ? r.bold : base.bold,
     italic: typeof r.italic === `boolean` ? r.italic : base.italic,
+    color: typeof r.color === `string` && (r.color === `` || HEX.test(r.color)) ? r.color.toLowerCase() : base.color,
+    highlight: typeof r.highlight === `string` && (r.highlight === `` || HEX.test(r.highlight)) ? r.highlight.toLowerCase() : base.highlight,
   };
 };
 
@@ -119,7 +124,7 @@ export function sanitizeTypography(raw: unknown): TypographyStyle {
 export type Overrides = Record<string, string | number | boolean>;
 
 const GROUPS = [`body`, `title`, `h1`, `h2`, `h3`, `h4`, `h5`, `h6`, `caption`, `footnote`, `decor`] as const;
-const TEXT_FIELDS = [`family`, `points`, `bold`, `italic`] as const;
+const TEXT_FIELDS = [`family`, `points`, `bold`, `italic`, `color`, `highlight`] as const;
 const HEADING_FIELDS = [...TEXT_FIELDS, `case`, `underline`, `numbered`, `frame`, `frameWidth`, `frameColor`, `frameFill`] as const;
 
 const isHeadingGroup = (g: string): boolean => g === `title` || /^h[1-6]$/.test(g);

@@ -2496,8 +2496,8 @@ table.mmw-t-equal td {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 6px 14px;
-  margin-bottom: 8px;
+  gap: 8px 14px;
+  padding: 0 0 10px 16px;
 }
 .mmw-typo-field {
   display: flex;
@@ -2508,12 +2508,111 @@ table.mmw-t-equal td {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
-.mmw-typo-styles {
+.mmw-typo-pair {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+.mmw-typo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 7px;
+}
+.mmw-typo-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.mmw-typo input[type="color"] {
+  width: 34px;
+  height: 28px;
+  padding: 0;
+}
+.mmw-typo input[type="color"].is-unset {
+  opacity: 0.45;
 }
 .mmw-typo-size {
   width: 80px;
+}
+.mmw-typo .modal-content {
+  max-height: 78vh;
+  overflow-y: auto;
+}
+.mmw-typo-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 6px 0;
+  background: var(--background-primary);
+}
+.mmw-typo-page {
+  max-height: 210px;
+  overflow: hidden;
+  padding: 8px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: #fff;
+  color: #000;
+}
+.mmw-typo-page-band {
+  margin-bottom: 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #d0d0d0;
+}
+.mmw-sample {
+  max-width: 100%;
+  overflow: hidden;
+}
+.mmw-typo-sample {
+  flex: 1 1 260px;
+  min-width: 0;
+  max-height: 44px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #fff;
+  color: #000;
+}
+.mmw-typo-section > summary {
+  align-items: center;
+}
+.mmw-addfont h4 {
+  margin: 12px 0 4px;
+}
+.mmw-addfont-site {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 3px 0;
+}
+.mmw-addfont-site a {
+  min-width: 150px;
+  font-weight: 600;
+}
+.mmw-addfont-note {
+  flex: 1 1 280px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.mmw-addfont-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 18px;
+  border: 2px dashed var(--background-modifier-border);
+  border-radius: 8px;
+}
+.mmw-addfont-drop.is-over {
+  border-color: var(--interactive-accent);
+}
+.mmw-addfont-ok {
+  margin-top: 8px;
+  color: var(--text-success);
 }
 .mmw-typo-over {
   color: var(--text-accent);
