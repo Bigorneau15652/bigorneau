@@ -20,7 +20,7 @@ export type ColumnAlign = `left` | `center` | `right`;
 // `id` : identifiant de bloc Obsidian (^identifiant a la fin du bloc), qui permet de renvoyer au bloc.
 export type DocBlock =
   // `format` : exception ecrite au debut du paragraphe (%% p: droite %%), voir paragraph-format.ts.
-  | { type: `paragraph`; text: string; id?: string; format?: ParagraphFormat }
+  | { type: `paragraph`; text: string; id?: string; format?: ParagraphFormat; shift?: number }
   | { type: `list`; ordered: boolean; items: DocListItem[] }
   | { type: `quote`; text: string; id?: string }
   | { type: `code`; lang: string; text: string }
@@ -427,8 +427,13 @@ export function parseBlocks(text: string): DocBlock[] {
     }
 
     // Chaque ligne de texte est un paragraphe : un retour a la ligne simple et un retour suivi de lignes vides donnent la meme mise en page.
+    // Quatre espaces ou une tabulation au debut de la ligne decalent le paragraphe d'un niveau (comme dans l'editeur d'Obsidian).
+    const shift = Math.floor(indentWidth(/^[ \t]*/.exec(line)![0]) / 4);
+    const before = blocks.length;
     para.push(line.trim());
     flushPara();
+    const made = blocks[blocks.length - 1];
+    if (shift > 0 && blocks.length > before && made.type === `paragraph`) made.shift = shift;
     i++;
   }
   flushPara();

@@ -12,23 +12,45 @@ export interface ParagraphSettings {
   mode: ParaMode;
   // Taille de l'espace entre paragraphes.
   size: ParaSize;
+  // Taille du retrait de la premiere ligne.
+  indentSize: ParaSize;
   align: ParaAlign;
+  // Vrai quand la note a choisi ces reglages elle-meme : ils l'emportent alors sur ceux de toutes les notes, meme s'ils sont identiques
+  // aux reglages d'origine.
+  set?: boolean;
 }
 
 // Espace entre deux paragraphes, en points.
 export const PARAGRAPH_SPACE_POINTS: Record<ParaSize, number> = { s: 4, m: 8, l: 14 };
+// Retrait de la premiere ligne, en points : 0,5 cm, 1 cm et 1,5 cm.
+export const INDENT_POINTS: Record<ParaSize, number> = { s: 14.17, m: 28.35, l: 42.52 };
+// Decalage de tout un paragraphe par niveau de tabulation (4 espaces) ecrit dans la note, en points : 1 cm.
+export const SHIFT_POINTS = 28.35;
+export const SHIFT_MAX_LEVELS = 8;
 
-export const defaultParagraphSettings = (): ParagraphSettings => ({ mode: `indent`, size: `m`, align: `justify` });
+export const defaultParagraphSettings = (): ParagraphSettings => ({ mode: `indent`, size: `m`, indentSize: `s`, align: `justify` });
+
+// Ces reglages different-ils des reglages d'origine, ou la note les a-t-elle choisis elle-meme ?
+export function isParagraphSet(p: ParagraphSettings): boolean {
+  const d = defaultParagraphSettings();
+  return p.set === true || p.mode !== d.mode || p.size !== d.size || p.indentSize !== d.indentSize || p.align !== d.align;
+}
+
+// Reglages qui s'appliquent a une note : les siens quand elle en a choisi, sinon ceux de toutes les notes.
+export const effectiveParagraphs = (general: ParagraphSettings, note: ParagraphSettings | undefined): ParagraphSettings => (note && isParagraphSet(note) ? note : general);
 
 const ALIGNS: ParaAlign[] = [`justify`, `left`, `right`, `center`];
 
 export function sanitizeParagraphSettings(raw: unknown): ParagraphSettings {
   const r = typeof raw === `object` && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const d = defaultParagraphSettings();
+  const size = (v: unknown, fallback: ParaSize): ParaSize => (v === `s` || v === `m` || v === `l` ? v : fallback);
   return {
     mode: r.mode === `space` ? `space` : d.mode,
-    size: r.size === `s` || r.size === `l` ? r.size : d.size,
+    size: size(r.size, d.size),
+    indentSize: size(r.indentSize, d.indentSize),
     align: typeof r.align === `string` && (ALIGNS as string[]).includes(r.align) ? (r.align as ParaAlign) : d.align,
+    ...(r.set === true ? { set: true } : {}),
   };
 }
 
@@ -36,7 +58,10 @@ export function sanitizeParagraphSettings(raw: unknown): ParagraphSettings {
 export interface ParagraphFormat {
   align?: ParaAlign;
   mode?: ParaMode | `none`;
+  // Taille de l'espace (mode `space`).
   size?: ParaSize;
+  // Taille du retrait (mode `indent`).
+  indentSize?: ParaSize;
 }
 
 const ALIGN_WORDS: Record<string, ParaAlign> = {
@@ -59,8 +84,11 @@ export function parseParagraphFormat(spec: string): ParagraphFormat {
     const word = raw.trim().toLowerCase().replace(/\s+/g, ` `);
     if (word === ``) continue;
     if (ALIGN_WORDS[word]) out.align = ALIGN_WORDS[word];
-    else if (word === `retrait` || word === `indent`) out.mode = `indent`;
-    else if (word === `aucun` || word === `none` || word === `compact`) out.mode = `none`;
+    else if (/^(?:retrait|indent)(?: [sml])?$/.test(word)) {
+      out.mode = `indent`;
+      const sz = / ([sml])$/.exec(word);
+      if (sz) out.indentSize = sz[1] as ParaSize;
+    } else if (word === `aucun` || word === `none` || word === `compact`) out.mode = `none`;
     else {
       const m = /^(?:espace|space)(?: ([sml]))?$/.exec(word);
       if (m) {
@@ -78,7 +106,7 @@ const ALIGN_FR: Record<ParaAlign, string> = { justify: `justifié`, left: `gauch
 export function formatParagraphMarker(f: ParagraphFormat): string {
   const parts: string[] = [];
   if (f.align) parts.push(ALIGN_FR[f.align]);
-  if (f.mode === `indent`) parts.push(`retrait`);
+  if (f.mode === `indent`) parts.push(f.indentSize ? `retrait ${f.indentSize}` : `retrait`);
   else if (f.mode === `none`) parts.push(`aucun`);
   else if (f.mode === `space`) parts.push(f.size ? `espace ${f.size}` : `espace`);
   return parts.length === 0 ? `` : `%% p: ${parts.join(`, `)} %%`;

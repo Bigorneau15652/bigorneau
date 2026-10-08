@@ -113,6 +113,8 @@ export class MindmapView extends ItemView {
       onUndo: () => this.undoRedo(`undo`),
       onRedo: () => this.undoRedo(`redo`),
       onOpenSettings: () => this.plugin.openSettings(),
+      onSaveProfile: () => this.plugin.openSaveProfile(),
+      onLoadProfile: () => void this.plugin.openLoadProfile(),
       onSelect: (key) => void this.onSelect(key),
       // Apres les modifications en cours (un titre valide juste avant, par exemple).
       onEnter: () => {

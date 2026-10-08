@@ -15,6 +15,9 @@ export interface ControlActions {
   undo: () => void;
   redo: () => void;
   openSettings: () => void;
+  // Profils : sauvegarde des reglages sous un nom, et chargement d'un profil.
+  saveProfile: () => void;
+  loadProfile: () => void;
   // Applique et enregistre des reglages qui ne sont pas des styles de case.
   change: (patch: Partial<MmSettings>) => void;
   // Modifie le style de la selection (par niveau de titre, ou de la case seule si `individual`).
@@ -57,6 +60,8 @@ const ICONS: Record<string, string> = {
   settings: svg(
     `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>`
   ),
+  saveProfile: svg(`<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>`),
+  loadProfile: svg(`<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>`),
   compact: svg(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/>`),
   check: svg(`<path d="m5 12 5 5 9-10"/>`, 14),
   tag: svg(`<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V4h9l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="8.5" r="1.2"/>`),
@@ -611,6 +616,14 @@ export class MapControls {
       this.menuItem(ICONS.tag, t(`Étiquettes…`), () => {
         this.open = `tags`;
         this.refresh();
+      }),
+      this.menuItem(ICONS.saveProfile, t(`Sauvegarder un profil`), () => {
+        this.closePopup();
+        a.saveProfile();
+      }),
+      this.menuItem(ICONS.loadProfile, t(`Charger un profil`), () => {
+        this.closePopup();
+        a.loadProfile();
       }),
       this.menuItem(ICONS.settings, t(`Tous les paramètres`), () => a.openSettings())
     );

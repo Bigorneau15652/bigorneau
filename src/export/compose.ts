@@ -1,6 +1,7 @@
 // Export de haute qualite : de la note au fichier PDF, sans rien qui depende d'Obsidian (se teste avec node --test).
 import { layoutDecor } from "./page-decor";
 import { findPageConfig } from "../page-config";
+import { defaultParagraphSettings, effectiveParagraphs } from "../paragraph-format";
 import { applyOverrides, defaultTypography } from "../text-style";
 import { buildExportDoc } from "./doc-tree";
 import { languageOf } from "./typeset";
@@ -98,7 +99,7 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
   const images = assets.images;
   const noteConfig = findPageConfig(text);
   const typography = applyOverrides(style.typography ?? defaultTypography(), noteConfig?.config.typography);
-  const options = { typography, ...(images ? { images } : {}), ...(assets.formulas ? { formulas: assets.formulas } : {}), ...(noteConfig ? { paragraphs: noteConfig.config.paragraphs } : {}) };
+  const options = { typography, ...(images ? { images } : {}), ...(assets.formulas ? { formulas: assets.formulas } : {}), paragraphs: effectiveParagraphs(style.paragraphs ?? defaultParagraphSettings(), noteConfig?.config.paragraphs) };
   const doc = buildExportDoc(text, fileName);
   // Mise en page de la note (format, orientation, marges, colonnes), sauf si une feuille est imposee : alors une seule colonne.
   const found = noteConfig;

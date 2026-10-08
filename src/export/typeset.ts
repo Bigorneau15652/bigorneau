@@ -3,7 +3,7 @@
 // Phase 3 : notes de bas de page, penalites de pagination (lignes veuves et orphelines, titres), chapitres courants. Les
 // tableaux, formules et figures sont encore des reperes provisoires.
 import { BulletId, BulletShape, bulletAt, bulletMark, DEFAULT_BULLETS } from "../bullets";
-import { defaultParagraphSettings, PARAGRAPH_SPACE_POINTS, ParagraphSettings } from "../paragraph-format";
+import { defaultParagraphSettings, INDENT_POINTS, PARAGRAPH_SPACE_POINTS, ParagraphSettings, SHIFT_MAX_LEVELS, SHIFT_POINTS } from "../paragraph-format";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
 import { applyCase, BASE_POINTS, CaseMode, defaultTypography, HeadingSpec, headingNumber, inFamilyOf, sizeFactor, styleOf, TextSpec, TypographyStyle } from "../text-style";
 import { FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
@@ -73,6 +73,8 @@ export interface PageStyle {
   protrusion: boolean;
   // Puce de chaque niveau d'une liste a puces (six niveaux), puis le trait d'union.
   bullets: BulletId[];
+  // Paragraphes de toutes les notes ; la note peut avoir les siens (voir effectiveParagraphs).
+  paragraphs?: ParagraphSettings;
   // Table des matieres generale au debut du document, et niveaux de titres qu'elle liste (1 a 6). Une propriete de la note
   // (toc, toc-depth) l'emporte sur ces choix.
   toc: boolean;
@@ -545,7 +547,9 @@ class Typesetter {
     const widest = Math.max(...rows.map((r) => (r.runs ?? []).reduce((a, run) => a + measureText(run.text, r.fontSize * (run.sup ? 0.7 : 1), run.style).width, 0)));
     const width = spec.frame === `full` ? this.textWidth : Math.min(this.textWidth, widest + 2 * BOX_PAD_X);
     rows.forEach((r, i) => {
-      r.box = { x: 0, width, top: i === 0, bottom: i === rows.length - 1, line: spec.frameWidth, color: spec.frameColor, fill: spec.frameFill };
+      // Cadre ajuste au texte : il suit l'alignement du titre (centre ou a droite de la colonne).
+      const boxX = spec.frame === `full` ? 0 : spec.align === `center` ? (this.textWidth - width) / 2 : spec.align === `right` ? this.textWidth - width : 0;
+      r.box = { x: boxX, width, top: i === 0, bottom: i === rows.length - 1, line: spec.frameWidth, color: spec.frameColor, fill: spec.frameFill };
       const top = i === 0 ? BOX_PAD_Y : 0;
       const bottom = i === rows.length - 1 ? BOX_PAD_Y : 0;
       r.height += top + bottom;
@@ -562,7 +566,7 @@ class Typesetter {
     const first = this.sink.length;
     const spec = this.ty.title;
     const place = this.headingBox(spec);
-    this.paragraph(text, `title`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0] * sizeFactor(spec, BASE_POINTS.title), keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec });
+    this.paragraph(text, `title`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: HEADING_SIZES[0] * sizeFactor(spec, BASE_POINTS.title), keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec, ...(spec.align !== `left` ? { shift: spec.align } : {}) });
     if (this.sink.length > first) this.sink[first].heading = { level: 0, title: plainOf(parseInline(text).text) };
     this.space(this.setup.leading * 1.2);
     // L'espace qui suit le titre reste avec lui.
@@ -584,7 +588,7 @@ class Typesetter {
     this.space(lead * (section.level <= 1 ? 1.6 : section.level === 2 ? 1.2 : 0.8), { breakBefore });
     const before = this.sink.length;
     const place = this.headingBox(spec);
-    this.paragraph(section.title || `(sans titre)`, `heading`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec, ...(number ? { prefix: number } : {}) });
+    this.paragraph(section.title || `(sans titre)`, `heading`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec, ...(spec.align !== `left` ? { shift: spec.align } : {}), ...(number ? { prefix: number } : {}) });
     if (this.sink.length > before) {
       this.sink[before].heading = { level: section.level, title: `${number ? `${number} ` : ``}${plainOf(parseInline(section.title).text) || `(sans titre)`}` };
       const anchor = this.anchors.sections.get(section);
@@ -663,8 +667,10 @@ class Typesetter {
         const gap = PARAGRAPH_SPACE_POINTS[b.format?.size ?? base.size];
         if (mode === `space` && this.afterParagraph) this.space(gap);
         // Le retrait n'a de sens que pour du texte a gauche ou justifie.
-        const indent = mode === `indent` && (align === `justify` || align === `left`) ? size * this.params.parIndent : 0;
-        this.paragraph(b.text, `text`, 0, this.textWidth, { indent, justify: align === `justify`, hyphenate: true, fontSize: size, ...(align === `right` || align === `center` ? { shift: align } : {}) });
+        const indent = mode === `indent` && (align === `justify` || align === `left`) ? INDENT_POINTS[b.format?.indentSize ?? base.indentSize] : 0;
+        // Texte decale par des tabulations ou des espaces en debut de ligne, comme dans la note : tout le paragraphe est decale.
+        const shift = Math.min(b.shift ?? 0, SHIFT_MAX_LEVELS) * SHIFT_POINTS;
+        this.paragraph(b.text, `text`, shift, this.textWidth - shift, { indent, justify: align === `justify`, hyphenate: true, fontSize: size, ...(align === `right` || align === `center` ? { shift: align } : {}) });
         this.anchorFrom(from, b.id);
         paragraphDone = true;
         break;

@@ -10,6 +10,7 @@ import { cssFamilyOf } from "./font-store";
 import { FolderPicker } from "./folder-picker";
 import type { ImportReport } from "./font-import";
 import { t } from "./i18n";
+import { INDENT_POINTS, ParaAlign, ParaMode, ParagraphSettings, ParaSize, sanitizeParagraphSettings } from "./paragraph-format";
 import type { FontProblem, LoadedFamily } from "./font-library";
 import { applyOverrides, BASE_POINTS, CaseMode, defaultTypography, FrameMode, getPath, HEADING_LEVELS, HeadingSpec, headingNumber, NumberScheme, Overrides, overridePaths, POINTS_MAX, POINTS_MIN, setPath, styleOf, TextSpec, TypographyStyle } from "./text-style";
 
@@ -18,7 +19,11 @@ export interface TypographyHost {
   general(): TypographyStyle;
   setGeneral(style: TypographyStyle): void;
   // Reglages propres a la note ouverte ; absent quand aucune note n'est ouverte dans un editeur.
-  note?: { read(): Overrides; write(overrides: Overrides): void };
+  // `paragraphs` : les paragraphes propres a la note (absent quand elle suit ceux de toutes les notes) ; `setParagraphs(null)` les efface.
+  note?: { read(): Overrides; write(overrides: Overrides): void; paragraphs(): ParagraphSettings | undefined; setParagraphs(p: ParagraphSettings | null): void };
+  // Paragraphes de toutes les notes : alignement du texte, retrait ou espace entre paragraphes.
+  paragraphs(): ParagraphSettings;
+  setParagraphs(p: ParagraphSettings): void;
   families(): LoadedFamily[];
   problems(): FontProblem[];
   folder(): string;
@@ -97,7 +102,7 @@ const CASE_CSS: Record<CaseMode, string> = { none: `none`, upper: `uppercase`, l
 
 // Met en forme un texte d'exemple comme l'export le fera : police, taille, gras, italique, couleur, surlignage, casse, soulignement et cadre.
 // `scale` reduit toutes les tailles (apercu de page) ; `number` est le numero du titre (vide : aucun).
-function paintSample(host: HTMLElement, spec: TextSpec | HeadingSpec, base: number, text: string, opts: { scale?: number; number?: string; cap?: boolean } = {}): HTMLElement {
+function paintSample(host: HTMLElement, spec: TextSpec | HeadingSpec, base: number, text: string, opts: { scale?: number; number?: string; cap?: boolean; align?: ParaAlign; indentPoints?: number } = {}): HTMLElement {
   const heading = `frame` in spec;
   const h = spec as HeadingSpec;
   let points = (spec.points > 0 ? spec.points : base) * (opts.scale ?? 1);
@@ -118,15 +123,23 @@ function paintSample(host: HTMLElement, spec: TextSpec | HeadingSpec, base: numb
     outer.style.fontStyle = spec.italic ? `italic` : `normal`;
   }
   if (spec.color !== ``) outer.style.color = spec.color;
+  if (opts.align) outer.style.textAlign = opts.align === `justify` ? `justify` : opts.align;
+  if (opts.indentPoints) outer.style.textIndent = `${opts.indentPoints * (opts.scale ?? 1)}pt`;
   if (spec.highlight !== ``) inner.style.backgroundColor = spec.highlight;
   if (heading) {
     outer.style.textTransform = CASE_CSS[h.case];
+    outer.style.textAlign = h.align;
     if (h.underline) outer.style.textDecoration = `underline`;
     if (h.frame !== `none`) {
       outer.style.border = `${h.frameWidth}pt solid ${h.frameColor}`;
       outer.style.padding = `${3 * (opts.scale ?? 1)}pt ${5 * (opts.scale ?? 1)}pt`;
       if (h.frameFill !== ``) outer.style.backgroundColor = h.frameFill;
-      outer.style.display = h.frame === `full` ? `block` : `inline-block`;
+      outer.style.display = h.frame === `full` ? `block` : h.align === `left` ? `inline-block` : `table`;
+      // Cadre ajuste au texte : il suit l'alignement du titre.
+      if (h.frame === `text` && h.align !== `left`) {
+        outer.style.marginLeft = `auto`;
+        outer.style.marginRight = h.align === `center` ? `auto` : `0`;
+      }
     }
   }
   return outer;
@@ -151,6 +164,43 @@ export class TypographyModal extends Modal {
       await this.host.prepareFolder();
       this.render();
     });
+  }
+
+  // Paragraphes qui s'appliquent a l'echelle choisie : ceux de la note quand elle a les siens, sinon ceux de toutes les notes.
+  private currentParagraphs(): ParagraphSettings {
+    return (this.target === `note` ? this.host.note?.paragraphs() : undefined) ?? this.host.paragraphs();
+  }
+
+  private saveParagraphs(patch: Partial<ParagraphSettings>): void {
+    const next = sanitizeParagraphSettings({ ...this.currentParagraphs(), ...patch });
+    if (this.target === `note` && this.host.note) this.host.note.setParagraphs({ ...next, set: true });
+    else {
+      const { set: _set, ...plain } = next;
+      this.host.setParagraphs(plain);
+    }
+    this.render();
+  }
+
+  // Alignement du texte et debut des paragraphes (retrait ou espace) : meme reglage que le bouton Paragraphes de la note.
+  private paragraphFields(field: (name: string) => HTMLElement): void {
+    const p = this.currentParagraphs();
+    const align = field(t(`Alignement`)).createEl(`select`);
+    const aligns: [ParaAlign, string][] = [[`justify`, t(`Justifié`)], [`left`, t(`À gauche`)], [`center`, t(`Centré`)], [`right`, t(`À droite`)]];
+    for (const [value, label] of aligns) align.createEl(`option`, { value, text: label });
+    align.value = p.align;
+    align.addEventListener(`change`, () => this.saveParagraphs({ align: align.value as ParaAlign }));
+
+    const mode = field(t(`Début des paragraphes`)).createEl(`select`);
+    mode.createEl(`option`, { value: `indent`, text: t(`Retrait de la première ligne`) });
+    mode.createEl(`option`, { value: `space`, text: t(`Espace entre les paragraphes`) });
+    mode.value = p.mode;
+    mode.addEventListener(`change`, () => this.saveParagraphs({ mode: mode.value as ParaMode }));
+
+    const size = field(p.mode === `indent` ? t(`Taille du retrait`) : t(`Taille de l'espace`)).createEl(`select`);
+    const sizes: [ParaSize, string][] = p.mode === `indent` ? [[`s`, t(`S : 0,5 cm`)], [`m`, t(`M : 1 cm`)], [`l`, t(`L : 1,5 cm`)]] : [[`s`, t(`S : 4 pt`)], [`m`, t(`M : 8 pt`)], [`l`, t(`L : 14 pt`)]];
+    for (const [value, label] of sizes) size.createEl(`option`, { value, text: label });
+    size.value = p.mode === `indent` ? p.indentSize : p.size;
+    size.addEventListener(`change`, () => this.saveParagraphs(p.mode === `indent` ? { indentSize: size.value as ParaSize } : { size: size.value as ParaSize }));
   }
 
   private overrides(): Overrides {
@@ -266,14 +316,15 @@ export class TypographyModal extends Modal {
   private renderPage(parent: HTMLElement, style: TypographyStyle): void {
     const page = parent.createDiv({ cls: `mmw-typo-page` });
     const scale = 0.8;
-    const run = (spec: TextSpec | HeadingSpec, base: number, text: string, level = 0): void => {
-      paintSample(page, spec, base, text, { scale, number: level > 0 ? this.numberOf(style, level) : `` });
+    const para = this.currentParagraphs();
+    const run = (spec: TextSpec | HeadingSpec, base: number, text: string, level = 0, extra: { align?: ParaAlign; indentPoints?: number } = {}): void => {
+      paintSample(page, spec, base, text, { scale, number: level > 0 ? this.numberOf(style, level) : ``, ...extra });
     };
     const header = page.createDiv({ cls: `mmw-typo-page-band` });
     paintSample(header, style.decor, BASE_POINTS.decor, t(`En-tête du document`), { scale });
     run(style.title, BASE_POINTS.title, t(`Titre du document`));
     run(style.headings[0], BASE_POINTS.h1, t(`Premier chapitre`), 1);
-    run(style.body, BASE_POINTS.body, t(`Un paragraphe de texte courant montre la police, la taille et la couleur du corps de texte, avec un mot en gras.`));
+    run(style.body, BASE_POINTS.body, t(`Un paragraphe de texte courant montre la police, la taille et la couleur du corps de texte, avec un mot en gras.`), 0, { align: para.align, ...(para.mode === `indent` && (para.align === `justify` || para.align === `left`) ? { indentPoints: INDENT_POINTS[para.indentSize] } : {}) });
     run(style.headings[1], BASE_POINTS.h2, t(`Première partie`), 2);
     run(style.headings[2], BASE_POINTS.h3, t(`Détail`), 3);
     run(style.caption, BASE_POINTS.caption, t(`Figure 1 : exemple de légende`));
@@ -298,7 +349,8 @@ export class TypographyModal extends Modal {
     summary.createSpan({ cls: `mmw-typo-recap`, text: `${family}, ${spec.points > 0 ? spec.points : base} pt` });
     const sample = summary.createDiv({ cls: `mmw-typo-sample` });
     paintSample(sample, spec, base, el.sample, { number: el.heading && el.level > 0 ? this.numberOf(style, el.level) : ``, cap: true });
-    const overridden = overridePaths().some((p) => p.startsWith(`${el.group}.`) && p in over);
+    const ownParagraphs = el.group === `body` && this.target === `note` && this.host.note?.paragraphs() !== undefined;
+    const overridden = ownParagraphs || overridePaths().some((p) => p.startsWith(`${el.group}.`) && p in over);
     if (overridden) summary.addClass(`mmw-typo-over`);
 
     // Tous les reglages de l'element sur une seule ligne qui passe a la suivante quand la largeur manque.
@@ -352,7 +404,13 @@ export class TypographyModal extends Modal {
     colorField(t(`Couleur du texte`), `color`, `baseline`, spec.color);
     if (el.group !== `decor`) colorField(t(`Surlignage`), `highlight`, `highlighter`, spec.highlight);
 
+    if (el.group === `body`) this.paragraphFields(field);
     if (h) {
+      const alignment = field(t(`Alignement`)).createEl(`select`);
+      const heads: [string, string][] = [[`left`, t(`À gauche`)], [`center`, t(`Centré`)], [`right`, t(`À droite`)]];
+      for (const [value, label] of heads) alignment.createEl(`option`, { value, text: label });
+      alignment.value = h.align;
+      alignment.addEventListener(`change`, () => this.change(path(`align`), alignment.value));
       const casing = field(t(`Casse`)).createEl(`select`);
       const cases: [CaseMode, string][] = [[`none`, t(`Casse d'origine`)], [`upper`, t(`MAJUSCULES`)], [`lower`, t(`minuscules`)], [`capitalize`, t(`Initiales en majuscules`)]];
       for (const [value, label] of cases) casing.createEl(`option`, { value, text: label });
@@ -389,7 +447,10 @@ export class TypographyModal extends Modal {
     }
     if (overridden) {
       const b = details.createEl(`button`, { cls: `mmw-typo-reset`, text: t(`Suivre le style de toutes les notes`) });
-      b.addEventListener(`click`, () => this.resetPaths(el.group));
+      b.addEventListener(`click`, () => {
+        if (el.group === `body`) this.host.note?.setParagraphs(null);
+        this.resetPaths(el.group);
+      });
     }
   }
 }
