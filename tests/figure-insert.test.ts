@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addedDrawing, cleanFigureName, drawingEmbeds, figureLines, figureMarkup, isolateFigure, nameDrawing, parseFigureLine, tableCaptionLines } from "../src/figure-insert";
+import { addedDrawing, captionRange, cleanFigureName, drawingEmbeds, figureLines, figureMarkup, isolateFigure, nameDrawing, parseFigureLine, tableCaptionLines } from "../src/figure-insert";
 import { composeNote } from "../src/export/compose";
 import { DEFAULT_PAGE_STYLE } from "../src/export/typeset";
 import { imageCandidates, isExcalidrawTarget, isImageTarget } from "../src/export/image";
@@ -85,4 +85,18 @@ test(`les tableaux nommes sont numerotes comme a l'export : legende au-dessus, a
   assert.deepEqual(caps.map((c) => [c.line, c.number, c.wordEnd]), [[2, 1, 7], [17, 2, 5]]);
   // Une ligne « Tableau : » collee au bout d'un paragraphe n'est pas une legende.
   assert.deepEqual(tableCaptionLines(`Du texte\nTableau : Pas une legende\n| A |\n|---|`), []);
+});
+
+test(`place du nom d'une figure dans sa ligne`, () => {
+  const at = (line: string): string | null => {
+    const r = captionRange(line);
+    return r ? line.slice(r.from, r.to) : null;
+  };
+  assert.equal(at(`![[image.png|Mon image]]`), `Mon image`);
+  assert.equal(at(`![[image.png|Mon image|300]]`), `Mon image`);
+  assert.equal(at(`![[dessin.excalidraw|Dessin d'Olivier]]`), `Dessin d'Olivier`);
+  assert.equal(at(`![Nom](chemin/image.png)`), `Nom`);
+  assert.equal(at(`![[image.png|300]]`), null);
+  assert.equal(at(`![[image.png]]`), null);
+  assert.equal(at(`du texte`), null);
 });
