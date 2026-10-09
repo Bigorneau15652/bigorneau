@@ -1,7 +1,7 @@
 // Panneau de boutons a droite de la zone de redaction : le bouton Bigorneau (fixe), puis un bouton par fonction du registre (l'aide
 // comprise) et des separations, dans l'ordre choisi par l'utilisateur (clic long sur un bouton, puis glissement, pour le deplacer). Chaque fonction a aussi sa commande de
 // la palette. Le panneau est pose dans chaque editeur Markdown ouvert.
-import { App, Editor, getIconIds, MarkdownView, Notice, Platform, setIcon, setTooltip } from "obsidian";
+import { App, Editor, getIconIds, MarkdownView, Notice, setIcon, setTooltip } from "obsidian";
 import { CUSTOM_ICON_IDS } from "./custom-icons";
 import { noteError } from "./diagnostics";
 import { displayItems, FunctionRegistry, isSeparator, moveId, orderedFunctions, panelOrder, PanelFunction, reorderVisible, visibleIds } from "./functions";
@@ -56,7 +56,7 @@ export class ButtonPanel {
 
   private shouldShow(): boolean {
     const s = this.host.settings;
-    return s.panelVisible && (!Platform.isMobile || s.panelOnMobile);
+    return s.panelVisible;
   }
 
   // Fonctions disponibles sur cet appareil, dans l'ordre complet enregistre.
@@ -123,8 +123,8 @@ export class ButtonPanel {
     const scripts = panel.createEl(`button`, { cls: `mmw-panel-button clickable-icon` });
     scripts.type = `button`;
     scripts.createEl(`img`, { cls: `mmw-panel-snail`, attr: { src: SNAIL_ICON, alt: `` } });
-    scripts.setAttr(`aria-label`, t(`Scripts de Bigorneau`));
-    setTooltip(scripts, t(`Scripts de Bigorneau`), { placement: `left` });
+    scripts.setAttr(`aria-label`, t(`Modules`));
+    setTooltip(scripts, t(`Modules`), { placement: `left` });
     scripts.addEventListener(`click`, () => this.host.openScripts());
 
     const list = panel.createDiv({ cls: `mmw-panel-functions` });

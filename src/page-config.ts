@@ -327,4 +327,4 @@ export interface PageValues {
   pages: number;
 }
 
-export const valueOf = (name: Variable, v: PageValues): string => (typeof v[name] === `number` ? String(v[name]) : (v[name] as string));
+export const valueOf = (name: Variable, v: PageValues): string => (typeof v[name] === `number` ? String(v[name]) : v[name]);

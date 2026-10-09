@@ -6,7 +6,7 @@ import { isImageTarget, isWebTarget } from "./export/image";
 
 // Nom prepare pour la barre verticale du lien : retours a la ligne, barres et crochets retires.
 export function cleanFigureName(name: string): string {
-  return name.replace(/[\r\n]+/g, ` `).replace(/[|\[\]]/g, `-`).trim();
+  return name.replace(/[\r\n]+/g, ` `).replace(/[|[\]]/g, `-`).trim();
 }
 
 export function figureMarkup(target: string, name: string): string {

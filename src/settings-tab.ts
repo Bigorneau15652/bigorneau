@@ -47,7 +47,7 @@ export class MmSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass(`mmw-settings`);
 
-    this.chapter(`general`, t(`Général`), t(`Langue et vue affichée à l'ouverture`), (el) => this.buildGeneral(el));
+    this.chapter(`general`, t(`Langue et ouverture`), t(`Langue du plugin et vue affichée à l'ouverture`), (el) => this.buildGeneral(el));
     this.chapter(`mindmap`, t(`Vue Mindmap`), t(`Cases, branches, traits, police et contraste de la carte mentale`), (el) => this.buildMindmap(el));
     this.chapter(`list`, t(`Vue Liste`), t(`Liste condensée : un titre par ligne`), (el) => this.buildList(el));
     this.chapter(`display`, t(`Éléments affichés`), t(`Ce que la carte montre par défaut (menu de l'œil)`), (el) => this.buildDisplay(el));
@@ -111,7 +111,9 @@ export class MmSettingTab extends PluginSettingTab {
       .setDesc(desc)
       .addDropdown((d) => {
         for (const [value, label] of options) d.addOption(value, label);
-        d.setValue(String(s[field])).onChange(async (v) => {
+        // The value is a text, a number or a boolean: every dropdown option is stored as a text.
+        const current: unknown = s[field];
+        d.setValue(typeof current === `string` || typeof current === `number` || typeof current === `boolean` ? String(current) : ``).onChange(async (v) => {
           s[field] = convert(v);
           await this.plugin.saveSettings();
         });
@@ -183,7 +185,7 @@ export class MmSettingTab extends PluginSettingTab {
       .addDropdown((d) => {
         for (const c of SHAPE_CHOICES) d.addOption(c, this.shapeLabel(c));
         d.setValue(shapeChoice(s)).onChange(async (v) => {
-          await this.plugin.updateSettings(shapePatch(v as ShapeChoice) as Partial<MmSettings>);
+          await this.plugin.updateSettings(shapePatch(v as ShapeChoice));
         });
       });
     this.colorSetting(el, t(`Couleur du trait`), t(`Contour et texte des cases. Vide : couleur du thème.`), `strokeColor`);
@@ -228,7 +230,7 @@ export class MmSettingTab extends PluginSettingTab {
       rounded: t(`Rectangle arrondi`),
       oval: t(`Ovale`),
       underline: t(`Trait dessous`),
-      parallelogram: t(`Losange`),
+      parallelogram: t(`Parallélogramme`),
       diamond: t(`Diamant`),
     };
     return names[c];
@@ -311,7 +313,7 @@ export class MmSettingTab extends PluginSettingTab {
       [`round`, t(`Rectangle arrondi`)],
       [`sharp`, t(`Rectangle`)],
       [`underline`, t(`Trait dessous`)],
-      [`parallelogram`, t(`Losange`)],
+      [`parallelogram`, t(`Parallélogramme`)],
       [`diamond`, t(`Diamant`)],
     ], (v) => v as MmSettings[`floatShape`]);
     this.colorSetting(el, t(`Couleur du trait`), t(`Contour et texte. Vide : comme la carte.`), `floatStrokeColor`);
@@ -372,10 +374,9 @@ export class MmSettingTab extends PluginSettingTab {
         b.title = t(def.name);
         setSvg(b, iconSvg(kind, def.id, 18));
         if (s[colorField]) b.style.color = s[colorField];
-        b.addEventListener(`click`, async () => {
+        b.addEventListener(`click`, () => {
           s[field] = def.id;
-          await this.plugin.saveSettings();
-          paint();
+          void this.plugin.saveSettings().then(() => paint());
         });
       }
     };
@@ -615,7 +616,6 @@ export class MmSettingTab extends PluginSettingTab {
   private buildPanel(el: HTMLElement): void {
     const s = this.plugin.settings;
     this.exportToggle(el, t(`Afficher le panneau de boutons`), t(`Les boutons des fonctions apparaissent à droite de la zone de rédaction, au milieu de la hauteur. Un clic long sur un bouton, puis un glissement, le déplace.`), s.panelVisible, (v) => (s.panelVisible = v));
-    this.exportToggle(el, t(`Afficher le panneau sur tablette et téléphone`), t(`Par défaut, le panneau est masqué sur ces appareils, faute de place.`), s.panelOnMobile, (v) => (s.panelOnMobile = v));
     new Setting(el).setName(t(`Boutons`)).setHeading();
     renderButtonList(el, this.plugin);
   }
@@ -715,7 +715,7 @@ export class MmSettingTab extends PluginSettingTab {
           .setIcon(`reset`)
           .setTooltip(t(`Rétablir la valeur d'origine`))
           .onClick(async () => {
-            s[field] = (DEFAULT_SETTINGS as MmSettings)[field];
+            s[field] = DEFAULT_SETTINGS[field];
             await this.plugin.saveSettings(false);
             this.display();
           })

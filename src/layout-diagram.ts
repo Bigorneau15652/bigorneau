@@ -45,7 +45,7 @@ function el(parent: Element, name: string, attrs: Record<string, string | number
   const node = document.createElementNS(NS, name);
   for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
   parent.appendChild(node);
-  return node as SVGElement;
+  return node;
 }
 
 function label(parent: Element, x: number, y: number, text: string, anchor = `middle`): void {

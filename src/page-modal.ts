@@ -1,7 +1,7 @@
 // Fenetre des reglages de page d'une note : en-tete, pied de page et numerotation, chacun sur son onglet. Chaque modification est
 // ecrite tout de suite dans la note (ligne de commentaire sous les proprietes). Les zones sont des textes avec un balisage simple,
 // montre dans la ligne de formule : **gras**, *italique*, {xs} {s} {m} {l}, {page}, ![[image.png|hauteur]].
-import { App, ColorComponent, Modal, Setting, TextComponent, TFile } from "obsidian";
+import { App, ColorComponent, Modal, Setting, TextComponent } from "obsidian";
 import { imageFile, ImagePicker } from "./image-picker";
 import { t } from "./i18n";
 import { Band, defaultConfig, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";

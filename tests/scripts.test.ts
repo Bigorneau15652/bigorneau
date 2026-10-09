@@ -1,11 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { safeFileName, API_VERSION, BigorneauApi, buildExternal, externalId, fingerprint, OfficialScript, ScriptHost, ScriptManager, ScriptState } from "../src/scripts";
-import { runScript } from "../src/script-runner";
+import { BigorneauApi, OfficialScript, ScriptHost, ScriptManager, ScriptState } from "../src/scripts";
 import { warningLines } from "../src/export-report";
 import { FORMULAS_SCRIPT, MATH_SERVICE } from "../src/script-formulas";
-
-const HEADER = (extra = ``) => `/* bigorneau-script\nname: Bonjour\nname-en: Hello\ndescription: Dit bonjour.\nversion: 1.2.0\napi: 1\n${extra}*/\n`;
 
 function makeHost() {
   const log = { functions: [] as { id: string; available: () => boolean; needsEditor: boolean }[], notices: [] as string[], saves: 0, help: 0 };
@@ -16,62 +13,25 @@ function makeHost() {
     notice: (m) => void log.notices.push(m),
     registerFunction: (fn) => void log.functions.push(fn),
     addHelp: () => void log.help++,
-    runExternal: (code, api, id) => runScript(code, api, id),
     saveState: () => void log.saves++,
   };
   return { host, log };
 }
 
 const official = (over: Partial<OfficialScript> = {}): OfficialScript => ({
-  origin: `builtin`,
   id: `off`,
   name: { fr: `Officiel`, en: `Official` },
   description: { fr: ``, en: `` },
   version: `1.0.0`,
-  api: API_VERSION,
   requires: [],
   defaultEnabled: false,
   load: () => undefined,
   ...over,
 });
 
-test(`l'en-tete d'un script est lu, et les erreurs sont nommees`, () => {
-  const ok = buildHeader(HEADER());
-  assert.equal(ok.ok, true);
-  if (ok.ok) {
-    assert.equal(ok.meta.name.fr, `Bonjour`);
-    assert.equal(ok.meta.name.en, `Hello`);
-    assert.equal(ok.meta.version, `1.2.0`);
-    assert.equal(ok.meta.id, `ext:bonjour`);
-  }
-  const noHeader = buildHeader(`console.log(1)`);
-  assert.deepEqual(noHeader.ok ? null : noHeader.error, `header`);
-  const noName = buildHeader(`/* bigorneau-script\napi: 1\n*/`);
-  assert.deepEqual(noName.ok ? null : noName.error, `name`);
-  const noApi = buildHeader(`/* bigorneau-script\nname: A\n*/`);
-  assert.deepEqual(noApi.ok ? null : noApi.error, `api`);
-});
-
-import { parseScriptHeader } from "../src/scripts";
-function buildHeader(code: string, file = `bonjour.js`) {
-  return parseScriptHeader(code, file);
-}
-
-test(`l'identifiant d'un script ajoute vient de son fichier`, () => {
-  assert.equal(externalId(`Mon script.js`), `ext:mon-script`);
-  assert.equal(safeFileName(`C:\\dossier\\Mon script (1).js`), `Mon-script-1.js`);
-  assert.equal(safeFileName(`../../x.JS`), `x.js`);
-});
-
-test(`l'empreinte change des qu'un caractere change`, async () => {
-  const a = await fingerprint(`abc`);
-  assert.equal(a, `ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`);
-  assert.notEqual(a, await fingerprint(`abd`));
-});
-
-test(`un script officiel respecte son etat par defaut puis celui de l'utilisateur`, async () => {
+test(`a built-in module follows its default state, then the choice of the user`, async () => {
   const { host } = makeHost();
-  const state: ScriptState = { enabled: {}, approved: {} };
+  const state: ScriptState = { enabled: {} };
   let loaded = 0;
   const m = new ScriptManager(host, state, [official({ load: () => void loaded++ })]);
   await m.loadEnabled();
@@ -85,9 +45,9 @@ test(`un script officiel respecte son etat par defaut puis celui de l'utilisateu
   assert.equal(m.isEnabled(`off`), false);
 });
 
-test(`les fonctions d'un script desactive ne sont plus disponibles, et ses services disparaissent`, async () => {
+test(`the functions of a module that is turned off are no longer available and its services disappear`, async () => {
   const { host, log } = makeHost();
-  const m = new ScriptManager(host, { enabled: {}, approved: {} }, [
+  const m = new ScriptManager(host, { enabled: {} }, [
     official({
       load: (api: BigorneauApi) => {
         api.addFunction({ id: `f`, name: `F`, run: () => undefined });
@@ -104,12 +64,12 @@ test(`les fonctions d'un script desactive ne sont plus disponibles, et ses servi
   assert.equal(m.service(`svc`), undefined);
 });
 
-test(`un script exige ses prerequis, meme s'il vient avant eux dans la liste`, async () => {
+test(`a module waits for its requirements, even when it comes before them in the list`, async () => {
   const { host } = makeHost();
   const order: string[] = [];
   const a = official({ id: `a`, requires: [`b`], load: () => void order.push(`a`) });
   const b = official({ id: `b`, load: () => void order.push(`b`) });
-  const m = new ScriptManager(host, { enabled: { a: true }, approved: {} }, [a, b]);
+  const m = new ScriptManager(host, { enabled: { a: true } }, [a, b]);
   await m.loadEnabled();
   assert.deepEqual(order, []);
   assert.equal(m.info().find((i) => i.id === `a`)?.status, `blocked`);
@@ -117,66 +77,33 @@ test(`un script exige ses prerequis, meme s'il vient avant eux dans la liste`, a
   assert.deepEqual(order, [`b`, `a`]);
 });
 
-test(`un script en erreur est signale sans empecher les autres`, async () => {
+test(`a module that fails is reported without stopping the others`, async () => {
   const { host, log } = makeHost();
   const bad = official({ id: `bad`, load: () => { throw new Error(`boum`); } });
   let ok = false;
   const good = official({ id: `good`, load: () => void (ok = true) });
-  const m = new ScriptManager(host, { enabled: { bad: true, good: true }, approved: {} }, [bad, good]);
+  const m = new ScriptManager(host, { enabled: { bad: true, good: true } }, [bad, good]);
   await m.loadEnabled();
   assert.equal(ok, true);
   assert.equal(m.info().find((i) => i.id === `bad`)?.status, `error`);
   assert.match(log.notices[0], /boum/);
 });
 
-test(`un script d'une autre version de l'interface n'est jamais charge`, async () => {
+test(`binding another state makes the manager follow it (after a profile is loaded)`, async () => {
   const { host } = makeHost();
-  let loaded = false;
-  const m = new ScriptManager(host, { enabled: { off: true }, approved: {} }, [official({ api: 2, load: () => void (loaded = true) })]);
+  let loaded = 0;
+  const m = new ScriptManager(host, { enabled: {} }, [official({ load: () => void loaded++ })]);
   await m.loadEnabled();
-  assert.equal(loaded, false);
-  assert.equal(m.info()[0].status, `incompatible`);
-});
-
-test(`un script ajoute a la main attend la confirmation, puis s'execute, puis redemande si le fichier change`, async () => {
-  const { host, log } = makeHost();
-  const state: ScriptState = { enabled: {}, approved: {} };
-  const m = new ScriptManager(host, state, []);
-  const code = HEADER() + `bigorneau.addFunction({ id: "salut", name: "Salut", run: () => bigorneau.notice("bonjour") });`;
-  const built = await buildExternal(`bonjour.js`, code);
-  assert.equal(built.ok, true);
-  if (!built.ok) return;
-  m.setExternal([built.script]);
-  assert.equal(m.info()[0].status, `needs-confirmation`);
+  assert.equal(loaded, 0);
+  m.bindState({ enabled: { off: true } });
+  assert.equal(m.isEnabled(`off`), true);
   await m.loadEnabled();
-  assert.equal(log.functions.length, 0);
-  await m.approve(built.script);
-  assert.equal(m.isEnabled(`ext:bonjour`), true);
-  // L'identifiant de la fonction porte le nom du script.
-  assert.equal(log.functions[0].id, `bonjour-salut`);
-  // Le fichier est modifie : l'ancienne confirmation ne vaut plus.
-  const changed = await buildExternal(`bonjour.js`, code + `\n// modifie`);
-  assert.equal(changed.ok, true);
-  if (!changed.ok) return;
-  m.setExternal([changed.script]);
-  assert.equal(m.isEnabled(`ext:bonjour`), false);
-  assert.equal(m.info()[0].status, `modified`);
-  m.remove(`ext:bonjour`);
-  assert.equal(state.approved[`ext:bonjour`], undefined);
+  assert.equal(loaded, 1);
 });
 
-test(`une erreur de syntaxe dans un script ajoute est signalee`, async () => {
-  const { host } = makeHost();
-  const m = new ScriptManager(host, { enabled: {}, approved: {} }, []);
-  const built = await buildExternal(`casse.js`, HEADER() + `let = ;`);
-  if (!built.ok) throw new Error(`en-tete`);
-  await m.approve(built.script);
-  assert.equal(m.info()[0].status, `error`);
-});
-
-test(`le script Formules fournit le rendu et ses deux fonctions seulement une fois active`, async () => {
+test(`the Formulas module provides the drawing and its functions only once it is on`, async () => {
   const { host, log } = makeHost();
-  const m = new ScriptManager(host, { enabled: {}, approved: {} }, [FORMULAS_SCRIPT]);
+  const m = new ScriptManager(host, { enabled: {} }, [FORMULAS_SCRIPT]);
   await m.loadEnabled();
   assert.equal(log.functions.length, 0);
   assert.equal(m.service(MATH_SERVICE), undefined);
@@ -187,11 +114,11 @@ test(`le script Formules fournit le rendu et ses deux fonctions seulement une fo
   assert.equal(typeof m.service(`math.svg`), `function`);
   assert.ok(log.help >= 1);
   assert.ok(log.functions.every((f) => f.needsEditor && f.available()));
-  // Seul l'editeur a un bouton ; les deux commandes d'avant gardent leur identifiant sans bouton.
+  // Only the editor has a button; the two commands keep their identifiers without a button.
   assert.deepEqual(log.functions.map((f) => (f as { button?: boolean }).button !== false), [true, false, false]);
 });
 
-test(`le rapport d'export regroupe les formules quand le script Formules est desactive`, () => {
+test(`the export report groups the formulas when the Formulas module is off`, () => {
   const w = [`formule:a`, `formule:b`, `image:x.png`];
   const on = warningLines(w, { formulasEnabled: true });
   assert.equal(on.length, 3);
@@ -200,15 +127,11 @@ test(`le rapport d'export regroupe les formules quand le script Formules est des
   assert.ok(off.some((l) => /Formules/.test(l)));
 });
 
-test(`le script d'exemple de la documentation se lit et se charge`, async () => {
-  const { readFileSync } = await import(`node:fs`);
-  const code = readFileSync(`docs/exemples/bonjour.js`, `utf8`);
-  const { host, log } = makeHost();
-  const m = new ScriptManager(host, { enabled: {}, approved: {} }, []);
-  const built = await buildExternal(`bonjour.js`, code);
-  if (!built.ok) throw new Error(`en-tete`);
-  await m.approve(built.script);
-  assert.equal(m.info()[0].status, `ok`);
-  assert.deepEqual(log.functions.map((f) => [f.id, f.needsEditor]), [[`bonjour-salut`, false], [`bonjour-date`, true]]);
-  assert.equal(log.help, 1);
+test(`the plugin never turns text into code (no dynamic code evaluation in the sources)`, async () => {
+  const { readdirSync, readFileSync } = await import(`node:fs`);
+  const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(`${dir}/${e.name}`) : e.name.endsWith(`.ts`) ? [`${dir}/${e.name}`] : []));
+  for (const file of files(`src`)) {
+    const code = readFileSync(file, `utf8`).replace(/\/\/.*$/gm, ``).replace(/\/\*[\s\S]*?\*\//g, ``);
+    assert.ok(!/\bnew\s+Function\s*\(/.test(code) && !/\beval\s*\(/.test(code), `${file} must not evaluate text as code`);
+  }
 });

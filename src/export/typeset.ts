@@ -835,7 +835,7 @@ class Typesetter {
     const block = this.collect(() => {
       this.stats.lines++;
       if (above) {
-        this.caption(label as string, caption);
+        this.caption(label, caption);
         this.space(lead * 0.4);
         this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
       }

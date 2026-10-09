@@ -32,7 +32,7 @@ export class WebDialog {
   private done = false;
   private cleanups: (() => void)[] = [];
 
-  constructor(private host: HTMLElement, private opts: WebDialogOptions) {
+  constructor(host: HTMLElement, private opts: WebDialogOptions) {
     this.root = el(`div`, `mmw-dialog mmw-web-dialog`);
     this.root.setAttribute(`role`, `dialog`);
     this.root.setAttribute(`aria-label`, opts.title);

@@ -67,8 +67,8 @@ export function resolvedVariant(familyId: string, variant: Variant): Variant | n
   return FALLBACK_ORDER[variant].find((v) => fam[v] !== undefined) ?? null;
 }
 
-export const FINE_SPACE = ` `;
-export const NO_BREAK_SPACE = ` `;
+export const FINE_SPACE = `\u202F`;
+export const NO_BREAK_SPACE = `\u00A0`;
 
 // Caractere de remplacement quand la police n'a pas le caractere demande.
 const FALLBACK = 0x3f;
@@ -96,11 +96,12 @@ export function fontFor(style: FontStyle = `regular`): OpenTypeFont {
     // Famille inconnue (police retiree du coffre) : la police d'origine, a la meme variante.
     return found ?? fontFor(u.variant);
   }
-  style = style as BuiltinStyle;
-  let f = fonts.get(style);
+  // Not a user font: the style is one of the built-in ones.
+  const builtin = style as BuiltinStyle;
+  let f = fonts.get(builtin);
   if (!f) {
-    f = new OpenTypeFont(fontBytes(style));
-    fonts.set(style, f);
+    f = new OpenTypeFont(fontBytes(builtin));
+    fonts.set(builtin, f);
   }
   return f;
 }

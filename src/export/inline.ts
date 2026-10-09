@@ -49,7 +49,7 @@ export interface InlineContext {
 export function normalizeHeading(title: string): string {
   return plainOf(parseInline(title).text)
     .toLowerCase()
-    .replace(/[#^\[\]|\\]/g, ` `)
+    .replace(/[#^[\]|\\]/g, ` `)
     .replace(/\s+/g, ` `)
     .trim();
 }
@@ -157,13 +157,13 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
       ctx.warn?.(`renvoi:${heading ?? file}`);
       return fallback;
     }
-    let text = alias || label || (block ? block[1] : (heading as string));
+    let text = alias || label || (block ? block[1] : heading);
     if (ctx.pageRefs) text += ` (page ${ctx.pageOf?.(anchor) ?? 0})`;
     links.push(`#${anchor}`);
     return `${LINK_ON}${links.length - 1}${LINK_NUM_END}${text}${LINK_OFF}`;
   });
   // Liens web : [texte](adresse "titre") ou adresse nue.
-  s = s.replace(/\[([^\]]*)\]\(<?([^)\s>]*)>?(?:\s+"[^"]*")?\)|https?:\/\/[^\s<> -]+/g, (m: string, text: string | undefined, url: string | undefined) => {
+  s = s.replace(/\[([^\]]*)\]\(<?([^)\s>]*)>?(?:\s+"[^"]*")?\)|https?:\/\/[^\s<>\u00A0-]+/g, (m: string, text: string | undefined, url: string | undefined) => {
     if (text !== undefined) {
       if (url === undefined || url === ``) return text;
       links.push(url);

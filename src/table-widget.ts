@@ -82,7 +82,7 @@ class TableWidgets {
     if (tables.length === 0) return;
     const text = this.view.state.doc.toString();
     for (const table of tables) {
-      const host = (table.closest(`.cm-table-widget, .cm-embed-block`) as HTMLElement | null) ?? table.parentElement;
+      const host = table.closest<HTMLElement>(`.cm-table-widget, .cm-embed-block`) ?? table.parentElement;
       if (!host) continue;
       const pos = this.posOf(host);
       if (pos === null) continue;

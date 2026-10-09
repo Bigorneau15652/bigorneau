@@ -1,10 +1,11 @@
 // Commandes de la carte, inspirees d'Excalidraw : en bas a gauche, le menu burger (reglages), la palette
 // (apparence de la carte, des niveaux de titre ou d'une case), puis le zoom, l'annulation et la compacite.
-// N'utilise que le DOM standard.
+// Utilise le DOM standard et l'objet Platform d'Obsidian (detection de macOS).
 import { MmSettings, makeTag, PanePosition, TagDef } from "./settings";
 import { t } from "./i18n";
 import { NodeStyle, ShapeChoice, shapeChoice, shapePatch, StylePatch } from "./style";
 import { setSvg } from "./dom";
+import { Platform } from "obsidian";
 
 export interface ControlActions {
   zoomIn: () => void;
@@ -149,7 +150,7 @@ function iconButton(icon: string, label: string, onClick: () => void, cls = `mmw
   return b;
 }
 
-const isMac = (): boolean => typeof navigator !== `undefined` && /Mac/.test(navigator.platform);
+const isMac = (): boolean => Platform.isMacOS;
 
 export class MapControls {
   private root: HTMLElement;
@@ -249,7 +250,7 @@ export class MapControls {
     host.appendChild(this.helpRoot);
     this.cleanups.push(() => this.helpRoot.remove());
     this.listen(this.helpRoot, `mouseover`, (e) => {
-      const el = (e.target as HTMLElement).closest(`[data-tip]`) as HTMLElement | null;
+      const el = (e.target as HTMLElement).closest<HTMLElement>(`[data-tip]`);
       if (el && this.helpRoot.contains(el)) this.scheduleTip(el, this.helpRoot);
     });
     this.listen(this.helpRoot, `mouseout`, (e) => {
@@ -258,7 +259,7 @@ export class MapControls {
 
     // Etiquettes au survol, avec un court delai.
     this.listen(this.root, `mouseover`, (e) => {
-      const el = (e.target as HTMLElement).closest(`[data-tip]`) as HTMLElement | null;
+      const el = (e.target as HTMLElement).closest<HTMLElement>(`[data-tip]`);
       if (el && this.root.contains(el)) this.scheduleTip(el);
     });
     this.listen(this.root, `mouseout`, (e) => {
@@ -803,7 +804,7 @@ export class MapControls {
           { value: `rounded`, html: OPT.shapeRounded, title: t(`Rectangle arrondi`) },
           { value: `oval`, html: OPT.shapeOval, title: t(`Ovale`) },
           { value: `underline`, html: OPT.shapeUnderline, title: t(`Trait dessous`) },
-          { value: `parallelogram`, html: OPT.shapeParallelogram, title: t(`Losange`) },
+          { value: `parallelogram`, html: OPT.shapeParallelogram, title: t(`Parallélogramme`) },
           { value: `diamond`, html: OPT.shapeDiamond, title: t(`Diamant`) },
         ],
         shapeChoice(st),

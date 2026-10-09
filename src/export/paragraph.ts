@@ -257,7 +257,7 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
   let started = false;
   words.forEach((word, wi) => {
     const before = items.length;
-    const parts = word.split(/([  ])/);
+    const parts = word.split(/([\u00A0\u202F])/);
     parts.forEach((part, pi) => {
       if (part === NO_BREAK_SPACE) {
         // Espace insecable : colle etirable devant laquelle on ne coupe pas.

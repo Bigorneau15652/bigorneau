@@ -18,7 +18,7 @@ export interface StylePlan {
 }
 
 // Niveau de style d'un noeud : le niveau de son titre, ou `f` pour la racine d'un sujet flottant (tous les sujets flottants).
-const levelOf = (key: string, doc: MmDoc, levels: Map<string, number>): string => (key === `r` ? `0` : isFloatRoot(key) ? `f` : String(levels.get(key) ?? 0));
+const levelOf = (key: string, levels: Map<string, number>): string => (key === `r` ? `0` : isFloatRoot(key) ? `f` : String(levels.get(key) ?? 0));
 
 function levelMap(doc: MmDoc): Map<string, number> {
   return new Map(flattenDoc(doc).map((e) => [e.key, e.node.level]));
@@ -53,7 +53,7 @@ export function planStyle(doc: MmDoc, keys: string[], patch: StylePatch, individ
   if (!individual) {
     const merged: Record<string, StylePatch> = { ...(rootMeta.levels ?? {}) };
     for (const k of keys) {
-      const lvl = levelOf(k, doc, levels);
+      const lvl = levelOf(k, levels);
       merged[lvl] = mergePatch(merged[lvl], patch);
     }
     return { changes: [{ key: `r`, meta: { ...rootMeta, levels: merged } }] };
@@ -82,7 +82,7 @@ export function planReset(doc: MmDoc, keys: string[], individual: boolean): Styl
   if (!individual) {
     const rootMeta: MmMeta = doc.root.meta ?? {};
     const merged: Record<string, StylePatch> = { ...(rootMeta.levels ?? {}) };
-    for (const k of keys) delete merged[levelOf(k, doc, levels)];
+    for (const k of keys) delete merged[levelOf(k, levels)];
     return { changes: [{ key: `r`, meta: { ...rootMeta, levels: merged } }] };
   }
   const changes: MetaChange[] = [];

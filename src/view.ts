@@ -12,7 +12,7 @@ import { branchToFloat, createFloat, floatToBranch, moveFloat } from "./float";
 import { activeLines, applyLineEdits, flattenDoc, isFloatKey, isFloatRoot, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
 import { insertLink, insertWebLink, linkHeading, MapLink, moveLinkTo, openableUrl, parseLinks, removeLink, removeWebLink, replaceLink, replaceWebLink, sameHeading, WebLink, webLinks } from "./links";
 import type { DialogValues } from "./node-dialog";
-import { appearanceDefaults, MmSettings, PanePosition } from "./settings";
+import { appearanceDefaults, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
 import type { MmMeta, StylePatch } from "./style";
 import { MapEdit, MapRenderer } from "./renderer";
@@ -605,7 +605,7 @@ export class MindmapView extends ItemView {
     }
     const menu = new Menu();
     for (const l of links) menu.addItem((item) => item.setTitle(l.label).setIcon(`globe`).onClick(() => open(l.url)));
-    menu.showAtMouseEvent(event as unknown as MouseEvent);
+    menu.showAtMouseEvent(event);
   }
 
   // Clic sur le repere d'un titre relie a d'autres notes : ouvre la carte de la note visee.
@@ -619,7 +619,7 @@ export class MindmapView extends ItemView {
     }
     const menu = new Menu();
     for (const l of links) menu.addItem((item) => item.setTitle(l.heading ? `${l.note} › ${l.heading}` : l.note).setIcon(`link`).onClick(() => void this.openLink(l, tab)));
-    menu.showAtMouseEvent(event as unknown as MouseEvent);
+    menu.showAtMouseEvent(event);
   }
 
   // Repere d'un titre dont les fleches sont repliees : va au titre vise, ou propose le choix.
@@ -637,7 +637,7 @@ export class MindmapView extends ItemView {
     }
     const menu = new Menu();
     for (const l of links) menu.addItem((item) => item.setTitle(l.heading ?? ``).setIcon(`corner-down-right`).onClick(() => go(l)));
-    menu.showAtMouseEvent(event as unknown as MouseEvent);
+    menu.showAtMouseEvent(event);
   }
 
   private async openLink(link: MapLink, newTab = false) {
@@ -704,7 +704,7 @@ export class MindmapView extends ItemView {
     add(t(`Ajouter un sous-titre (Tab)`), `corner-down-right`, run(`child`));
     add(t(`Ajouter un titre de même niveau (Entrée)`), `plus`, run(`sibling`), { disabled: isRoot });
     menu.addSeparator();
-    add(`Dupliquer (${mod} + D)`, `files`, run(`duplicate`), { disabled: isRoot });
+    add(t(`Dupliquer ({0} + D)`, mod), `files`, run(`duplicate`), { disabled: isRoot });
     add(t(`Copier ({0} + C)`, mod), `copy`, run(`copy`), { disabled: isRoot });
     add(t(`Couper ({0} + X)`, mod), `scissors`, run(`cut`), { disabled: isRoot });
     add(t(`Coller dedans ({0} + V)`, mod), `clipboard-paste`, run(`paste`));
@@ -735,7 +735,7 @@ export class MindmapView extends ItemView {
 
   // Le titre de la racine est le nom du fichier : le modifier renomme la note.
   private async renameFile(file: TFile, title: string) {
-    const name = title.replace(/[\\/:*?"<>|#^\[\]]/g, ` `).replace(/\s+/g, ` `).trim();
+    const name = title.replace(/[\\/:*?"<>|#^[\]]/g, ` `).replace(/\s+/g, ` `).trim();
     if (name === ``) {
       new Notice(t(`Le nom de la note ne peut pas être vide.`));
       return;
@@ -777,11 +777,11 @@ export class MindmapView extends ItemView {
   private async applyStyle(patch: StylePatch, individual: boolean) {
     const renderer = this.renderer;
     if (!renderer || !this.doc) {
-      await this.plugin.updateSettings(patch as Partial<MmSettings>);
+      await this.plugin.updateSettings(patch);
       return;
     }
     const plan = planStyle(this.doc, renderer.getSelection(), patch, individual);
-    if (plan.settings) await this.plugin.updateSettings(plan.settings as Partial<MmSettings>);
+    if (plan.settings) await this.plugin.updateSettings(plan.settings);
     await this.applyMetaChanges(plan.changes);
   }
 

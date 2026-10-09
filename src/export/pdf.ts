@@ -93,7 +93,10 @@ function mathOps(d: string): string {
     const c = t[i++];
     if (c === `M`) out.push(`${t[i++]} ${t[i++]} m`);
     else if (c === `L`) out.push(`${t[i++]} ${t[i++]} l`);
-    else if (c === `C`) out.push(`${t.slice(i, i + 6).join(` `)} c`), (i += 6);
+    else if (c === `C`) {
+      out.push(`${t.slice(i, i + 6).join(` `)} c`);
+      i += 6;
+    }
     else if (c === `Z`) out.push(`h`);
   }
   return out.join(` `);
@@ -212,7 +215,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
         if (!u.glyphs.has(g.gid)) u.glyphs.set(g.gid, g.text);
         cur += hex4(g.gid);
         const kern = g.advance - f.advance(g.gid);
-        const isSpace = g.text === ` ` || g.text === ` `;
+        const isSpace = g.text === ` ` || g.text === `\u00A0`;
         const extra = isSpace && !run.sup ? wordSpacing : 0;
         const adj = (-kern * 1000) / f.unitsPerEm - (extra * 1000) / sz;
         width += (g.advance * sz) / f.unitsPerEm + extra;
@@ -255,7 +258,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
       if (r.math) return a + (r.math.width * size) / 1000;
       const f = fontFor(r.style);
       const sz = size * (r.sup ? SUP_SCALE : 1);
-      const spaces = r.sup ? 0 : Array.from(r.text).filter((c) => c === ` ` || c === ` `).length;
+      const spaces = r.sup ? 0 : Array.from(r.text).filter((c) => c === ` ` || c === `\u00A0`).length;
       return a + (f.width(r.text) * sz) / f.unitsPerEm + spaces * wordSpacing;
     }, 0);
 
@@ -280,8 +283,6 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
     const ops: string[] = [];
     const links: LinkBox[] = [];
 
-    // Corps de page : lignes empilees depuis la marge haute.
-    let top = setup.marginTop;
     const drawRow = (row: Row, left: number, rowTop: number): void => {
       if (row.anchor !== undefined && !anchors.has(row.anchor)) anchors.set(row.anchor, { page: pageIndex, x: left + row.x, y: rowTop });
       if (row.alias !== undefined && !anchors.has(row.alias)) anchors.set(row.alias, { page: pageIndex, x: left + row.x, y: rowTop });

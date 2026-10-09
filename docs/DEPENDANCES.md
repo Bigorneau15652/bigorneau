@@ -1,6 +1,6 @@
 # Dépendances et licences de l'export
 
-Ce document recense chaque élément extérieur ajouté au plugin pour l'export de haute qualité, avec sa licence, la raison de son ajout et la date de validation par l'utilisateur, comme l'exige le paragraphe 4.12 de docs/POLITIQUE-EXPORT.md. Les textes de licence figurent dans le dossier licences/ et le fichier NOTICE à la racine résume les mentions obligatoires.
+Ce document recense chaque élément extérieur ajouté au plugin pour l'export de haute qualité, avec sa licence, la raison de son ajout et la date de validation par l'utilisateur, comme l'exige la règle du projet de ne rien ajouter sans l'accord du propriétaire. Les textes de licence figurent dans le dossier licences/ et le fichier NOTICE à la racine résume les mentions obligatoires.
 
 ## Polices Libertinus Serif et Libertinus Mono
 
@@ -21,3 +21,11 @@ Depuis la version 0.1.6, le plugin intègre la bibliothèque mathjax-full, versi
 ## Polices ajoutées par l'utilisateur
 
 Depuis la version 0.15.0, l'utilisateur peut déposer ses propres polices (.ttf ou .otf) dans un dossier de son coffre. Aucune bibliothèque n'a été ajoutée : le plugin lit lui-même les polices TrueType et OpenType (src/export/font.ts), les mesure pour la composition et les incorpore, réduites aux caractères utilisés, dans le PDF. Le plugin ne livre aucune de ces polices et ne les télécharge pas. Le plugin lit l'indicateur d'incorporation (fsType) de chaque police et refuse celles dont la licence interdit l'incorporation dans un document ; la licence des autres reste de la responsabilité de l'utilisateur. Les polices de test du dossier tests/fonts ont été fabriquées pour le projet avec fonttools : ce sont des polices synthétiques sans dessin de lettres, sans licence tierce.
+
+## Analyseur de chimie mhchemparser
+
+MathJax dépend de mhchemparser, version 4.2.1, copyright Martin Hensel, licence Apache 2.0 (même texte que licences/Apache-2.0-MathJax.txt). Source : https://github.com/mhchem/mhchemParser. Elle lit les formules chimiques de la commande `\ce` et est incorporée au fichier main.js avec MathJax.
+
+## Mentions de licence livrées avec le plugin
+
+Le plugin s'installe avec trois fichiers seulement (main.js, manifest.json, styles.css). Un bandeau de licence est donc écrit en tête de main.js par la configuration de construction (esbuild.config.mjs) : il cite le plugin, MathJax, mhchemparser, les polices Libertinus et les motifs de césure. Les textes complets restent dans le dossier licences/ et dans NOTICE.

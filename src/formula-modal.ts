@@ -484,7 +484,7 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
       const leaves = leafElements(shown.svg);
       if (e.detail >= 2) {
         const leaf = hitLeaf(leaves, e.clientX, e.clientY);
-        if (leaf >= 0) await this.chooseAt(shown, leaves, leaf, mine);
+        if (leaf >= 0) await this.chooseAt(shown, leaf, mine);
         return;
       }
       // Un clic sur le carre d'un emplacement vide place le curseur dedans (c'est ainsi que l'on ecrit sous une barre de fraction).
@@ -512,7 +512,7 @@ export function openFormulaEditor(deps: FormulaEditorDeps, forceDisplay?: boolea
     }
 
     // Choisit l'element dessine d'indice `leaf` : la plus petite partie du TeX qui le contient, puis des parties de plus en plus grandes.
-    private async chooseAt(shown: NonNullable<FormulaModal[`shown`]>, leaves: Element[], leaf: number, mine: number): Promise<void> {
+    private async chooseAt(shown: NonNullable<FormulaModal[`shown`]>, leaf: number, mine: number): Promise<void> {
       const sets: number[][] = [];
       for (const unit of shown.model.units) sets.push(await this.setOf({ unit }));
       if (this.shown !== shown || mine !== this.clickSeq) return;
