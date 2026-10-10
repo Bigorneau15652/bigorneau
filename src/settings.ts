@@ -370,7 +370,8 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.floatLevel = typeof merged.floatLevel === `number` && merged.floatLevel >= 1 && merged.floatLevel <= 6 ? Math.round(merged.floatLevel) : 2;
   if (![`oval`, `round`, `sharp`, `underline`, `parallelogram`, `diamond`].includes(merged.floatShape)) merged.floatShape = `oval`;
   if (![`frame`, `oval`, `underline`, `parallelogram`, `diamond`].includes(merged.shape)) merged.shape = `frame`;
-  for (const k of [`floatStrokeColor`, `floatFillColor`] as const) {
+  // Every colour of the settings is empty or a hexadecimal colour: a profile or a data file cannot carry an address or a style rule.
+  for (const k of [`strokeColor`, `fillColor`, `floatStrokeColor`, `floatFillColor`] as const) {
     if (typeof merged[k] !== `string` || (merged[k] !== `` && !TAG_HEX.test(merged[k]))) merged[k] = ``;
   }
   if (![``, `solid`, `dashed`, `dotted`].includes(merged.floatStrokeDash)) merged.floatStrokeDash = ``;

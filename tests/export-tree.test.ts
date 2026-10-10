@@ -209,3 +209,24 @@ test(`l'identifiant d'un tableau peut suivre une ligne vide`, () => {
   assert.equal(blocks.length, 2);
   assert.equal(blocks[1].type === `paragraph` && blocks[1].text, `Suite.`);
 });
+
+test(`les commentaires HTML ne sont pas imprimes`, () => {
+  assert.equal(stripComments(`avant <!-- cache --> apres`), `avant  apres`);
+  assert.equal(stripComments([`a`, `<!-- debut`, `milieu`, `fin -->`, `b`].join(`\n`)), [`a`, `b`].join(`\n`));
+  assert.equal(stripComments(`a %% x <!-- y %% z --> b`), `a  z --> b`);
+  assert.equal(stripComments(`a <!-- x %% y --> b %% c`), `a  b `);
+});
+
+test(`un commentaire HTML jamais ferme reste du texte`, () => {
+  assert.equal(stripComments([`a <!-- jamais ferme`, `suite`].join(`\n`)), [`a <!-- jamais ferme`, `suite`].join(`\n`));
+});
+
+test(`les commentaires HTML dans un bloc de code restent`, () => {
+  const text = [`\`\`\``, `<!-- reste -->`, `\`\`\``].join(`\n`);
+  assert.equal(stripComments(text), text);
+});
+
+test(`les commentaires d'un titre ne sortent pas dans l'export`, () => {
+  const doc = buildExportDoc([`# Rapport`, `## Partie %% a revoir %% une <!-- prix: 40 000 --> fin`, `texte`].join(`\n`), `Rapport.md`);
+  assert.equal(doc.sections[0].sections[0].title, `Partie  une  fin`);
+});

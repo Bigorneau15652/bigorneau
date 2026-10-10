@@ -125,7 +125,7 @@ const FONT_SCALES = [
 ];
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
+  const el = createEl(tag);
   if (cls) el.className = cls;
   if (text !== undefined) el.textContent = text;
   return el;
@@ -229,7 +229,7 @@ export class MapControls {
     // le bouton d'aide reste toujours libre.
     const fit = (): void => {
       for (const bar of [dock, zoom]) {
-        const kids = Array.from(bar.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+        const kids = Array.from(bar.children).filter((c): c is HTMLElement => c.instanceOf(HTMLElement));
         for (const k of kids) k.removeClass(`mmw-fit-hidden`);
         for (let i = kids.length - 1; i > 0 && bar.scrollWidth > bar.clientWidth + 1; i--) kids[i].addClass(`mmw-fit-hidden`);
       }

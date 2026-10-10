@@ -9,6 +9,7 @@ import { RegisterHTMLHandler } from "mathjax-full/js/handlers/html.js";
 import { AllPackages } from "mathjax-full/js/input/tex/AllPackages.js";
 import type { LiteElement } from "mathjax-full/js/adaptors/lite/Element.js";
 import { MathAsset, parseMathSvg } from "./math";
+import { cleanMathSvg } from "./svg-clean";
 
 interface Engine {
   convert(tex: string, display: boolean): string;
@@ -17,13 +18,14 @@ interface Engine {
 let engine: Engine | undefined;
 
 // Le moteur est cree a la premiere formule. Les extensions qui chargent d'autres fichiers a la demande (autoload, require) sont
-// laissees de cote : elles ne fonctionnent pas dans un fichier unique. Les extensions noundefined et noerrors sont ecartees pour qu'une
+// laissees de cote : elles ne fonctionnent pas dans un fichier unique. L'extension html (\href, \style, \class) est ecartee aussi : elle
+// peut ecrire une adresse dans le dessin. Les extensions noundefined et noerrors sont ecartees pour qu'une
 // commande inconnue ou une formule incorrecte soit refusee (et signalee) au lieu d'etre dessinee comme du texte.
 function getEngine(): Engine {
   if (engine) return engine;
   const adaptor = liteAdaptor();
   RegisterHTMLHandler(adaptor);
-  const packages = AllPackages.filter((p: string) => ![`autoload`, `require`, `noundefined`, `noerrors`].includes(p));
+  const packages = AllPackages.filter((p: string) => ![`autoload`, `require`, `noundefined`, `noerrors`, `html`].includes(p));
   const doc = mathjax.document(``, { InputJax: new TeX({ packages }), OutputJax: new SVG({ fontCache: `local` }) });
   engine = { convert: (tex, display) => adaptor.serializeXML(doc.convert(tex, { display }) as LiteElement) };
   return engine;
@@ -62,7 +64,7 @@ export function renderTexSvg(tex: string, display: boolean): string | null {
     if (/data-mml-node="merror"|<mjx-merror|data-mjx-error/.test(out)) return remember(svgs, key, null);
     const from = out.indexOf(`<svg`);
     const to = out.lastIndexOf(`</svg>`);
-    return remember(svgs, key, from < 0 || to < 0 ? null : out.slice(from, to + 6));
+    return remember(svgs, key, from < 0 || to < 0 ? null : cleanMathSvg(out.slice(from, to + 6)));
   } catch {
     return remember(svgs, key, null);
   }

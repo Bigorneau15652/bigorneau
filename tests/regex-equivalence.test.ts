@@ -4,6 +4,9 @@ import { BOLD_OFF, BOLD_ON, emphasize, ITALIC_OFF, ITALIC_ON } from "../src/expo
 import { findMath } from "../src/export/math";
 import { abbreviationSpacing } from "../src/export/typography";
 import { NO_BREAK_SPACE } from "../src/export/font-metrics";
+import { PAGE_ZONE_RE } from "../src/page-zone";
+import { PARAGRAPH_MARKER_RE } from "../src/paragraph-format";
+import { LIST_MARKER_RE } from "../src/illustration-list";
 
 // Les expressions a « lookbehind » ont ete remplacees (les anciens iPhone et iPad ne savent pas les lire). Ces tests comparent le
 // nouveau code aux expressions d'origine, ecrites ici sous forme de texte pour que le source du plugin n'en contienne plus, sur
@@ -92,4 +95,40 @@ test(`le decoupage en lignes qui garde les fins de ligne est identique a l'ancie
     if (t === ``) continue;
     assert.deepEqual(t.match(/[^\n]*\n|[^\n]+/g) ?? [], old(t), JSON.stringify(t));
   }
+});
+
+// Les trois reperes %% page: %%, %% p: %% et %% liste: %% : l'expression d'origine (capture paresseuse entre deux series d'espaces) etait de
+// temps cubique sur une ligne d'espaces. Le nouveau code doit donner le meme resultat, vite.
+const OLD_MARKERS: [RegExp, RegExp, number][] = [
+  [PAGE_ZONE_RE, new RegExp(String.raw`^[ \t]*%%[ \t]*page[ \t]*:[ \t]*([^%\n]*?)[ \t]*%%[ \t]*$`), 1],
+  [PARAGRAPH_MARKER_RE, new RegExp(String.raw`^([ \t]*)%%[ \t]*p[ \t]*:[ \t]*([^%\n]*?)[ \t]*%%[ \t]?`), 2],
+  [LIST_MARKER_RE, new RegExp(String.raw`^[ \t]*%%[ \t]*(?:liste|list)[ \t]*:[ \t]*([^%\n]*?)[ \t]*%%[ \t]*$`), 1],
+];
+
+test(`les reperes %% donnent le meme resultat qu'avant sur des lignes tirees au hasard`, () => {
+  const r = rng(42);
+  const alphabet = [`%`, `%%`, ` `, `\t`, `p`, `:`, `a`, `x`, `page`, `list`, `liste`, `=`, `1`, `,`];
+  for (let n = 0; n < 60000; n++) {
+    const line = randomText(r, alphabet, 14);
+    for (const [fresh, old, group] of OLD_MARKERS) {
+      const a = fresh.exec(line);
+      const b = old.exec(line);
+      assert.equal(a === null, b === null, JSON.stringify(line));
+      if (a && b) {
+        assert.equal(a[0], b[0], JSON.stringify(line));
+        assert.equal(a[group].trim(), b[group], JSON.stringify(line));
+      }
+    }
+  }
+});
+
+test(`une ligne de milliers d'espaces ne fige pas les reperes %%`, () => {
+  const start = Date.now();
+  const spaces = ` `.repeat(30000);
+  for (const line of [`%% page:${spaces}`, `%% p:${spaces}x`, `%% liste:${spaces}`, `%%${spaces}page:${spaces}`, `${spaces}%% p:${spaces}`]) {
+    PAGE_ZONE_RE.exec(line);
+    PARAGRAPH_MARKER_RE.exec(line);
+    LIST_MARKER_RE.exec(line);
+  }
+  assert.ok(Date.now() - start < 1500, `duree ${Date.now() - start} ms`);
 });

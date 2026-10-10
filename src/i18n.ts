@@ -11,7 +11,7 @@ let current: Lang = `fr`;
 // Langue d'Obsidian : memorisee par l'application dans le stockage local (cle « language ») ; absente, c'est l'anglais.
 export function detectLang(): Lang {
   try {
-    const stored = (globalThis as { localStorage?: { getItem(k: string): string | null } }).localStorage?.getItem(`language`);
+    const stored = typeof window === `undefined` ? null : window.localStorage?.getItem(`language`);
     return stored && stored.toLowerCase().startsWith(`fr`) ? `fr` : `en`;
   } catch {
     return `en`;

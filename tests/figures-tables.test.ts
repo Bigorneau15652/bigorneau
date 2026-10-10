@@ -250,3 +250,38 @@ test(`un tableau dont l'identifiant suit une ligne vide est trouve par les renvo
   assert.deepEqual(c.typeset.warnings, []);
   assert.ok(c.typeset.rows.some((r) => r.runs?.some((u) => u.text === `Tableau` && u.link === `#b:conso`)));
 });
+
+// Segment JPEG : repere, longueur (2 octets, elle compte ces 2 octets) puis contenu.
+const segment = (marker: number, content: number[]): number[] => [0xff, marker, (content.length + 2) >> 8, (content.length + 2) & 0xff, ...content];
+const ascii = (s: string): number[] => Array.from(s, (c) => c.charCodeAt(0));
+
+test(`les metadonnees d'un JPEG (EXIF, position GPS, commentaires) ne sont pas reprises dans le PDF`, async () => {
+  const { stripJpegMetadata, jpegInfo } = await import(`../src/export/image`);
+  const jpeg = new Uint8Array([
+    0xff, 0xd8,
+    ...segment(0xe0, ascii(`JFIF`).concat([0, 1, 1, 0, 0, 1, 0, 1, 0, 0])),
+    ...segment(0xe1, ascii(`Exif`).concat([0, 0], ascii(`GPSLatitude 43.61 Samsung SM-G991B`))),
+    ...segment(0xe1, ascii(`http://ns.adobe.com/xap/1.0/`).concat(ascii(`<x:xmpmeta>auteur</x:xmpmeta>`))),
+    ...segment(0xe2, ascii(`ICC_PROFILE`).concat([0, 1, 1], ascii(`profil`))),
+    ...segment(0xed, ascii(`Photoshop 3.0`)),
+    ...segment(0xee, ascii(`Adobe`)),
+    ...segment(0xfe, ascii(`commentaire prive`)),
+    ...segment(0xc0, [8, 0, 100, 0, 200, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]),
+    ...segment(0xda, [3, 1, 0, 2, 0x11, 3, 0x11, 0, 63, 0]),
+    1, 2, 3, 0xff, 0xd9,
+  ]);
+  const clean = stripJpegMetadata(jpeg);
+  assert.ok(clean);
+  const text = Buffer.from(clean).toString(`latin1`);
+  for (const gone of [`Exif`, `GPS`, `Samsung`, `xmpmeta`, `Photoshop`, `commentaire`]) assert.ok(!text.includes(gone), gone);
+  for (const kept of [`JFIF`, `ICC_PROFILE`, `profil`, `Adobe`]) assert.ok(text.includes(kept), kept);
+  assert.deepEqual(jpegInfo(clean), { width: 200, height: 100, components: 3 });
+  assert.deepEqual(Array.from(clean.subarray(clean.length - 5)), [1, 2, 3, 0xff, 0xd9]);
+});
+
+test(`un fichier JPEG mal forme n'est pas repris tel quel`, async () => {
+  const { stripJpegMetadata } = await import(`../src/export/image`);
+  assert.equal(stripJpegMetadata(new Uint8Array([1, 2, 3, 4, 5])), null);
+  assert.equal(stripJpegMetadata(new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x7f, 0xff, 1, 2])), null);
+  assert.equal(stripJpegMetadata(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0, 0])), null);
+});

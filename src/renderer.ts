@@ -234,16 +234,16 @@ export class MapRenderer {
     this.mapEl.classList.add(`mmw-map`);
     this.mapEl.tabIndex = 0;
 
-    this.frameEl = document.createElement(`div`);
+    this.frameEl = createEl(`div`);
     this.frameEl.className = `mmw-frame`;
-    this.worldEl = document.createElement(`div`);
+    this.worldEl = createEl(`div`);
     this.worldEl.className = `mmw-world`;
     this.frameEl.appendChild(this.worldEl);
     this.svgEl = document.createElementNS(SVG_NS, `svg`);
     this.svgEl.setAttribute(`class`, `mmw-svg`);
-    this.messageEl = document.createElement(`div`);
+    this.messageEl = createEl(`div`);
     this.messageEl.className = `mmw-message`;
-    this.marqueeEl = document.createElement(`div`);
+    this.marqueeEl = createEl(`div`);
     this.marqueeEl.className = `mmw-marquee`;
     this.marqueeEl.style.display = `none`;
     this.mapEl.append(this.frameEl, this.messageEl, this.marqueeEl);
@@ -271,7 +271,7 @@ export class MapRenderer {
       addFixed: () => this.callbacks.onAddFixed?.(),
     });
 
-    this.statusEl = document.createElement(`div`);
+    this.statusEl = createEl(`div`);
     this.statusEl.className = `mmw-status`;
     this.mapEl.appendChild(this.statusEl);
 
@@ -544,7 +544,7 @@ export class MapRenderer {
     }
     if (list) {
       // Trait qui ouvre la zone des sujets flottants.
-      const sep = document.createElement(`div`);
+      const sep = createEl(`div`);
       sep.className = `mmw-float-sep`;
       sep.title = t(`Sujets flottants : glissez un titre ici pour le sortir de la carte`);
       sep.style.top = `${this.floatZoneY}px`;
@@ -666,7 +666,7 @@ export class MapRenderer {
   }
 
   private createNodeEl(n: LNode, s: MmSettings): HTMLElement {
-    const el = document.createElement(`div`);
+    const el = createEl(`div`);
     el.className = `mmw-node mmw-depth-${Math.min(n.depth, 3)}`;
     el.dataset.key = n.key;
     if (this.isHidden(n)) el.classList.add(`mmw-hidden`);
@@ -686,7 +686,7 @@ export class MapRenderer {
     // Le titre court remplace le titre sur la carte ; la note garde le titre complet.
     const shown = meta?.short || title;
     const prefix = s.showPrefix && n.depth > 0 ? `${`#`.repeat(n.node.level)} ` : ``;
-    const label = document.createElement(`span`);
+    const label = createEl(`span`);
     label.className = `mmw-title`;
     if (shown === `` && prefix === ``) {
       el.classList.add(`mmw-empty-title`);
@@ -699,7 +699,7 @@ export class MapRenderer {
     // Mappemonde si le paragraphe du titre contient des liens web ou des videos integrees (avant les etiquettes).
     const web = this.webByKey.get(n.key);
     if (web) {
-      const mark = document.createElement(`span`);
+      const mark = createEl(`span`);
       mark.className = `mmw-web-mark`;
       setSvg(mark, iconSvg(`web`, s.iconWeb));
       if (s.iconColorWeb) mark.style.color = s.iconColorWeb;
@@ -712,7 +712,7 @@ export class MapRenderer {
     if (list ? s.showExternalLinks : !s.showExternalLinks) {
       const ext = (this.linksFrom.get(n.key) ?? []).filter((l) => l.external);
       if (ext.length > 0) {
-        const mark = document.createElement(`span`);
+        const mark = createEl(`span`);
         mark.className = `mmw-link-mark`;
         setSvg(mark, iconSvg(`external`, s.iconExternal));
         if (s.iconColorExternal) mark.style.color = s.iconColorExternal;
@@ -723,7 +723,7 @@ export class MapRenderer {
     if (list ? s.showInternalLinks : !s.showInternalLinks) {
       const inner = (this.linksFrom.get(n.key) ?? []).filter((l) => !l.external && l.to);
       if (inner.length > 0) {
-        const mark = document.createElement(`span`);
+        const mark = createEl(`span`);
         mark.className = `mmw-int-mark`;
         setSvg(mark, iconSvg(`internal`, s.iconInternal));
         if (s.iconColorInternal) mark.style.color = s.iconColorInternal;
@@ -736,10 +736,10 @@ export class MapRenderer {
     const defs = new Map(s.tags.map((t) => [t.id, t]));
     const tags = (meta?.tags ?? []).flatMap((id) => (defs.has(id) ? [defs.get(id)!] : []));
     if (tags.length > 0) {
-      const box = document.createElement(`span`);
+      const box = createEl(`span`);
       box.className = `mmw-tags`;
       for (const t of tags) {
-        const chip = document.createElement(`span`);
+        const chip = createEl(`span`);
         chip.className = `mmw-tag`;
         chip.textContent = t.name === `` ? `?` : t.name;
         chip.style.background = t.bg;
@@ -752,7 +752,7 @@ export class MapRenderer {
     const tip: string[] = [];
     if (title !== `` || prefix !== ``) tip.push(prefix + title);
     if (meta?.comment) {
-      const mark = document.createElement(`span`);
+      const mark = createEl(`span`);
       mark.className = `mmw-comment-mark`;
       setSvg(mark, COMMENT_ICON);
       el.appendChild(mark);
@@ -773,7 +773,7 @@ export class MapRenderer {
     if (n.depth < 1 || isFloatRoot(n.key)) return null;
     const own = !!n.node.meta?.hidden;
     if (!own && n.parent && this.isHidden(n.parent)) return null;
-    const el = document.createElement(`div`);
+    const el = createEl(`div`);
     el.className = `mmw-eye` + (own ? ` mmw-eye-on` : ``);
     el.dataset.eye = n.key;
     setSvg(el, own ? EYE_OFF_ICON : EYE_ICON);
@@ -798,7 +798,7 @@ export class MapRenderer {
 
   // Vue Liste : petit triangle a gauche du titre, qui replie ou deplie ses enfants.
   private createListFold(n: LNode): HTMLElement {
-    const el = document.createElement(`div`);
+    const el = createEl(`div`);
     el.className = `mmw-lfold` + (n.collapsed ? ` mmw-lfold-collapsed` : ``);
     el.dataset.fold = n.key;
     setSvg(el, FOLD_ICON);
@@ -809,7 +809,7 @@ export class MapRenderer {
   }
 
   private createFold(n: LNode): HTMLElement {
-    const el = document.createElement(`div`);
+    const el = createEl(`div`);
     el.className = `mmw-fold` + (n.collapsed ? ` mmw-fold-collapsed` : ``);
     el.dataset.fold = n.key;
     el.textContent = n.collapsed ? String(countDescendants(n)) : `−`;
@@ -921,14 +921,14 @@ export class MapRenderer {
     const showExternal = this.getSettings().showExternalLinks;
     for (const l of this.links) {
       if (!showExternal || !l.external || !this.els.has(l.from)) continue;
-      const el = document.createElement(`div`);
+      const el = createEl(`div`);
       el.className = `mmw-ext-box`;
       el.dataset.ext = this.linkId(l);
       const name = l.note.replace(/^.*\//, ``);
-      const label = document.createElement(`span`);
+      const label = createEl(`span`);
       label.className = `mmw-ext-label`;
       label.textContent = l.heading ? `${name} › ${l.heading}` : name;
-      const open = document.createElement(`span`);
+      const open = createEl(`span`);
       open.className = `mmw-ext-open`;
       setSvg(open, OPEN_ICON);
       open.title = t(`Ouvrir la carte de cette note (Cmd ou Ctrl : ouvrir la note dans un nouvel onglet)`);
@@ -1089,7 +1089,7 @@ export class MapRenderer {
     const L = this.linking;
     if (!L) return;
     if (!this.linkHint) {
-      this.linkHint = document.createElement(`div`);
+      this.linkHint = createEl(`div`);
       this.linkHint.className = `mmw-link-hint`;
       this.mapEl.appendChild(this.linkHint);
     }
@@ -1963,7 +1963,7 @@ export class MapRenderer {
     this.dropLineEl?.remove();
     this.dropLineEl = null;
     if (!this.dropLine) return;
-    const el = document.createElement(`div`);
+    const el = createEl(`div`);
     el.className = `mmw-drop-line`;
     el.style.left = `${this.dropLine.x}px`;
     el.style.top = `${this.dropLine.y}px`;
@@ -2129,7 +2129,7 @@ export class MapRenderer {
     if (this.renaming && this.renaming.key === key) return;
     this.commitRename(true, false);
     if (this.selected !== key) this.select(key);
-    const input = document.createElement(`input`);
+    const input = createEl(`input`);
     input.type = `text`;
     input.className = `mmw-rename`;
     input.spellcheck = false;

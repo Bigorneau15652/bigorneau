@@ -11,7 +11,7 @@ import type MindmapWritingPlugin from "./main";
 
 // Compression Flate des flux du PDF, par le navigateur d'Obsidian.
 async function deflate(data: Uint8Array): Promise<Uint8Array> {
-  const g = globalThis as unknown as { CompressionStream?: new (format: string) => { readable: ReadableStream; writable: WritableStream } };
+  const g = window as unknown as { CompressionStream?: new (format: string) => { readable: ReadableStream; writable: WritableStream } };
   if (!g.CompressionStream) return data;
   const stream = new Blob([data.slice().buffer]).stream().pipeThrough(new g.CompressionStream(`deflate`));
   return new Uint8Array(await new Response(stream).arrayBuffer());

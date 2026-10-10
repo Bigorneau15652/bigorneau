@@ -119,52 +119,70 @@ function fenceCloses(line: string, fence: { ch: string; len: number }): boolean 
   return !!c && c[1][0] === fence.ch && c[1].length >= fence.len;
 }
 
-// Retire les commentaires %% ... %% (sur une ou plusieurs lignes), hors blocs de code. Une ligne qui ne contenait
-// qu'un commentaire disparait entierement, pour ne pas creer de saut de paragraphe.
+// Removes the comments %% ... %% and <!-- ... --> (on one or several lines), outside code blocks. The first opener found wins.
+// A <!-- that is never closed is kept as text, so that it cannot hide the rest of the note. A line that held only a comment
+// disappears entirely, so that no paragraph break is created.
 export function stripComments(text: string): string {
   const out: string[] = [];
+  const lines = splitLines(text);
+  let lastClose = -1;
+  lines.forEach((raw, n) => {
+    if (raw.includes(`-->`)) lastClose = n;
+  });
+  // True when an HTML comment opened at column `col` of line `n` is closed later.
+  const closedAfter = (n: number, col: number): boolean => lastClose > n || (lastClose === n && stripEol(lines[n]).indexOf(`-->`, col + 4) !== -1);
   let fence: { ch: string; len: number } | null = null;
-  let inComment = false;
-  for (const raw of splitLines(text)) {
+  let closer = ``;
+  lines.forEach((raw, n) => {
     const line = stripEol(raw);
-    if (!inComment) {
+    if (closer === ``) {
       if (fence) {
         out.push(line);
         if (fenceCloses(line, fence)) fence = null;
-        continue;
+        return;
       }
       const opened = fenceOpen(line);
       if (opened) {
         fence = opened;
         out.push(line);
-        continue;
+        return;
       }
     }
     let result = ``;
-    let hadComment = inComment;
+    let hadComment = closer !== ``;
     let i = 0;
     while (i < line.length) {
-      const k = line.indexOf(`%%`, i);
-      if (inComment) {
+      if (closer !== ``) {
+        const k = line.indexOf(closer, i);
         if (k === -1) {
           i = line.length;
         } else {
-          inComment = false;
-          i = k + 2;
+          i = k + closer.length;
+          closer = ``;
         }
-      } else if (k === -1) {
+        continue;
+      }
+      const percent = line.indexOf(`%%`, i);
+      let html = line.indexOf(`<!--`, i);
+      while (html !== -1 && !closedAfter(n, html)) html = line.indexOf(`<!--`, html + 4);
+      if (percent === -1 && html === -1) {
         result += line.slice(i);
         i = line.length;
-      } else {
-        result += line.slice(i, k);
-        inComment = true;
+      } else if (html === -1 || (percent !== -1 && percent < html)) {
+        result += line.slice(i, percent);
+        closer = `%%`;
         hadComment = true;
-        i = k + 2;
+        i = percent + 2;
+      } else {
+        result += line.slice(i, html);
+        closer = `-->`;
+        hadComment = true;
+        i = html + 4;
       }
     }
-    if (hadComment && result.trim() === ``) continue;
+    if (hadComment && result.trim() === ``) return;
     out.push(result);
-  }
+  });
   return out.join(`\n`);
 }
 
@@ -474,10 +492,15 @@ export function parseBlocks(text: string): DocBlock[] {
   return out;
 }
 
+// Title of a section without the comments written in the heading line (they must not reach the contents, bookmarks or running header).
+function titleOf(node: MmNode): string {
+  return stripComments(node.title).trim();
+}
+
 function buildSection(node: MmNode, opts: ExtractOptions): DocSection {
   return {
     level: node.level,
-    title: node.title,
+    title: titleOf(node),
     blocks: parseBlocks(node.body),
     sections: visibleChildren(node, opts),
   };
@@ -516,5 +539,5 @@ export function buildExportDoc(text: string, fileName: string, opts: ExtractOpti
   const author = /^(?:author|auteur)[ \t]*:[ \t]*[\x22\x27\x60]?([^\x22\x27\x60\r\n]+?)[\x22\x27\x60]?[ \t]*$/m.exec(doc.frontmatter);
   const toc = tocProps(doc.frontmatter, `toc`);
   const chapterToc = tocProps(doc.frontmatter, `chapter-toc`);
-  return { title: doc.root.title, ...(toc ? { toc } : {}), ...(chapterToc ? { chapterToc } : {}), ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
+  return { title: titleOf(doc.root), ...(toc ? { toc } : {}), ...(chapterToc ? { chapterToc } : {}), ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
 }

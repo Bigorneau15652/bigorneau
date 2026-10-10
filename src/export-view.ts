@@ -123,7 +123,7 @@ export class ExportPreviewView extends ItemView {
         if (url.startsWith(`#`)) span.addEventListener(`click`, () => this.goTo(url.slice(1)));
         else {
           span.title = url;
-          span.addEventListener(`click`, () => window.open(url));
+          span.addEventListener(`click`, () => window.open(url, `_blank`, `noopener`));
         }
       }
     }

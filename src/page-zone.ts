@@ -16,7 +16,9 @@ export interface PageZone {
 // Ligne d'etiquette seule (zone de page ou liste d'illustrations) : elle ne fait pas partie du bloc qui la suit.
 const LABEL_LINE_RE = /^[ \t]*%%[ \t]*(?:liste|list)[ \t]*:[^%\n]*%%[ \t]*$/;
 
-export const PAGE_ZONE_RE = /^[ \t]*%%[ \t]*page[ \t]*:[ \t]*([^%\n]*?)[ \t]*%%[ \t]*$/;
+// The text of the label is captured with its spaces and trimmed by the reader: a lazy capture between two runs of spaces would make
+// the expression slow (cubic) on a line made of thousands of spaces.
+export const PAGE_ZONE_RE = /^[ \t]*%%[ \t]*page[ \t]*:([^%\n]*)%%[ \t]*$/;
 
 const norm = (s: string): string => s.normalize(`NFD`).replace(/[̀-ͯ]/g, ``).toLowerCase().trim();
 
@@ -49,7 +51,7 @@ export function formatPageZone(zone: PageZone): string {
 // Zone ecrite sur cette ligne, ou null.
 export function readPageZone(line: string): PageZone | null {
   const m = PAGE_ZONE_RE.exec(line.replace(/\r$/, ``));
-  return m ? parsePageZone(m[1]) : null;
+  return m ? parsePageZone(m[1].trim()) : null;
 }
 
 // Repere pose avant l'analyse du texte (les commentaires sont alors retires) : la ligne d'une zone devient une ligne que l'analyse

@@ -72,3 +72,14 @@ test(`reglages : auteur du PDF vide par defaut, nettoye quand il est enregistre`
   const bad = migrateSettings({ exportHeader: `x`, exportFooter: 1, exportFlushBottom: `oui`, exportChapterBreak: `x`, exportFootnoteNumbering: `x`, exportProtrusion: `non`, exportToc: `oui`, exportTocDepth: 9, exportChapterToc: 1, exportChapterTocDepth: 0 });
   assert.deepEqual([bad.exportHeader, bad.exportFooter, bad.exportFlushBottom, bad.exportChapterBreak, bad.exportFootnoteNumbering, bad.exportProtrusion, bad.exportToc, bad.exportTocDepth, bad.exportChapterToc, bad.exportChapterTocDepth], [`chapter`, `number`, false, `none`, `continuous`, true, false, 3, false, 3]);
 });
+
+test(`les couleurs de contour et de fond refusent tout ce qui n'est pas une couleur hexadecimale`, () => {
+  for (const bad of [`url(http://exemple.fr/a)`, `red; background:url(x)`, `javascript:1`, 42, null, `#12`, `#gggggg`]) {
+    const s = migrateSettings({ strokeColor: bad, fillColor: bad });
+    assert.equal(s.strokeColor, ``, String(bad));
+    assert.equal(s.fillColor, ``, String(bad));
+  }
+  const ok = migrateSettings({ strokeColor: `#336699`, fillColor: `#fa0` });
+  assert.equal(ok.strokeColor, `#336699`);
+  assert.equal(ok.fillColor, `#fa0`);
+});
