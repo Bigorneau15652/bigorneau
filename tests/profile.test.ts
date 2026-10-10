@@ -76,3 +76,22 @@ test(`le nom d'un profil devient un nom de fichier valable`, () => {
   assert.ok(sameProfile(`Rapport`, `rapport`));
   assert.ok(!sameProfile(`Rapport`, `Rapports`));
 });
+
+test(`charger un profil fusionne les etiquettes par identifiant et garde celles de la carte`, () => {
+  const current = base();
+  current.tags = [
+    { id: `a`, name: `Ancien A`, bg: `#111111`, fg: `#eeeeee` },
+    { id: `b`, name: `B local`, bg: `#222222`, fg: `#dddddd` },
+  ];
+  const saved = base();
+  saved.tags = [
+    { id: `a`, name: `Nouveau A`, bg: `#333333`, fg: `#cccccc` },
+    { id: `c`, name: `C du profil`, bg: `#444444`, fg: `#bbbbbb` },
+  ];
+  const profile = parseProfile(serializeProfile(buildProfile(`P`, saved)))!;
+  const next = applyProfile(current, profile);
+  assert.deepEqual(next.tags.map((t) => [t.id, t.name]), [[`a`, `Nouveau A`], [`c`, `C du profil`], [`b`, `B local`]]);
+  // Un profil sans etiquettes laisse celles de la carte.
+  const bare = parseProfile(JSON.stringify({ kind: `bigorneau-profile`, version: 1, settingsVersion: current.settingsVersion, settings: { maxWidth: 250 } }))!;
+  assert.deepEqual(applyProfile(current, bare).tags.map((t) => t.id), [`a`, `b`]);
+});
