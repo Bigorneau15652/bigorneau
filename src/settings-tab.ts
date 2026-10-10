@@ -589,6 +589,7 @@ export class MmSettingTab extends PluginSettingTab {
       s.exportFigureCaption,
       (v) => (s.exportFigureCaption = v === `above` ? `above` : `below`)
     );
+    this.toggle(el, t(`Nom des images collées`), t(`Après un collage d'image (Ctrl + V), une fenêtre demande le nom de la figure, qui devient sa légende dans l'export. Un nom vide laisse l'image sans légende.`), `namePastedImages`);
     this.exportChoice(
       el,
       t(`Renvois vers un titre, une figure ou un tableau`),

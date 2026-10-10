@@ -2,7 +2,7 @@
 // d'image place dans la note une image ou un dessin du coffre. Dans les deux cas, le nom demande est ecrit dans le lien
 // (![[dessin.excalidraw|Nom]]) : c'est la legende « Figure N : Nom » de l'export. Sans nom, la figure n'a ni legende ni numero.
 import { App, Editor, Modal, Notice, Setting } from "obsidian";
-import { addedDrawing, figureMarkup, isolateFigure, nameDrawing } from "./figure-insert";
+import { addedDrawing, addedPicture, figureMarkup, isolateFigure, nameDrawing } from "./figure-insert";
 import { t } from "./i18n";
 import { ImagePicker } from "./image-picker";
 import { insertBlock } from "./table-edit";
@@ -158,4 +158,27 @@ export function insertNamedImage(app: App, editor: Editor): void {
     },
     t(`Insérer une image ou un dessin`)
   ).open();
+}
+
+// Apres un collage d'image (Ctrl + V ou Cmd + V) : Obsidian enregistre l'image et ecrit son lien sans nom, un peu apres. Ce lien est
+// attendu, puis le nom de la figure est demande (un nom vide laisse l'image sans legende).
+export function nameAfterPaste(app: App, editor: Editor): void {
+  const before = editor.getValue();
+  let tries = 0;
+  const timer = window.setInterval(() => {
+    tries++;
+    const added = addedPicture(before, editor.getValue());
+    if (!added && tries < 25) return;
+    window.clearInterval(timer);
+    if (!added) return;
+    new NameModal(app, t(`Nom de la figure`), (name) => {
+      if (name === null || name.trim() === ``) return;
+      // The text may have changed while the window was open: the link is looked for again.
+      const text = editor.getValue();
+      const start = text.indexOf(added.text);
+      if (start < 0) return;
+      const edit = isolateFigure(text, nameDrawing({ ...added, start, end: start + added.text.length }, name));
+      if (text.slice(edit.from, edit.to) !== edit.insert) editor.replaceRange(edit.insert, editor.offsetToPos(edit.from), editor.offsetToPos(edit.to));
+    }).open();
+  }, 200);
 }

@@ -183,3 +183,24 @@ export function tableCaptionLines(text: string): TableCaptionLine[] {
   }
   return out;
 }
+
+// Image integree sans nom par Obsidian (![[Pasted image 2026....png]]) : le collage d'une capture d'ecran ecrit ce lien dans la note.
+const PICTURE_EMBED_RE = /!\[\[([^\]|]+?\.(?:png|jpe?g|gif|webp|bmp|avif|svg))\]\]/gi;
+
+// Images sans nom ajoutees entre deux etats du texte (celles qu'Obsidian vient d'ecrire), ou null.
+export function addedPicture(before: string, after: string): DrawingEmbed | null {
+  const seen = new Map<string, number>();
+  for (const m of before.matchAll(PICTURE_EMBED_RE)) seen.set(m[0], (seen.get(m[0]) ?? 0) + 1);
+  for (const m of after.matchAll(PICTURE_EMBED_RE)) {
+    const left = seen.get(m[0]) ?? 0;
+    if (left > 0) seen.set(m[0], left - 1);
+    else return { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length, text: m[0], target: m[1].trim() };
+  }
+  return null;
+}
+
+// Nom d'une image collee : « Pasted image 20261010111529 », comme le fait Obsidian.
+export function pastedImageName(date: Date): string {
+  const p = (n: number): string => String(n).padStart(2, `0`);
+  return `Pasted image ${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}`;
+}
