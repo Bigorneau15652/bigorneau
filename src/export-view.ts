@@ -1,6 +1,6 @@
 // Apercu de l'export de haute qualite : volet qui montre la note ouverte telle que l'export la composera.
 // Phase 2 : coupure de lignes de Knuth et Plass avec cesure ; la pagination definitive et le PDF arrivent aux phases suivantes.
-import { record } from "./diagnostics";
+import { noteError, record } from "./diagnostics";
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import { composeNote } from "./export/compose";
 import type { ImageAsset } from "./export/image";
@@ -33,6 +33,8 @@ export class ExportPreviewView extends ItemView {
   private images = new Map<string, ImageAsset>();
   // Vrai quand la note a change pendant que l'apercu n'etait pas visible : il est recompose quand on revient dessus.
   private dirty = false;
+  // Step of the composition that is running (for the diagnostic when the pane stays empty).
+  private step = ``;
 
   constructor(leaf: WorkspaceLeaf, private plugin: MindmapWritingPlugin) {
     super(leaf);
@@ -327,8 +329,20 @@ export class ExportPreviewView extends ItemView {
 
   async refresh() {
     const started = performance.now();
-    await this.refreshNow();
-    record(`Aperçu de l'export : composition`, performance.now() - started, `${this.sheets.length} pages`);
+    this.step = `début`;
+    // A composition that does not end (a step that waits for an answer that never comes) is reported after 15 seconds.
+    const watchdog = window.setTimeout(() => noteError(`Aperçu de l'export`, new Error(`composition toujours en cours après 15 s, étape : ${this.step}`)), 15000);
+    try {
+      await this.refreshNow();
+    } catch (e) {
+      // A failure must not leave an empty pane: the error is recorded and shown, with the step that was running.
+      noteError(`Aperçu de l'export (étape : ${this.step})`, e);
+      const root = this.contentEl;
+      root.empty();
+      root.createDiv({ cls: `mmw-export-message`, text: t(`L'aperçu n'a pas pu être composé : {0}. Le détail est dans le diagnostic (bouton bigorneau du panneau, Modules et boutons).`, e instanceof Error ? e.message : String(e)) });
+    }
+    window.clearTimeout(watchdog);
+    record(`Aperçu de l'export : composition`, performance.now() - started, `${this.sheets.length} pages, étape ${this.step}`);
   }
 
   private async refreshNow() {
@@ -347,11 +361,14 @@ export class ExportPreviewView extends ItemView {
       root.createDiv({ cls: `mmw-export-message`, text: t(`Ouvrez d'abord une note.`) });
       return;
     }
+    this.step = `police de l'export`;
     const fontOk = await loadExportFont();
+    this.step = `polices du coffre`;
     await this.plugin.fonts.refresh();
     const text = this.plugin.getOpenText(file) ?? (await this.app.vault.read(file));
     if (token !== this.token) return;
 
+    this.step = `images et formules`;
     const loaded = await loadAssets(this.app, text, file.name, file.path, this.plugin.scripts.service<MathRenderer>(MATH_SERVICE));
     if (token !== this.token) {
       for (const u of loaded.urls) URL.revokeObjectURL(u);
@@ -360,7 +377,9 @@ export class ExportPreviewView extends ItemView {
     this.releaseImages();
     this.urls = loaded.urls;
     this.images = loaded.images;
+    this.step = `mise en pages`;
     const composed = composeNote(text, file.name, undefined, pageStyleOf(this.plugin.settings), { images: loaded.images, formulas: loaded.formulas, created: file.stat.ctime, modified: file.stat.mtime, defaultAuthor: this.plugin.settings.exportAuthor });
+    this.step = `affichage`;
     const typeset = composed.typeset;
     const pages = composed.pages;
     const s = typeset.stats;
