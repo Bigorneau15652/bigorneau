@@ -53,9 +53,12 @@ function signature(bytes: Uint8Array): string {
 // (« Lato Light »), sinon elles se disputeraient la place du style normal de la famille de base.
 function familyName(font: OpenTypeFont, path: string): { name: string; base: boolean } {
   const family = font.family.trim() !== `` ? font.family.trim() : (path.split(`/`).pop() ?? path).replace(/\.[^.]+$/, ``);
+  // Some fonts repeat their family name as sub-family (family « 1942 report », sub-family « 1942 report »): the words already found in
+  // the family name are not a weight and are dropped, otherwise the name would be shown twice.
+  const inFamily = new Set(family.toLowerCase().split(/\s+/));
   const words = font.subfamily
     .split(/\s+/)
-    .filter((w) => w !== `` && !/^(italic|oblique|regular|normal|roman)$/i.test(w));
+    .filter((w) => w !== `` && !/^(italic|oblique|regular|normal|roman)$/i.test(w) && !inFamily.has(w.toLowerCase()));
   if (words.length === 0 || (words.length === 1 && /^bold$/i.test(words[0]))) return { name: family, base: true };
   return { name: `${family} ${words.join(` `)}`, base: false };
 }
