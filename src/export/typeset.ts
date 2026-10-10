@@ -680,8 +680,9 @@ class Typesetter {
         for (const item of b.items) {
           const ordered = item.kind ? item.kind === `ordered` : b.ordered;
           counters.length = item.depth + 1;
-          // A numbered item continues the count of its level (or starts it at the number written); a bullet restarts the count.
-          counters[item.depth] = ordered ? (counters[item.depth] === undefined ? (item.start ?? 1) : (counters[item.depth] as number) + 1) : undefined;
+          // A numbered item continues the count of its level (or starts it at the number written). Bullets of the same level do not
+          // interrupt the count: « 1. 2. puce puce 3. » is printed 1 2 3, whatever number the editor wrote after the bullets.
+          if (ordered) counters[item.depth] = counters[item.depth] === undefined ? (item.start ?? 1) : (counters[item.depth] as number) + 1;
           const x = 6 + item.depth * 18;
           // Liste a puces : le symbole depend du niveau (reglage de l'export) ; liste numerotee : le numero.
           const mark = ordered ? { glyph: `${counters[item.depth]}.` } : bulletMark(bulletAt(this.style.bullets ?? DEFAULT_BULLETS, item.depth));

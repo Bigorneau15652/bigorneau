@@ -447,7 +447,8 @@ export function parseBlocks(text: string): DocBlock[] {
           const item: DocListItem = { text: m[3].trim(), depth };
           if (ordered !== topOrdered) item.kind = ordered ? `ordered` : `bullet`;
           if (ordered && !started[depth] && parseInt(m[2], 10) !== 1) item.start = parseInt(m[2], 10);
-          started[depth] = ordered;
+          // A bullet does not end the count of the numbered items of its level.
+          if (ordered) started[depth] = true;
           items.push(item);
         } else if (/^[ \t]/.test(lines[i]) && items.length > 0) {
           // Suite d'un element de liste sur la ligne suivante.
