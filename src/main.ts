@@ -6,7 +6,7 @@ import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-ed
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
-import { exportNoteToPdf } from "./export-pdf";
+import { exportNoteToPdf, printNote } from "./export-pdf";
 import { DiagnosticModal } from "./diagnostic-modal";
 import { noteError, record } from "./diagnostics";
 import { FunctionRegistry, isSeparator, panelOrder, PanelFunction } from "./functions";
@@ -380,6 +380,16 @@ export default class MindmapWritingPlugin extends Plugin {
         }
         void this.exportPdf();
       },
+    });
+    this.addFunction({
+      id: `export-print`,
+      name: () => t(`Imprimer la note`),
+      icons: [`printer`, `file-output`, `download`],
+      needsEditor: false,
+      // L'impression se lance depuis l'apercu : la commande de la palette existe, le bouton du panneau non.
+      button: false,
+      available: () => Platform.isDesktop,
+      run: () => void this.printPdf(),
     });
     // Lignes et colonnes du tableau sous le curseur (le clic droit et les triangles du tableau font la meme chose).
     const tableCommands: { id: string; name: string; title: string }[] = [
@@ -1032,6 +1042,17 @@ export default class MindmapWritingPlugin extends Plugin {
       return;
     }
     await exportNoteToPdf(this, this.lastFile);
+  }
+
+  // Ouvre la note en PDF dans le lecteur du systeme, pour l'imprimer.
+  async printPdf() {
+    if (!Platform.isDesktop) return;
+    this.rememberFile(this.app.workspace.getActiveFile());
+    if (!this.lastFile) {
+      new Notice(t(`Ouvrez d'abord une note.`));
+      return;
+    }
+    await printNote(this, this.lastFile);
   }
 
   // Ouvre l'apercu de l'export a cote de la note (ou le montre s'il est deja ouvert).
