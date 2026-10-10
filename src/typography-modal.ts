@@ -108,7 +108,7 @@ function paintSample(host: HTMLElement, spec: TextSpec | HeadingSpec, base: numb
   let points = (spec.points > 0 ? spec.points : base) * (opts.scale ?? 1);
   if (opts.cap) points = Math.min(points, SAMPLE_MAX_POINTS);
   const outer = host.createDiv({ cls: `mmw-sample` });
-  const inner = outer.createSpan({ text: `${opts.number ? `${opts.number} ` : ``}${text}` });
+  const inner = outer.createSpan({ text: `${opts.number ? `${opts.number}\u00A0` : ``}${text}` });
   outer.style.fontSize = `${points}pt`;
   outer.style.lineHeight = `1.25`;
   // Police du coffre : le fichier de la variante est deja gras ou italique ; police d'origine : le navigateur choisit la variante.

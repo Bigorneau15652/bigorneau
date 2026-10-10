@@ -155,7 +155,7 @@ export function getPath(style: TypographyStyle, path: string): string | number |
   if (path === `numbering`) return style.numbering;
   const [g, f] = path.split(`.`);
   const spec = groupOf(style, g);
-  return spec ? ((spec as unknown as Record<string, string | number | boolean>)[f] as string | number | boolean | undefined) : undefined;
+  return spec ? (spec as unknown as Record<string, string | number | boolean>)[f] : undefined;
 }
 
 // Nouveau style avec le champ `path` change (le style donne n'est pas modifie). Une valeur invalide est ramenee par `sanitize`.
@@ -180,7 +180,7 @@ export function sanitizeOverrides(raw: unknown): Overrides {
     if (!VALID.has(path) || (typeof value !== `string` && typeof value !== `number` && typeof value !== `boolean`)) continue;
     // Une valeur du mauvais type ou hors des choix possibles est ecartee : on la fait passer par le nettoyage de style.
     const probe = getPath(setPath(base, path, value), path);
-    if (probe === value || (typeof value === `number` && typeof probe === `number`)) out[path] = probe as string | number | boolean;
+    if (probe === value || (typeof value === `number` && typeof probe === `number`)) out[path] = probe;
   }
   return out;
 }
@@ -201,7 +201,7 @@ export const sizeFactor = (spec: TextSpec, base: number): number => (spec.points
 export function applyCase(value: string, mode: CaseMode): string {
   if (mode === `upper`) return value.toLocaleUpperCase(`fr`);
   if (mode === `lower`) return value.toLocaleLowerCase(`fr`);
-  if (mode === `capitalize`) return value.toLocaleLowerCase(`fr`).replace(/(^|[\s(«"'’\- ])(\p{L})/gu, (_m, before: string, letter: string) => `${before}${letter.toLocaleUpperCase(`fr`)}`);
+  if (mode === `capitalize`) return value.toLocaleLowerCase(`fr`).replace(/(^|[\s(«"'’\-\u00A0])(\p{L})/gu, (_m, before: string, letter: string) => `${before}${letter.toLocaleUpperCase(`fr`)}`);
   return value;
 }
 

@@ -20,7 +20,6 @@ import { TypographyHost, TypographyModal } from "./typography-modal";
 // `defaultAuthor` donne le reglage « Auteur du PDF » du plugin, propose quand la note n'a pas de propriete author.
 // `typography` donne le style general des polices et des titres, et les polices du coffre.
 export const createPageScript = (defaultAuthor: () => string, typography: Omit<TypographyHost, `note`>): OfficialScript => ({
-  origin: `builtin`,
   id: `page-layout`,
   name: { fr: `Mise en page`, en: `Page layout` },
   description: {
@@ -28,7 +27,6 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
     en: `Sets the page of the PDF export note by note: sheet format, orientation, margins and columns, then header, footer and outer edge (text at 90 degrees) with three zones, formatting, images, left and right pages, page number inside a coloured shape.`,
   },
   version: `3.0.0`,
-  api: 1,
   requires: [],
   defaultEnabled: false,
   load(api) {
@@ -45,7 +43,7 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
         if (file) {
           host.author = {
             get: () => {
-              const value = api.app.metadataCache.getFileCache(file)?.frontmatter?.author;
+              const value: unknown = api.app.metadataCache.getFileCache(file)?.frontmatter?.author;
               return typeof value === `string` ? value : ``;
             },
             fallback: defaultAuthor(),

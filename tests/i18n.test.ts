@@ -44,3 +44,14 @@ test(`t() renvoie le francais ou l'anglais selon la langue`, () => {
   assert.equal(t(`texte inconnu {0}`, 1), `texte inconnu 1`);
   setLanguage(`fr`);
 });
+
+test(`aucun texte francais n'est traduit deux fois (la derniere traduction ecraserait la premiere)`, () => {
+  const source = readFileSync(join(SRC, `i18n-en.ts`), `utf8`);
+  const seen = new Set<string>();
+  const twice: string[] = [];
+  for (const m of source.matchAll(/^  \[`((?:[^`\\]|\\.)*)`, `/gm)) {
+    if (seen.has(m[1])) twice.push(m[1]);
+    seen.add(m[1]);
+  }
+  assert.deepEqual(twice, []);
+});

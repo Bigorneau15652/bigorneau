@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { applyProfile, buildProfile, parseProfile, PROFILE_EXCLUDED, PROFILE_VERSION, profileName, sameProfile, serializeProfile } from "../src/profile";
 import { DEFAULT_SETTINGS, migrateSettings } from "../src/settings";
 
-const base = () => migrateSettings({ exportAuthor: `Ada`, fontFolder: `Mes/Polices`, profileFolder: `Mes/Profils`, scriptsEnabled: { formulas: true }, scriptsApproved: { x: `abc` } });
+const base = () => migrateSettings({ exportAuthor: `Ada`, fontFolder: `Mes/Polices`, profileFolder: `Mes/Profils`, scriptsEnabled: { formulas: true } });
 
-test(`un profil garde les reglages mais pas ce qui est propre a l'auteur, aux dossiers ni aux scripts`, () => {
+test(`un profil garde les reglages et l'etat des modules, mais pas ce qui est propre a l'auteur ni aux dossiers`, () => {
   const s = base();
   s.exportBullets = [`arrow`, `dash`, `square`, `dot`, `none`, `disc`];
   s.exportFooter = `none`;
@@ -15,14 +15,16 @@ test(`un profil garde les reglages mais pas ce qui est propre a l'auteur, aux do
   for (const key of PROFILE_EXCLUDED) assert.ok(!(key in p.settings), `${key} ne doit pas etre dans le profil`);
   assert.deepEqual(p.settings.exportBullets, [`arrow`, `dash`, `square`, `dot`, `none`, `disc`]);
   assert.equal(p.settings.exportFooter, `none`);
+  assert.deepEqual(p.settings.scriptsEnabled, { formulas: true });
   assert.ok(p.settings.typography);
 });
 
-test(`charger un profil remplace les reglages mais garde l'auteur, les dossiers et les scripts`, () => {
+test(`charger un profil remplace les reglages et les modules actifs mais garde l'auteur et les dossiers`, () => {
   const saved = base();
   saved.exportBullets = [`diamond`, `diamond`, `diamond`, `diamond`, `diamond`, `diamond`];
   saved.exportToc = true;
   saved.maxWidth = 321;
+  saved.scriptsEnabled = { formulas: false, "page-layout": true };
   const profile = parseProfile(serializeProfile(buildProfile(`P`, saved)))!;
   const current = base();
   current.exportAuthor = `Grace`;
@@ -34,21 +36,19 @@ test(`charger un profil remplace les reglages mais garde l'auteur, les dossiers 
   assert.deepEqual(next.exportBullets, [`diamond`, `diamond`, `diamond`, `diamond`, `diamond`, `diamond`]);
   assert.equal(next.exportAuthor, `Grace`);
   assert.equal(next.fontFolder, `Autre/Polices`);
-  assert.deepEqual(next.scriptsEnabled, { formulas: true });
-  assert.deepEqual(next.scriptsApproved, { x: `abc` });
+  assert.deepEqual(next.scriptsEnabled, { formulas: false, "page-layout": true });
   // Les reglages d'origine ne sont pas modifies.
   assert.equal(current.maxWidth, DEFAULT_SETTINGS.maxWidth);
 });
 
-test(`un profil ne peut pas activer un script ni changer l'auteur, meme s'il les contient`, () => {
+test(`un profil ne peut pas changer l'auteur ni les dossiers, meme s'il les contient`, () => {
   const current = base();
-  const profile = parseProfile(JSON.stringify({ kind: `bigorneau-profile`, version: 1, name: `X`, settingsVersion: current.settingsVersion, settings: { exportAuthor: `Intrus`, scriptsEnabled: { evil: true }, scriptsApproved: { evil: `1` }, fontFolder: `Ailleurs`, maxWidth: 250 } }))!;
+  const profile = parseProfile(JSON.stringify({ kind: `bigorneau-profile`, version: 1, name: `X`, settingsVersion: current.settingsVersion, settings: { exportAuthor: `Intrus`, scriptsEnabled: { formulas: false }, fontFolder: `Ailleurs`, maxWidth: 250 } }))!;
   const next = applyProfile(current, profile);
   assert.equal(next.maxWidth, 250);
   assert.equal(next.exportAuthor, `Ada`);
-  assert.deepEqual(next.scriptsEnabled, { formulas: true });
-  assert.deepEqual(next.scriptsApproved, { x: `abc` });
   assert.equal(next.fontFolder, `Mes/Polices`);
+  assert.deepEqual(next.scriptsEnabled, { formulas: false });
 });
 
 test(`des valeurs invalides dans un profil sont corrigees comme au demarrage du plugin`, () => {

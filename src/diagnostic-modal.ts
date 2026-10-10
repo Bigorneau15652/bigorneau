@@ -1,4 +1,4 @@
-// Fenetre « Diagnostic de Bigorneau » : version, scripts (etat et erreurs), nombre de volets, reglages utiles et temps mesures. Le texte
+// « Diagnostic » window: version, modules (state and errors), nombre de volets, reglages utiles et temps mesures. Le texte
 // se copie pour etre envoye avec une description du probleme.
 import { App, Modal, Notice, Setting } from "obsidian";
 import { errorsList, formatSamples, samplesList } from "./diagnostics";
@@ -14,7 +14,7 @@ export function diagnosticText(app: App, plugin: MindmapWritingPlugin): string {
   lines.push(`Vue de la carte : ${plugin.settings.viewMode}`);
   lines.push(`Panneau de boutons : ${plugin.settings.panelVisible ? `affiché` : `masqué`}, ${plugin.functions.all().filter((f) => f.button !== false && (!f.available || f.available())).length} boutons disponibles`);
   lines.push(``);
-  lines.push(`Scripts :`);
+  lines.push(`Modules :`);
   for (const s of plugin.scripts.info()) lines.push(`- ${s.name[lang]} (${s.version}) : ${s.enabled ? `actif` : `inactif`}, ${s.loaded ? `chargé` : `non chargé`}, état ${s.status}${s.detail ? ` (${s.detail})` : ``}`);
   lines.push(``);
   const errs = errorsList();

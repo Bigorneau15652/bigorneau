@@ -15,14 +15,12 @@ import { PLUGIN_HELP } from "./help-data";
 import { HelpModal } from "./help-modal";
 import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
-import { runScript } from "./script-runner";
 import { FORMULAS_SCRIPT } from "./script-formulas";
 import { ICON_FOOTNOTE, ICON_LOREM, registerCustomIcons } from "./custom-icons";
 import { drawFigure, insertNamedImage } from "./drawing";
 import { LoremModal } from "./lorem-dialog";
 import { createPageScript } from "./script-page";
-import { buildExternal, ExternalScript, ScriptManager } from "./scripts";
-import { ScriptStore } from "./script-store";
+import { ScriptManager } from "./scripts";
 import { ScriptsModal } from "./scripts-modal";
 import * as obsidianApi from "obsidian";
 import { columnAt, findTable, insertBlock, newTableBlock, tableContext } from "./table-edit";
@@ -60,8 +58,7 @@ export default class MindmapWritingPlugin extends Plugin {
   fonts = new FontStore(this.app, () => this.settings.fontFolder);
   // Profils : copies nommees des reglages, gardees dans le coffre.
   profiles = new ProfileStore(this.app, () => this.settings.profileFolder, () => this.settings);
-  // Scripts : les scripts officiels sont integres au plugin ; les autres sont des fichiers ajoutes a la main.
-  scriptStore = new ScriptStore(this.app, `bigorneau`);
+  // Modules built into the plugin (Formulas, Page layout): they can be turned on or off.
   scripts: ScriptManager = new ScriptManager(
     {
       app: this.app,
@@ -70,10 +67,9 @@ export default class MindmapWritingPlugin extends Plugin {
       notice: (message) => void new Notice(message),
       registerFunction: (fn) => this.addFunction(fn),
       addHelp: (entries) => this.helpEntries.add(entries),
-      runExternal: (code, api, id) => runScript(code, api, id),
       saveState: () => void this.saveSettings(false),
     },
-    { enabled: {}, approved: {} },
+    { enabled: {} },
     [FORMULAS_SCRIPT, createPageScript(() => this.settings.exportAuthor, this.typographyHost())]
   );
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
@@ -82,15 +78,9 @@ export default class MindmapWritingPlugin extends Plugin {
   async onload() {
     const started = performance.now();
     const stored: unknown = await this.loadData();
-    // Premier lancement sous le nom Bigorneau : les reglages de l'ancien plugin (Mindmap Note Writing) sont repris une fois.
-    const legacy = stored === null || stored === undefined ? await this.legacyData() : null;
-    this.settings = migrateSettings(legacy ?? stored);
-    if (legacy) {
-      void this.saveData(this.settings);
-      new Notice(t(`Les réglages de l'ancien plugin Mindmap Note Writing ont été repris.`));
-    }
+    this.settings = migrateSettings(stored);
     setLanguage(this.settings.language);
-    this.scripts.bindState({ enabled: this.settings.scriptsEnabled, approved: this.settings.scriptsApproved });
+    this.scripts.bindState({ enabled: this.settings.scriptsEnabled });
     this.fixed = this.settings.fixedViews.map((entry) => ({ entry: { ...entry }, leaf: null }));
     this.addSettingTab(new MmSettingTab(this.app, this));
     this.applyBodySettings();
@@ -453,7 +443,7 @@ export default class MindmapWritingPlugin extends Plugin {
     });
     this.addCommand({
       id: `diagnostic`,
-      name: t(`Diagnostic de Bigorneau`),
+      name: t(`Diagnostic`),
       callback: () => this.openDiagnostic(),
     });
     this.addCommand({
@@ -466,12 +456,12 @@ export default class MindmapWritingPlugin extends Plugin {
     });
     this.addCommand({
       id: `open-scripts`,
-      name: t(`Ouvrir les scripts de Bigorneau`),
+      name: t(`Ouvrir les modules`),
       callback: () => this.openScripts(),
     });
     this.addCommand({
       id: `open-help`,
-      name: t(`Ouvrir l'aide de Bigorneau`),
+      name: t(`Ouvrir l'aide`),
       callback: () => this.openHelp(),
     });
 
@@ -490,8 +480,6 @@ export default class MindmapWritingPlugin extends Plugin {
     this.fonts.destroy();
     this.forEachView((v) => v.clearActive());
     for (const cm of this.editorViews) if (this.fixedFor(cm)) clearFixedState(cm);
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_MINDMAP);
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_EXPORT);
     document.body.style.removeProperty(`--mmw-inactive-opacity`);
   }
 
@@ -682,45 +670,14 @@ export default class MindmapWritingPlugin extends Plugin {
     new ScriptsModal(this.app, this).open();
   }
 
-  // Lit le fichier choisi par l'utilisateur : renvoie le script a confirmer, ou affiche pourquoi il est refuse.
-  async prepareScript(file: string, code: string): Promise<ExternalScript | null> {
-    const built = await buildExternal(file, code);
-    if (!built.ok) {
-      const why = built.error === `header` ? t(`l'en-tête /* bigorneau-script */ est absent`) : built.error === `name` ? t(`le nom du script est absent de l'en-tête`) : t(`la version de l'interface (api) est absente ou invalide`);
-      new Notice(t(`Ce fichier n'est pas un script Bigorneau : {0}.`, why));
-      return null;
-    }
-    return built.script;
-  }
-
-  // Apres confirmation : le fichier est copie dans le dossier technique du plugin, puis le script est active et charge.
-  async confirmScript(script: ExternalScript, _isNew: boolean): Promise<void> {
-    await this.scriptStore.write(script.file, script.code);
-    await this.scripts.approve(script);
-    this.panel.sync();
-  }
-
-  // Scripts ajoutes a la main presents dans le dossier technique, puis chargement des scripts actifs.
+  // Loads the modules that are on, then refreshes the panel. A module that fails does not stop the others.
   private async startScripts(): Promise<void> {
     const started = performance.now();
-    // Les scripts ajoutes a la main viennent d'un dossier que l'on peut ne pas pouvoir lire : les scripts officiels (Mise en page,
-    // Formules) sont charges quand meme, et le panneau est toujours remis a jour.
-    try {
-      const found: ExternalScript[] = [];
-      for (const f of await this.scriptStore.list()) {
-        const built = await buildExternal(f.file, f.code);
-        if (built.ok) found.push(built.script);
-      }
-      this.scripts.setExternal(found);
-    } catch (e) {
-      noteError(`Lecture des scripts ajoutés à la main`, e);
-      new Notice(t(`Les scripts ajoutés à la main n'ont pas pu être lus : {0}`, e instanceof Error ? e.message : String(e)), 8000);
-    }
     try {
       await this.scripts.loadEnabled();
     } catch (e) {
-      noteError(`Chargement des scripts`, e);
-      new Notice(t(`Les scripts n'ont pas pu être chargés : {0}`, e instanceof Error ? e.message : String(e)), 8000);
+      noteError(`Chargement des modules`, e);
+      new Notice(t(`Les modules n'ont pas pu être chargés : {0}`, e instanceof Error ? e.message : String(e)), 8000);
     }
     try {
       await this.placeDefaultSeparators();
@@ -728,7 +685,7 @@ export default class MindmapWritingPlugin extends Plugin {
       noteError(`Disposition de départ du panneau`, e);
     }
     this.panel.sync();
-    record(`Chargement des scripts`, performance.now() - started, `${this.scripts.info().filter((i) => i.loaded).length} chargés`);
+    record(`Chargement des modules`, performance.now() - started, `${this.scripts.info().filter((i) => i.loaded).length} chargés`);
   }
 
   // ---------------------------------------------------------------- tableaux
@@ -904,7 +861,7 @@ export default class MindmapWritingPlugin extends Plugin {
   confirmLoadProfile(name: string, done: () => void = () => undefined): void {
     new ConfirmModal(this.app, {
       title: t(`Charger le profil « {0} »`, name),
-      text: t(`Vos réglages actuels seront remplacés par ceux du profil. Ils sont d'abord sauvegardés dans le profil « {0} », que vous pourrez recharger pour revenir en arrière. Le nom de l'auteur, les dossiers et les scripts ne changent pas.`, AUTO_BACKUP_NAME),
+      text: t(`Vos réglages actuels seront remplacés par ceux du profil. Ils sont d'abord sauvegardés dans le profil « {0} », que vous pourrez recharger pour revenir en arrière. Le nom de l'auteur et les dossiers ne changent pas.`, AUTO_BACKUP_NAME),
       confirm: t(`Charger`),
       onConfirm: () => void this.loadProfile(name).then(done),
     }).open();
@@ -923,6 +880,9 @@ export default class MindmapWritingPlugin extends Plugin {
     }
     Object.assign(this.settings, next);
     setLanguage(this.settings.language);
+    // The profile carries its own on/off state for the modules: the manager must read it, and load the modules it turns on.
+    this.scripts.bindState({ enabled: this.settings.scriptsEnabled });
+    await this.scripts.loadEnabled();
     await this.saveSettings();
     this.refreshExportPreviews();
     new Notice(t(`Profil « {0} » chargé.`, name));
@@ -957,18 +917,6 @@ export default class MindmapWritingPlugin extends Plugin {
   async saveOrder(order: string[]): Promise<void> {
     this.settings.panelOrder = order;
     await this.saveSettings(false);
-  }
-
-  // Reglages enregistres par l'ancien plugin (identifiant mindmap-writing), s'il est encore present dans ce coffre. Les fichiers
-  // de configuration ne sont pas dans l'index du coffre : seul l'adaptateur peut les lire. A retirer dans une version ulterieure.
-  private async legacyData(): Promise<unknown> {
-    try {
-      const path = normalizePath(`${this.app.vault.configDir}/plugins/mindmap-writing/data.json`);
-      if (!(await this.app.vault.adapter.exists(path))) return null;
-      return JSON.parse(await this.app.vault.adapter.read(path)) as unknown;
-    } catch {
-      return null;
-    }
   }
 
   private persistLater = debounce(() => void this.saveData(this.settings), 400, true);
@@ -1093,7 +1041,7 @@ export default class MindmapWritingPlugin extends Plugin {
       leaf = workspace.getLeaf(`split`, `vertical`);
       await leaf.setViewState({ type: VIEW_TYPE_EXPORT, active: true });
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
     if (leaf.view instanceof ExportPreviewView) await leaf.view.refresh();
   }
 
@@ -1176,7 +1124,7 @@ export default class MindmapWritingPlugin extends Plugin {
       await leaf.setViewState({ type: VIEW_TYPE_MINDMAP, active: true });
       if (narrow && adopted) this.narrowPane(leaf, adopted);
     }
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
     const view = leaf.view;
     if (view instanceof MindmapView) {
       if (adopted) view.adoptNoteLeaf(adopted);

@@ -91,7 +91,7 @@ const TABLE_CAPTION_RE = /^(?:Tableau|Table)[ \t\u00a0]*:[ \t\u00a0]*(.+)$/i;
 
 const VIDEO_EXT = /\.(mp4|webm|ogv|mov|m4v|mkv)$/i;
 const AUDIO_EXT = /\.(mp3|wav|m4a|ogg|oga|flac|aac|opus)$/i;
-const VIDEO_HOST = /^https?:\/\/(?:[\w-]+\.)*(?:youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly)(?:[\/?#:]|$)/i;
+const VIDEO_HOST = /^https?:\/\/(?:[\w-]+\.)*(?:youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly)(?:[/?#:]|$)/i;
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|svg|bmp|avif|excalidraw(\.md)?)$/i;
 
 // Sorte de media d'une cible de figure ![[...]] ou ![](...), ou undefined si c'est une image.

@@ -7,6 +7,7 @@ import { SVG } from "mathjax-full/js/output/svg.js";
 import { liteAdaptor } from "mathjax-full/js/adaptors/liteAdaptor.js";
 import { RegisterHTMLHandler } from "mathjax-full/js/handlers/html.js";
 import { AllPackages } from "mathjax-full/js/input/tex/AllPackages.js";
+import type { LiteElement } from "mathjax-full/js/adaptors/lite/Element.js";
 import { MathAsset, parseMathSvg } from "./math";
 
 interface Engine {
@@ -24,7 +25,7 @@ function getEngine(): Engine {
   RegisterHTMLHandler(adaptor);
   const packages = AllPackages.filter((p: string) => ![`autoload`, `require`, `noundefined`, `noerrors`].includes(p));
   const doc = mathjax.document(``, { InputJax: new TeX({ packages }), OutputJax: new SVG({ fontCache: `local` }) });
-  engine = { convert: (tex, display) => adaptor.serializeXML(doc.convert(tex, { display })) };
+  engine = { convert: (tex, display) => adaptor.serializeXML(doc.convert(tex, { display }) as LiteElement) };
   return engine;
 }
 

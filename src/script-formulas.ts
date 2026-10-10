@@ -17,7 +17,6 @@ export type MathSvgRenderer = (tex: string, display: boolean) => Promise<string 
 export const MATH_SVG_SERVICE = `math.svg`;
 
 export const FORMULAS_SCRIPT: OfficialScript = {
-  origin: `builtin`,
   id: `formulas`,
   name: { fr: `Formules`, en: `Formulas` },
   description: {
@@ -25,7 +24,6 @@ export const FORMULAS_SCRIPT: OfficialScript = {
     en: `Draws mathematical formulas ($formula$ and $$formula$$) in the export preview and PDF, and adds a formula editor with symbol palettes and a live preview.`,
   },
   version: `1.0.0`,
-  api: 1,
   requires: [],
   defaultEnabled: false,
   load(api) {
@@ -35,7 +33,8 @@ export const FORMULAS_SCRIPT: OfficialScript = {
       return renderTex(tex, display);
     };
     api.provide(MATH_SERVICE, render);
-    api.provide(MATH_SVG_SERVICE, (async (tex, display) => (await import(`./export/mathjax`)).renderTexSvg(tex, display)) as MathSvgRenderer);
+    const renderSvg: MathSvgRenderer = async (tex, display) => (await import(`./export/mathjax`)).renderTexSvg(tex, display);
+    api.provide(MATH_SVG_SERVICE, renderSvg);
     api.addHelp(
       courseSections().map((c) => ({
         id: `course-${c.id}`,

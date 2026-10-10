@@ -1,9 +1,9 @@
 // Export de haute qualite : conventions typographiques francaises (Imprimerie nationale, Lexique des regles typographiques;
 // package babel pour le francais) appliquees avant la composition. Elles ne s'appliquent qu'aux textes en francais.
-// Phase 1 de la liste : la liste complete sera etablie a partir du Lexique, voir docs/POLITIQUE-EXPORT.md paragraphe 2.7.
+// Phase 1 of the list: the complete list will be drawn from the Lexique (French typography rules).
 import { FINE_SPACE, NO_BREAK_SPACE } from "./font-metrics";
 
-const SPACES = `    `;
+const SPACES = ` \u00A0\u202F\u2009`;
 
 // Abreviations apres lesquelles on ne coupe pas la ligne, et unites qui ne se separent pas du nombre qui les precede.
 const ABBREVIATIONS = /(M\.|MM\.|Mme|Mmes|Mlle|Dr|Pr|p\.|pp\.|art\.|fig\.|chap\.|vol\.|n°|N°)[ ]+(?=[\p{L}\d])/gu;

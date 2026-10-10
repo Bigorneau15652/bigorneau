@@ -229,7 +229,7 @@ export class MapRenderer {
   private previewDragKey: string | null = null;
   private settleTimer: number | null = null;
 
-  constructor(private container: HTMLElement, private getSettings: () => MmSettings, private callbacks: MapCallbacks) {
+  constructor(container: HTMLElement, private getSettings: () => MmSettings, private callbacks: MapCallbacks) {
     this.mapEl = container;
     this.mapEl.classList.add(`mmw-map`);
     this.mapEl.tabIndex = 0;
@@ -286,7 +286,7 @@ export class MapRenderer {
     this.on(this.mapEl, `wheel`, (e) => this.onWheel(e as WheelEvent), { passive: false });
     this.on(this.mapEl, `keydown`, (e) => this.onKey(e as KeyboardEvent));
     this.on(this.mapEl, `contextmenu`, (e) => {
-      const node = (e.target as HTMLElement).closest(`.mmw-node`) as HTMLElement | null;
+      const node = (e.target as HTMLElement).closest<HTMLElement>(`.mmw-node`);
       if (!node || (e.target as HTMLElement).closest(`.mmw-rename`)) return;
       e.preventDefault();
       const key = node.dataset.key!;
@@ -296,7 +296,7 @@ export class MapRenderer {
     // L'oeil de masquage n'apparait qu'au survol du titre.
     this.on(this.mapEl, `mouseover`, (e) => {
       const t = e.target as HTMLElement;
-      const key = (t.closest(`.mmw-node`) as HTMLElement | null)?.dataset.key ?? (t.closest(`.mmw-eye`) as HTMLElement | null)?.dataset.eye ?? null;
+      const key = t.closest<HTMLElement>(`.mmw-node`)?.dataset.key ?? t.closest<HTMLElement>(`.mmw-eye`)?.dataset.eye ?? null;
       this.setEyeHover(key);
     });
     this.on(this.mapEl, `mouseleave`, () => this.setEyeHover(null));
@@ -304,14 +304,14 @@ export class MapRenderer {
       const t = e.target as HTMLElement;
       if (this.linking) return;
       // Double clic sur un lien (case d'une note ou fleche) : modification du lien.
-      const linkEl = (t.closest(`.mmw-ext-box`) as HTMLElement | null)?.dataset.ext ?? (t.closest(`[data-link]`) as Element | null)?.getAttribute(`data-link`);
+      const linkEl = t.closest<HTMLElement>(`.mmw-ext-box`)?.dataset.ext ?? t.closest(`[data-link]`)?.getAttribute(`data-link`);
       if (linkEl) {
         if (t.closest(`.mmw-ext-open`)) return;
         const link = this.links.find((l) => this.linkId(l) === linkEl);
         if (link) this.editLink(link);
         return;
       }
-      const node = t.closest(`.mmw-node`) as HTMLElement | null;
+      const node = t.closest<HTMLElement>(`.mmw-node`);
       if (node) this.openDialog(node.dataset.key!);
     });
 
@@ -482,7 +482,7 @@ export class MapRenderer {
     const collapsedSet = this.previewCollapsed ?? this.collapsed;
     this.floatRoots = (this.previewDoc ?? this.doc).floats.map((f, i) => buildLayoutTree(f, `f${i}`, 1, collapsedSet));
     for (const fr of this.floatRoots) this.list.push(...flatten(fr));
-    this.links = parseLinks(this.previewDoc ?? this.doc!, this.callbacks.getFileName?.() ?? `Note.md`);
+    this.links = parseLinks(this.previewDoc ?? this.doc, this.callbacks.getFileName?.() ?? `Note.md`);
     if (this.pendingLink && this.links.some((l) => this.linkId(l) === this.pendingLink)) {
       this.selectedLink = this.pendingLink;
       this.pendingLink = null;
@@ -495,7 +495,7 @@ export class MapRenderer {
     this.webByKey.clear();
     for (const n of this.list) {
       if (n.depth < 1) continue;
-      const w = webLinks(this.previewDoc ?? this.doc!, n.key);
+      const w = webLinks(this.previewDoc ?? this.doc, n.key);
       if (w.length > 0) this.webByKey.set(n.key, w);
     }
     this.els.clear();
@@ -587,7 +587,7 @@ export class MapRenderer {
     }
 
     const stats = computeStats(this.doc);
-    this.statusEl.textContent = `${stats.nodeCount} nœud${stats.nodeCount > 1 ? `s` : ``}. ${
+    this.statusEl.textContent = `${stats.nodeCount > 1 ? t(`{0} nœuds`, stats.nodeCount) : t(`{0} nœud`, stats.nodeCount)}. ${
       this.identical ? t(`Reconstruction de la note identique au fichier.`) : t(`ATTENTION : reconstruction différente du fichier, ne rien modifier.`)
     }`;
     this.statusEl.classList.toggle(`mmw-ko`, !this.identical);
@@ -649,8 +649,8 @@ export class MapRenderer {
       const rel = computeLayout(fr, s.compactness);
       const pos = fr.node.float;
       const hasPos = pos?.x !== undefined && pos?.y !== undefined;
-      const dx = hasPos ? pos!.x! : autoX;
-      const dy = hasPos ? pos!.y! : autoY;
+      const dx = hasPos ? pos.x! : autoX;
+      const dy = hasPos ? pos.y! : autoY;
       for (const n of flatten(fr)) {
         n.x += dx;
         n.y += dy;
@@ -1428,7 +1428,7 @@ export class MapRenderer {
     this.controls.closePopup();
     this.abandonDrag();
     this.mapEl.focus();
-    const linkMark = target.closest(`.mmw-link-mark, .mmw-int-mark`) as HTMLElement | null;
+    const linkMark = target.closest<HTMLElement>(`.mmw-link-mark, .mmw-int-mark`);
     if (linkMark && !this.linking) {
       e.preventDefault();
       const key = (linkMark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
@@ -1438,14 +1438,14 @@ export class MapRenderer {
       else this.callbacks.onLinkOpen?.(mine, e);
       return;
     }
-    const webMark = target.closest(`.mmw-web-mark`) as HTMLElement | null;
+    const webMark = target.closest<HTMLElement>(`.mmw-web-mark`);
     if (webMark && !this.linking) {
       e.preventDefault();
       const key = (webMark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
       this.callbacks.onWebOpen?.(this.webByKey.get(key) ?? [], e);
       return;
     }
-    const extBox = target.closest(`.mmw-ext-box`) as HTMLElement | null;
+    const extBox = target.closest<HTMLElement>(`.mmw-ext-box`);
     if (extBox && !this.linking) {
       e.preventDefault();
       const link = this.links.find((l) => this.linkId(l) === extBox.dataset.ext);
@@ -1459,9 +1459,9 @@ export class MapRenderer {
       }
       return;
     }
-    const hit = target.closest(`[data-link]`) as Element | null;
+    const hit = target.closest(`[data-link]`);
     if (hit && !this.linking) {
-      this.selectLink(hit.getAttribute(`data-link`)!);
+      this.selectLink(hit.getAttribute(`data-link`));
       return;
     }
     if (this.linking) {
@@ -1469,18 +1469,18 @@ export class MapRenderer {
       this.onLinkPointerDown(e);
       return;
     }
-    const eye = target.closest(`.mmw-eye`) as HTMLElement | null;
+    const eye = target.closest<HTMLElement>(`.mmw-eye`);
     if (eye) {
       e.preventDefault();
       this.callbacks.onToggleHidden?.(eye.dataset.eye!);
       return;
     }
-    const fold = target.closest(`.mmw-fold, .mmw-lfold`) as HTMLElement | null;
+    const fold = target.closest<HTMLElement>(`.mmw-fold, .mmw-lfold`);
     if (fold) {
       this.toggleFold(fold.dataset.fold!);
       return;
     }
-    const node = target.closest(`.mmw-node`) as HTMLElement | null;
+    const node = target.closest<HTMLElement>(`.mmw-node`);
     if (node) {
       const key = node.dataset.key!;
       if (e.shiftKey) this.toggleSelect(key);

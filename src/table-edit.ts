@@ -98,7 +98,7 @@ function sepCell(a: Align): string {
 }
 
 export function renderTable(data: TableData, eol = `\n`): string {
-  const line = (cells: string[]): string => `| ${cells.map((c) => (c === `` ? ` ` : c)).join(` | `)} |`.replace(/\|  \|/g, `|   |`);
+  const line = (cells: string[]): string => `| ${cells.map((c) => (c === `` ? ` ` : c)).join(` | `)} |`.replace(/\| {2}\|/g, `|   |`);
   const out = [line(data.rows[0]), `| ${data.align.map(sepCell).join(` | `)} |`];
   for (let i = 1; i < data.rows.length; i++) out.push(line(data.rows[i]));
   return out.join(eol);
@@ -188,7 +188,7 @@ export function captionPrefix(word: string): string {
   return word === `Table` ? `Table: ` : `${word} : `;
 }
 
-const CAPTION_RE = /^(Tableau|Table)[ \t ]*:[ \t ]*(.*)$/i;
+const CAPTION_RE = /^(Tableau|Table)[ \t\u00A0]*:[ \t\u00A0]*(.*)$/i;
 
 export interface TableContext {
   style: TableStyle;
@@ -287,7 +287,7 @@ export function newTableBlock(n: NewTable, eol = `\n`): { text: string; cursor: 
     parts.push(prefix);
     cursor = head.length + prefix.length;
   }
-  const data: TableData = { rows: Array.from({ length: n.rows }, () => Array.from({ length: n.cols }, () => ``)), align: Array.from({ length: n.cols }, () => `none` as Align) };
+  const data: TableData = { rows: Array.from({ length: n.rows }, () => Array.from({ length: n.cols }, () => ``)), align: Array.from({ length: n.cols }, () => `none`) };
   const table = renderTable(data, eol);
   const head = parts.length > 0 ? parts.join(eol + eol) + eol + eol : ``;
   if (cursor < 0) cursor = head.length + 2;

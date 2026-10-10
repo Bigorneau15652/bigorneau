@@ -75,7 +75,7 @@ export function mergePatch(a: StylePatch | undefined, b: StylePatch): StylePatch
 export function omitKeys(patch: StylePatch | undefined, keys: string[]): StylePatch {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(patch ?? {})) if (!keys.includes(k)) out[k] = v;
-  return out as StylePatch;
+  return out;
 }
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;

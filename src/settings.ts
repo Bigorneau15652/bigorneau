@@ -198,7 +198,6 @@ export interface MmSettings {
   // Panneau de boutons a droite de la zone de redaction : affichage, affichage sur tablette et telephone, ordre des boutons
   // (identifiants de fonctions) et boutons masques.
   panelVisible: boolean;
-  panelOnMobile: boolean;
   panelOrder: string[];
   panelHidden: string[];
   // Vrai quand la disposition de depart du panneau (aide en tete, separations autour de l'apercu et de l'export) a ete posee.
@@ -207,9 +206,8 @@ export interface MmSettings {
   tableHeader: boolean;
   tableStripes: boolean;
   tableCaption: boolean;
-  // Scripts : etat d'activation (identifiant -> actif) et empreinte confirmee de chaque script ajoute a la main.
+  // Modules built into the plugin: switch state (identifier -> on). Absent: the default of the module.
   scriptsEnabled: Record<string, boolean>;
-  scriptsApproved: Record<string, string>;
   // Icones des reperes de liens (identifiants de src/icons.ts) et leur couleur (vide : couleur des liens du theme).
   iconExternal: string;
   iconInternal: string;
@@ -301,7 +299,6 @@ export const DEFAULT_SETTINGS: MmSettings = {
   foldersCreated: false,
   typography: defaultTypography(),
   panelVisible: true,
-  panelOnMobile: false,
   panelOrder: [],
   panelHidden: [],
   panelLayoutDone: false,
@@ -309,7 +306,6 @@ export const DEFAULT_SETTINGS: MmSettings = {
   tableStripes: false,
   tableCaption: true,
   scriptsEnabled: {},
-  scriptsApproved: {},
   iconExternal: `chain`,
   iconInternal: `return`,
   iconWeb: `globe`,
@@ -346,7 +342,7 @@ export const APPEARANCE_KEYS: (keyof MmSettings)[] = [
 export function appearanceDefaults(): Partial<MmSettings> {
   const out: Record<string, unknown> = {};
   for (const k of APPEARANCE_KEYS) out[k] = DEFAULT_SETTINGS[k];
-  return out as Partial<MmSettings>;
+  return out;
 }
 
 // Convertit les reglages enregistres par une version precedente du plugin.
@@ -368,7 +364,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   delete data.paragraphMode;
   delete data.paneSize;
 
-  const merged = { ...DEFAULT_SETTINGS, ...data } as MmSettings;
+  const merged = { ...DEFAULT_SETTINGS, ...data };
   merged.tags = sanitizeTags(data.tags);
   merged.fixedViews = sanitizeFixed(data.fixedViews);
   merged.floatLevel = typeof merged.floatLevel === `number` && merged.floatLevel >= 1 && merged.floatLevel <= 6 ? Math.round(merged.floatLevel) : 2;
@@ -403,7 +399,6 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.exportChapterToc = merged.exportChapterToc === true;
   merged.panelLayoutDone = merged.panelLayoutDone === true;
   merged.panelVisible = merged.panelVisible !== false;
-  merged.panelOnMobile = merged.panelOnMobile === true;
   merged.tableHeader = merged.tableHeader !== false;
   merged.tableStripes = merged.tableStripes === true;
   merged.tableCaption = merged.tableCaption !== false;
@@ -411,14 +406,9 @@ export function migrateSettings(stored: unknown): MmSettings {
     merged[k] = Array.isArray(data[k]) ? (data[k] as unknown[]).filter((x): x is string => typeof x === `string`) : [];
   }
   merged.scriptsEnabled = {};
-  merged.scriptsApproved = {};
   const rawEnabled: unknown = data.scriptsEnabled;
-  const rawApproved: unknown = data.scriptsApproved;
   if (typeof rawEnabled === `object` && rawEnabled !== null) {
     for (const [k, v] of Object.entries(rawEnabled)) if (typeof v === `boolean`) merged.scriptsEnabled[k] = v;
-  }
-  if (typeof rawApproved === `object` && rawApproved !== null) {
-    for (const [k, v] of Object.entries(rawApproved)) if (typeof v === `string`) merged.scriptsApproved[k] = v;
   }
   for (const k of [`exportTocDepth`, `exportChapterTocDepth`] as const) {
     if (!Number.isInteger(merged[k]) || merged[k] < 1 || merged[k] > 6) merged[k] = 3;

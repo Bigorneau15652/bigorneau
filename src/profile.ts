@@ -7,17 +7,15 @@ export const PROFILE_VERSION = 1;
 // Profil cree automatiquement avant d'en charger un autre, pour pouvoir revenir en arriere.
 export const AUTO_BACKUP_NAME = `Sauvegarde automatique`;
 
-// Ce qu'un profil ne contient pas : ce qui est propre a l'auteur (nom de l'auteur du PDF), a l'emplacement des dossiers dans le coffre,
-// aux fenetres actuellement ouvertes (notes fixes) ou a la securite (activation et confirmation des scripts : un profil recu d'une autre
-// personne ne doit pas pouvoir activer un script).
+// What a profile does not contain: what belongs to the author (name of the PDF author), the location of folders in the vault, the
+// windows currently open (fixed notes) and the chapters left open in the settings page. The on/off state of the built-in modules is
+// part of a profile (a profile can only turn on modules that are built into the plugin, never load code).
 export const PROFILE_EXCLUDED: (keyof MmSettings)[] = [
   `exportAuthor`,
   `profileFolder`,
   `fontFolder`,
   `newNoteFolder`,
   `foldersCreated`,
-  `scriptsEnabled`,
-  `scriptsApproved`,
   `fixedViews`,
   `openChapters`,
 ];
@@ -34,8 +32,10 @@ export interface Profile {
 
 // Nom utilisable comme nom de fichier : sans caracteres interdits, espaces nettoyes, 80 caracteres au plus.
 export function profileName(raw: string): string {
-  return raw
-    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ` `)
+  // Control characters (code below 32) are turned into spaces before the forbidden characters.
+  const printable = Array.from(raw, (ch) => (ch.charCodeAt(0) < 32 ? ` ` : ch)).join(``);
+  return printable
+    .replace(/[\\/:*?"<>|]/g, ` `)
     .replace(/\s+/g, ` `)
     .trim()
     .replace(/^\.+/, ``)
@@ -73,7 +73,7 @@ export function parseProfile(text: string): Profile | null {
     name: typeof p.name === `string` ? p.name : ``,
     savedAt: typeof p.savedAt === `string` ? p.savedAt : ``,
     settingsVersion: typeof p.settingsVersion === `number` ? p.settingsVersion : 1,
-    settings: p.settings as Partial<MmSettings>,
+    settings: p.settings,
   };
 }
 

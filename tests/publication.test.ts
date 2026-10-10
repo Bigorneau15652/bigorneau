@@ -54,7 +54,8 @@ test(`le depot contient la licence et les deux README`, () => {
   assert.ok(existsSync(join(ROOT, `LICENSE`)));
   const licence = read(`LICENSE`);
   assert.ok(licence.startsWith(`MIT License`));
-  assert.ok(licence.includes(String(manifest.author)), `la licence nomme l'auteur du manifest`);
+  // The copyright holder of the licence is the real author; the public listing uses the name Bigorneau.
+  assert.match(licence, /Copyright \(c\) \d{4} \S+/, `la licence nomme un titulaire du droit d'auteur`);
   for (const f of [`README.md`, `README.fr.md`]) {
     const text = read(f);
     assert.ok(text.length > 3000, f);
@@ -76,8 +77,7 @@ test(`le code evite les constructions refusees ou deconseillees par la revue`, (
     assert.ok(!/console\.(log|debug)\(/.test(code), `${f} : journal dans la console`);
     assert.ok(!/from [`"'](fs|path|os|crypto|child_process|electron)[`"']/.test(code), `${f} : interface Node.js ou Electron`);
     assert.ok(!/\beval\(/.test(code), `${f} : execution de code`);
-    // L'execution d'un script ajoute a la main est isolee dans un seul fichier, pour que la revue la trouve du premier coup.
-    if (f !== `src/script-runner.ts`) assert.ok(!/new Function\(/.test(code), `${f} : execution de code`);
+    assert.ok(!/new Function\(/.test(code), `${f} : execution de code`);
     assert.ok(!/\bfetch\(|XMLHttpRequest|requestUrl\(|WebSocket/.test(code), `${f} : acces au reseau`);
   }
 });
