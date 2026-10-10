@@ -6,7 +6,8 @@ import { blockStart } from "./page-zone";
 
 export type ListKind = `figures` | `tables`;
 
-export const LIST_MARKER_RE = /^[ \t]*%%[ \t]*(?:liste|list)[ \t]*:[ \t]*([^%\n]*?)[ \t]*%%[ \t]*$/;
+// The text of the label keeps its spaces (trimmed by the reader): see PAGE_ZONE_RE.
+export const LIST_MARKER_RE = /^[ \t]*%%[ \t]*(?:liste|list)[ \t]*:([^%\n]*)%%[ \t]*$/;
 
 const norm = (s: string): string => s.normalize(`NFD`).replace(/[̀-ͯ]/g, ``).toLowerCase().trim();
 
@@ -22,7 +23,7 @@ export const formatListMarker = (kind: ListKind): string => `%% liste: ${kind ==
 // Liste demandee sur cette ligne, ou null.
 export function readListMarker(line: string): ListKind | null {
   const m = LIST_MARKER_RE.exec(line.replace(/\r$/, ``));
-  return m ? parseListKind(m[1]) : null;
+  return m ? parseListKind(m[1].trim()) : null;
 }
 
 // Repere pose avant l'analyse du texte (les commentaires sont alors retires), hors blocs de code.

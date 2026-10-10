@@ -104,3 +104,47 @@ export function jpegInfo(bytes: Uint8Array): { width: number; height: number; co
   }
   return null;
 }
+
+// Copy of a JPEG file without its metadata: the segments APP1 to APP15 (EXIF with the GPS position, the camera model and the date,
+// XMP, IPTC) and the comments are dropped. Kept: the JFIF header (APP0), the colour profile (APP2 ICC_PROFILE) and the Adobe marker
+// (APP14), which the picture needs to be shown with the right colours. Returns null when the file is not well formed, so that the
+// caller draws the picture again instead (which also removes the metadata).
+export function stripJpegMetadata(bytes: Uint8Array): Uint8Array | null {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  const ICC = [0x49, 0x43, 0x43, 0x5f, 0x50, 0x52, 0x4f, 0x46, 0x49, 0x4c, 0x45, 0x00];
+  const parts: Uint8Array[] = [bytes.subarray(0, 2)];
+  let i = 2;
+  let scanned = false;
+  while (i + 4 <= bytes.length) {
+    if (bytes[i] !== 0xff) return null;
+    const marker = bytes[i + 1];
+    if (marker === 0xff) {
+      i++;
+      continue;
+    }
+    // Start of scan: the compressed picture follows, to the end of the file, and is copied as is.
+    if (marker === 0xda) {
+      parts.push(bytes.subarray(i));
+      scanned = true;
+      break;
+    }
+    // Markers without a length (restart, TEM) have no place before the scan.
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) return null;
+    const length = (bytes[i + 2] << 8) | bytes[i + 3];
+    if (length < 2 || i + 2 + length > bytes.length) return null;
+    const isMetadata = (marker >= 0xe1 && marker <= 0xef && marker !== 0xee) || marker === 0xfe;
+    const isIcc = marker === 0xe2 && ICC.every((b, k) => bytes[i + 4 + k] === b);
+    if (!isMetadata || isIcc) parts.push(bytes.subarray(i, i + 2 + length));
+    i += 2 + length;
+  }
+  if (!scanned) return null;
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}

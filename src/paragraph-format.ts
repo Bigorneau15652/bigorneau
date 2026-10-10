@@ -113,11 +113,12 @@ export function formatParagraphMarker(f: ParagraphFormat): string {
 }
 
 // Etiquette au debut d'une ligne : %% p: ... %% (espaces autour permis).
-export const PARAGRAPH_MARKER_RE = /^([ \t]*)%%[ \t]*p[ \t]*:[ \t]*([^%\n]*?)[ \t]*%%[ \t]?/;
+// The text of the label keeps its spaces (trimmed by the reader): see PAGE_ZONE_RE.
+export const PARAGRAPH_MARKER_RE = /^([ \t]*)%%[ \t]*p[ \t]*:([^%\n]*)%%[ \t]?/;
 
 export function readParagraphMarker(line: string): { format: ParagraphFormat; length: number } | null {
   const m = PARAGRAPH_MARKER_RE.exec(line);
-  return m ? { format: parseParagraphFormat(m[2]), length: m[0].length } : null;
+  return m ? { format: parseParagraphFormat(m[2].trim()), length: m[0].length } : null;
 }
 
 // Modification du texte qui pose (ou retire, avec `null`) l'exception du paragraphe dont la ligne contient `offset`.

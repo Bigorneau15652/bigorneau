@@ -2,7 +2,7 @@
 // libelles du compte rendu. Le calcul de la mise en page est dans src/export (sans Obsidian).
 import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
-import { displaySize, figureBounds, ImageAsset, imageCandidates, isImageTarget, isWebTarget, jpegInfo, targetPixels } from "./export/image";
+import { displaySize, figureBounds, ImageAsset, imageCandidates, isImageTarget, isWebTarget, jpegInfo, stripJpegMetadata, targetPixels } from "./export/image";
 import { excalidrawSvg } from "./excalidraw-export";
 import { isExcalidrawTarget } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
@@ -194,14 +194,16 @@ async function loadBytes(bytes: Uint8Array<ArrayBuffer>, ext: string, requestedW
   if (ext === `jpg` || ext === `jpeg`) {
     const info = jpegInfo(bytes);
     if (info && info.components === 3 && info.width === naturalWidth && info.height === naturalHeight) {
-      return remember({ naturalWidth, naturalHeight, pixelWidth: info.width, pixelHeight: info.height, kind: `jpeg`, data: bytes, previewUrl: url }, blob);
+      // The metadata (GPS position, camera, date) stay out of the PDF; a file that cannot be cleaned is drawn again below.
+      const clean = stripJpegMetadata(bytes);
+      if (clean) return remember({ naturalWidth, naturalHeight, pixelWidth: info.width, pixelHeight: info.height, kind: `jpeg`, data: clean, previewUrl: url }, blob);
     }
   }
 
   // Autres formats (et SVG) : on trace l'image a la resolution voulue et on garde les pixels.
   const pw = ext === `svg` ? Math.max(1, Math.ceil((d.width / 72) * 300)) : targetPixels(naturalWidth, d.width);
   const ph = Math.max(1, Math.round((pw * naturalHeight) / naturalWidth));
-  const canvas = document.createElement(`canvas`);
+  const canvas = createEl(`canvas`);
   canvas.width = pw;
   canvas.height = ph;
   const ctx = canvas.getContext(`2d`);

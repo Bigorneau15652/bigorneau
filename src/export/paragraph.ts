@@ -195,6 +195,8 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
       else if (ch === ITALIC_OFF) italic = false;
       else if (ch === LINK_ON) {
         const end = piece.indexOf(LINK_NUM_END, i);
+        // A marker without the end of its number is ignored (it cannot come from the parser, which writes both).
+        if (end === -1) continue;
         link = Number(piece.slice(i + 1, end));
         i = end;
       } else if (ch === LINK_OFF) link = -1;

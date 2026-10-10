@@ -86,3 +86,19 @@ test(`les titres se comparent sans tenir compte de la casse, des signes et des e
   assert.equal(normalizeHeading(`Les  **Résultats** [détaillés]`), `les résultats détaillés`);
   assert.equal(normalizeHeading(`Résultats`), normalizeHeading(`résultats `));
 });
+
+test(`seuls les liens web, courriel et internes deviennent des liens`, () => {
+  assert.deepEqual(parseInline(`[a](https://exemple.fr) [b](mailto:x@y.fr) [c](#partie)`).links, [`https://exemple.fr`, `mailto:x@y.fr`, `#partie`]);
+  for (const bad of [`javascript:alert`, `JavaScript:void0`, `file:///etc/passwd`, `data:text/html,x`, `obsidian://open?vault=x`, `Dossier/Note.md`, `//exemple.fr`]) {
+    const r = parseInline(`voir [lien](${bad}) ici`);
+    assert.deepEqual(r.links, [], bad);
+    assert.equal(r.text, `voir lien ici`, bad);
+  }
+});
+
+test(`un caractere d'usage prive tape dans une note ne fabrique pas de repere`, () => {
+  const r = parseInline(`avant ${LINK_ON}0 apres`);
+  assert.equal(r.text, `avant 0 apres`);
+  assert.deepEqual(r.links, []);
+  assert.equal(parseInline(`ab`).text, `ab`);
+});

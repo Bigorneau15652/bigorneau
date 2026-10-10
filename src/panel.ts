@@ -168,7 +168,7 @@ export class ButtonPanel {
     let dragging = false;
     let target = 0;
     let origin = 0;
-    const others = (): HTMLElement[] => Array.from(list.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c !== btn && c.dataset.id !== undefined);
+    const others = (): HTMLElement[] => Array.from(list.children).filter((c): c is HTMLElement => c.instanceOf(HTMLElement) && c !== btn && c.dataset.id !== undefined);
     const clearMarks = (): void => {
       for (const el of Array.from(list.children)) el.removeClasses([`mmw-panel-drop-before`, `mmw-panel-drop-after`]);
     };

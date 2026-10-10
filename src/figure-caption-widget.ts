@@ -21,7 +21,7 @@ class FigureCaptions {
   constructor(private view: EditorView) {
     this.observer = new MutationObserver((records) => {
       // Les changements faits par l'extension elle-meme ne relancent rien.
-      if (records.every((r) => Array.from(r.addedNodes).concat(Array.from(r.removedNodes)).every((n) => n instanceof HTMLElement && n.classList.contains(CAPTION_CLASS)))) return;
+      if (records.every((r) => Array.from(r.addedNodes).concat(Array.from(r.removedNodes)).every((n) => n.instanceOf(HTMLElement) && n.classList.contains(CAPTION_CLASS)))) return;
       this.schedule();
     });
     this.observer.observe(view.contentDOM, { childList: true, subtree: true });
@@ -119,7 +119,7 @@ class FigureCaptions {
       if (!fig) continue;
       let cap = host.querySelector<HTMLElement>(`:scope > .${CAPTION_CLASS}`);
       if (!cap) {
-        cap = document.createElement(`div`);
+        cap = createEl(`div`);
         cap.className = CAPTION_CLASS;
         host.appendChild(cap);
         host.classList.add(HOST_CLASS);
@@ -137,7 +137,7 @@ class FigureCaptions {
       if (cap.dataset.text !== want) {
         cap.dataset.text = want;
         cap.textContent = ``;
-        const strong = document.createElement(`strong`);
+        const strong = createEl(`strong`);
         strong.textContent = fig.label;
         cap.append(strong, document.createTextNode(want.slice(fig.label.length)));
       }
@@ -159,7 +159,7 @@ class NumberWidget extends WidgetType {
     return other.n === this.n;
   }
   toDOM(): HTMLElement {
-    const el = document.createElement(`span`);
+    const el = createEl(`span`);
     el.className = `mmw-table-number`;
     el.textContent = ` ${this.n}`;
     return el;

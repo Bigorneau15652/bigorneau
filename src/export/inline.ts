@@ -59,6 +59,8 @@ const CODE_OFF = ``;
 
 // Les adresses du texte sont nettoyees de la ponctuation qui les termine.
 const URL_TAIL = /[.,;:!?)\]'”»]+$/;
+// Addresses kept as links in the preview and the PDF: web, mail and references to a place of the document.
+const SAFE_LINK = /^(?:https?:\/\/|mailto:|#)/i;
 
 // Remplace, de gauche a droite, les passages qui commencent par `open` et que reconnait l'expression collante `re`, quand le
 // caractere qui precede l'ouverture verifie `okBefore`. Les anciennes expressions a « lookbehind » faisaient cette verification
@@ -107,7 +109,9 @@ export function emphasize(text: string): string {
 export function parseInline(source: string, ctx?: InlineContext): InlineText {
   const links: string[] = [];
   const codes: string[] = [];
-  let s = source;
+  // The style, link, formula and code markers are private-use characters (U+E010 to U+E018, U+E030 and U+E031): any of them typed in
+  // a note is dropped, so that a note cannot forge a marker and put the reading of the text in a loop.
+  let s = source.replace(/[\uE010-\uE018\uE030\uE031]/g, ``);
 
   // Le code en ligne est protege : son texte ne subit aucune autre transformation.
   s = s.replace(/`([^`]*)`/g, (_m, c: string) => {
@@ -165,7 +169,8 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
   // Liens web : [texte](adresse "titre") ou adresse nue.
   s = s.replace(/\[([^\]]*)\]\(<?([^)\s>]*)>?(?:\s+"[^"]*")?\)|https?:\/\/[^\s<>\u00A0-]+/g, (m: string, text: string | undefined, url: string | undefined) => {
     if (text !== undefined) {
-      if (url === undefined || url === ``) return text;
+      // Only web, mail and internal addresses become links: javascript:, file:, obsidian: and vault paths stay plain text.
+      if (url === undefined || url === `` || !SAFE_LINK.test(url)) return text;
       links.push(url);
       return `${LINK_ON}${links.length - 1}${LINK_NUM_END}${text}${LINK_OFF}`;
     }

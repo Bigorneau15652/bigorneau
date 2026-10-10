@@ -11,7 +11,7 @@ export interface ImportReport {
 }
 
 const inflate: Inflate = async (data) => {
-  const g = globalThis as unknown as { DecompressionStream?: new (format: string) => { readable: ReadableStream; writable: WritableStream } };
+  const g = window as unknown as { DecompressionStream?: new (format: string) => { readable: ReadableStream; writable: WritableStream } };
   if (!g.DecompressionStream) throw new Error(`DecompressionStream indisponible`);
   const stream = new Blob([data.slice().buffer]).stream().pipeThrough(new g.DecompressionStream(`deflate-raw`));
   return new Uint8Array(await new Response(stream).arrayBuffer());

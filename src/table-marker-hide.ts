@@ -100,7 +100,7 @@ class ListNoteWidget extends WidgetType {
     return other.kind === this.kind;
   }
   toDOM(): HTMLElement {
-    const el = document.createElement(`span`);
+    const el = createEl(`span`);
     el.className = `mmw-list-marker`;
     el.textContent = `${this.kind === `figures` ? t(`Liste des figures`) : t(`Liste des tableaux`)} : ${t(`placée ici à l'export`)}`;
     return el;
