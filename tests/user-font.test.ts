@@ -79,3 +79,16 @@ test(`une police qui declare des milliards de caracteres est lue sans saturer la
 test(`une police ordinaire garde tous ses caracteres`, () => {
   assert.ok(load(`TestSerif-Regular.ttf`).cmap.size > 50);
 });
+
+test(`les signes des rapports techniques sont dans la police embarquee`, async () => {
+  const { measureText } = await import(`../src/export/font-metrics`);
+  const text = `≤ ≥ ≈ ≠ ± Δ λ μ π Ω α β ² ³ ₂ ⁻ ∞ √ ∑ → ⇒ ⇔ ℃ ½`;
+  for (const style of [`regular`, `italic`, `bold`, `boldItalic`] as const) assert.deepEqual(measureText(text, 11, style).missing, [], style);
+  assert.ok(measureText(`☃`, 11, `regular`).missing.length > 0);
+});
+
+test(`un caractere absent de la police est copie comme le point d'interrogation qui le remplace`, async () => {
+  const { fontFor } = await import(`../src/export/font-metrics`);
+  const glyphs = fontFor(`regular`).shape(`a☃b`);
+  assert.deepEqual(glyphs.map((g) => g.text), [`a`, `?`, `b`]);
+});

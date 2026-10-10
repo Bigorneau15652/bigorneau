@@ -4,7 +4,7 @@ import { Notice, Platform, TFile } from "obsidian";
 import { composeNote, composeToPdf } from "./export/compose";
 import { ExportDialog, ExportReportModal, targetPath } from "./export-dialog";
 import { loadAssets, pageStyleOf } from "./export-context";
-import { warningLines } from "./export-report";
+import { missingCharsLine, warningLines } from "./export-report";
 import { MATH_SERVICE, MathRenderer } from "./script-formulas";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
@@ -54,7 +54,7 @@ export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile)
 
     const lines: string[] = [];
     lines.push(...warningLines(composed.typeset.warnings, { formulasEnabled: plugin.scripts.isEnabled(`formulas`) }));
-    if (composed.typeset.missing.length > 0) lines.push(t(`Caractères absents de la police : {0}`, composed.typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)));
+    if (composed.typeset.missing.length > 0) lines.push(missingCharsLine(composed.typeset.missing));
     if (composed.typeset.stats.overfullLines > 0) lines.push(t(`{0} lignes débordent de la colonne.`, composed.typeset.stats.overfullLines));
     if (lines.length > 0) new ExportReportModal(plugin.app, path, lines).open();
     else new Notice(t(`PDF enregistré : {0}`, path));

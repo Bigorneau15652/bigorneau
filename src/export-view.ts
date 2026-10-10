@@ -11,7 +11,7 @@ import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, PageSetup, Row } from "./export/typeset";
 import { loadAssets, pageStyleOf } from "./export-context";
 import { cssFamilyOf } from "./font-store";
-import { warningLines } from "./export-report";
+import { missingCharsLine, warningLines } from "./export-report";
 import { MATH_SERVICE, MathRenderer } from "./script-formulas";
 import { loadExportFont } from "./export-font";
 import { t } from "./i18n";
@@ -107,6 +107,7 @@ export class ExportPreviewView extends ItemView {
       const span = el.createSpan({ text: run.text });
       if (highlight !== ``) span.style.backgroundColor = highlight;
       if (run.sup) span.addClass(`mmw-sup`);
+      if (run.strike) span.addClass(`mmw-run-strike`);
       if (run.style === `mono`) span.addClass(`mmw-run-mono`);
       if (run.style === `bold` || run.style === `boldItalic`) span.addClass(`mmw-run-bold`);
       if (run.style === `italic` || run.style === `boldItalic`) span.addClass(`mmw-run-italic`);
@@ -380,7 +381,7 @@ export class ExportPreviewView extends ItemView {
     });
     for (const line of warningLines(typeset.warnings, { formulasEnabled: this.plugin.scripts.isEnabled(`formulas`) })) head.createDiv({ cls: `mmw-export-stats`, text: line });
     if (typeset.missing.length > 0) {
-      head.createDiv({ cls: `mmw-export-stats`, text: t(`Caractères absents de la police : {0}`, typeset.missing.map((c) => `U+${c.toString(16).toUpperCase().padStart(4, `0`)}`).join(` `)) });
+      head.createDiv({ cls: `mmw-export-stats`, text: missingCharsLine(typeset.missing) });
     }
     if (!fontOk) head.createDiv({ cls: `mmw-export-stats`, text: t(`Police de l'export indisponible : l'aperçu utilise une autre police.`) });
     head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de l'export : le PDF reprend exactement ces pages. Les titres masqués et les sujets flottants ne sont pas exportés.`) });

@@ -13,6 +13,9 @@ export const ITALIC_OFF = ``;
 export const LINK_ON = ``;
 export const LINK_NUM_END = ``;
 export const LINK_OFF = ``;
+// Texte barre : reperes de debut et de fin (la barre est tracee par la mise en page).
+export const STRIKE_ON = `\uE019`;
+export const STRIKE_OFF = `\uE01A`;
 
 // Formule en ligne : repere, numero de la formule dans la table, repere de fin du numero.
 export const MATH_ON = `\uE017`;
@@ -98,20 +101,20 @@ export function emphasize(text: string): string {
   s = replaceAfter(s, `__`, /__(\S(?:.*?\S)??)__(?![\p{L}\d])/uy, NOT_WORD, (m) => `${BOLD_ON}${m[1]}${BOLD_OFF}`);
   s = s.replace(/\*([^\s*](?:[^*]*[^\s*])?)\*/g, `${ITALIC_ON}$1${ITALIC_OFF}`);
   s = replaceAfter(s, `_`, /_([^\s_](?:[^_]*[^\s_])?)_(?![\p{L}\d_])/uy, NOT_WORD_OR_UNDERSCORE, (m) => `${ITALIC_ON}${m[1]}${ITALIC_OFF}`);
-  s = s.replace(/~~(\S(?:.*?\S)??)~~/g, `$1`);
+  s = s.replace(/~~(\S(?:.*?\S)??)~~/g, `${STRIKE_ON}$1${STRIKE_OFF}`);
   s = s.replace(/==(\S(?:.*?\S)??)==/g, `$1`);
   return s;
 }
 
 // Transforme le Markdown en ligne : liens [texte](adresse) et adresses nues, gras (** ou __), italique (* ou _), gras italique
 // (***), code en ligne (garde son texte), images (retirees), liens internes [[note|texte]] (garde le texte), et laisse
-// tels quels le barre ~~ et le surlignage ==, dont les signes disparaissent.
+// le barre ~~ (trace par la mise en page) et le surlignage ==, dont les signes disparaissent.
 export function parseInline(source: string, ctx?: InlineContext): InlineText {
   const links: string[] = [];
   const codes: string[] = [];
-  // The style, link, formula and code markers are private-use characters (U+E010 to U+E018, U+E030 and U+E031): any of them typed in
+  // The style, link, formula and code markers are private-use characters (U+E010 to U+E01A, U+E030 and U+E031): any of them typed in
   // a note is dropped, so that a note cannot forge a marker and put the reading of the text in a loop.
-  let s = source.replace(/[\uE010-\uE018\uE030\uE031]/g, ``);
+  let s = source.replace(/[\uE010-\uE01A\uE030\uE031]/g, ``);
 
   // Le code en ligne est protege : son texte ne subit aucune autre transformation.
   s = s.replace(/`([^`]*)`/g, (_m, c: string) => {
@@ -184,8 +187,6 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
     links.push(clean);
     return `${LINK_ON}${links.length - 1}${LINK_NUM_END}${clean}${LINK_OFF}${tail}`;
   });
-  // The strikethrough bar is not drawn: the text stays, without its bar.
-  if (/~~(\S(?:.*?\S)??)~~/.test(s)) ctx?.warn?.(`strike`);
   s = emphasize(s);
   s = s.replace(new RegExp(`${CODE_ON}(\\d+)${CODE_OFF}`, `g`), (_m, i: string) => codes[Number(i)]);
   return { text: s, links, ...(maths.length > 0 ? { maths } : {}) };
@@ -195,5 +196,5 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
 export function plainOf(text: string): string {
   return text
     .replace(new RegExp(`${LINK_ON}\\d+${LINK_NUM_END}|${MATH_ON}\\d+${MATH_END}`, `g`), ``)
-    .replace(/[\uE010-\uE016]/g, ``);
+    .replace(/[\uE010-\uE016\uE019\uE01A]/g, ``);
 }

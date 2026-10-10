@@ -11,7 +11,6 @@ export interface ReportOptions {
 export function warningLines(warnings: string[], opts: ReportOptions = { formulasEnabled: true }): string[] {
   const out: string[] = [];
   let formulas = false;
-  let strike = false;
   for (const w of warnings) {
     if (w.startsWith(`note:`)) out.push(t(`Note de bas de page sans définition : {0}`, w.slice(5)));
     else if (w.startsWith(`image:`)) {
@@ -28,9 +27,14 @@ export function warningLines(warnings: string[], opts: ReportOptions = { formula
     else if (w.startsWith(`inlineimage:`)) out.push(t(`Image ou fichier intégré non imprimé : il n'est pas seul sur sa ligne (phrase, liste ou tableau) : {0}`, w.slice(12)));
     else if (w.startsWith(`embed:`)) out.push(t(`Note intégrée non reprise, remplacée par un repère : {0}`, w.slice(6)));
     else if (w.startsWith(`block:`)) out.push(t(`Bloc {0} imprimé comme texte source : Bigorneau n'exécute pas les requêtes ni les diagrammes.`, w.slice(6)));
-    else if (w === `strike`) strike = true;
   }
   if (formulas) out.push(t(`Le script Formules est désactivé : les formules restent écrites telles quelles. Activez-le avec le bouton bigorneau du panneau.`));
-  if (strike) out.push(t(`Texte barré imprimé sans barre : « 120 barré 90 » se lirait comme deux valeurs.`));
   return out;
+}
+
+// Line of the report about the characters that the embedded font does not contain: each one is named by its sign and its code, and the
+// line says what the PDF prints instead (a question mark). The preview may show them with another font of the system.
+export function missingCharsLine(missing: number[]): string {
+  const shown = missing.map((c) => `${String.fromCodePoint(c)} (U+${c.toString(16).toUpperCase().padStart(4, `0`)})`).join(`, `);
+  return t(`Caractères absents de la police, imprimés « ? » dans le PDF : {0}. Un signe mathématique peut s'écrire dans une formule, entre dollars.`, shown);
 }

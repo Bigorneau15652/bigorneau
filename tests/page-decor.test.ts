@@ -295,6 +295,21 @@ test(`le compte rendu signale ce que l'export ne peut pas imprimer`, async () =>
     "```",
   ].join(`\n`);
   const warnings = composeNote(text, `N.md`).typeset.warnings;
-  for (const code of [`inlineimage:photo.png`, `inlineimage:autre.png`, `strike`, `embed:Autre note`, `block:dataview`]) assert.ok(warnings.includes(code), code);
-  assert.ok(warningLines(warnings).length >= 5);
+  for (const code of [`inlineimage:photo.png`, `inlineimage:autre.png`, `embed:Autre note`, `block:dataview`]) assert.ok(warnings.includes(code), code);
+  assert.ok(warningLines(warnings).length >= 4);
+});
+
+test(`le texte barre garde sa barre, y compris sur l'espace entre deux mots barres`, () => {
+  const c = composeNote(`# A\n\nUn ~~ancien prix~~ et un nouveau.`, `N.md`);
+  const rows = c.pages.flatMap((p) => p.rows).filter((r) => (r.runs ?? []).some((run) => run.strike));
+  assert.equal(rows.length, 1);
+  const struck = (rows[0].runs ?? []).filter((run) => run.strike).map((run) => run.text).join(``);
+  assert.equal(struck, `ancien prix`);
+  assert.ok(!(rows[0].runs ?? []).some((run) => run.text.includes(`~`)));
+});
+
+test(`le PDF trace la barre du texte barre`, async () => {
+  const plain = Buffer.from(await composeToPdf(composeNote(`# A\n\nUn ancien prix ici.`, `N.md`), REQ)).toString(`latin1`);
+  const struck = Buffer.from(await composeToPdf(composeNote(`# A\n\nUn ~~ancien prix~~ ici.`, `N.md`), REQ)).toString(`latin1`);
+  assert.ok(struck.length !== plain.length);
 });
