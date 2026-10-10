@@ -1627,6 +1627,10 @@
   font-family: "MMW Libertinus Mono", monospace;
 }
 
+.mmw-export-button {
+  margin-right: 8px;
+}
+
 .mmw-run-strike {
   text-decoration: line-through;
 }

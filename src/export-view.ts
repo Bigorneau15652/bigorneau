@@ -406,6 +406,8 @@ export class ExportPreviewView extends ItemView {
     head.createDiv({ cls: `mmw-export-hint`, text: t(`Aperçu de l'export : le PDF reprend exactement ces pages. Les titres masqués et les sujets flottants ne sont pas exportés.`) });
     const exportBtn = head.createEl(`button`, { cls: `mod-cta mmw-export-button`, text: t(`Exporter en PDF…`) });
     exportBtn.addEventListener(`click`, () => void this.plugin.exportPdf());
+    const printBtn = head.createEl(`button`, { cls: `mmw-export-button`, text: t(`Imprimer…`) });
+    printBtn.addEventListener(`click`, () => void this.plugin.printPdf());
 
     const host = root.createDiv({ cls: `mmw-export-pages` });
     this.sheets = [];

@@ -24,6 +24,50 @@ function askTarget(plugin: MindmapWritingPlugin, file: TFile): Promise<{ folder:
   });
 }
 
+// Composes the note and writes it as a PDF (the same pages as the preview). Used by the export and by the print button.
+async function makePdf(plugin: MindmapWritingPlugin, file: TFile): Promise<{ pdf: Uint8Array; composed: ReturnType<typeof composeNote> }> {
+  const text = plugin.getOpenText(file) ?? (await plugin.app.vault.read(file));
+  // Laisse le temps d'afficher le message avant le calcul.
+  await new Promise((r) => window.setTimeout(r, 30));
+  await plugin.fonts.refresh();
+  const { images, formulas, urls } = await loadAssets(plugin.app, text, file.name, file.path, plugin.scripts.service<MathRenderer>(MATH_SERVICE));
+  const composed = composeNote(text, file.name, undefined, pageStyleOf(plugin.settings), { images, formulas, created: file.stat.ctime, modified: file.stat.mtime, defaultAuthor: plugin.settings.exportAuthor });
+  for (const u of urls) URL.revokeObjectURL(u);
+  const pdf = await composeToPdf(composed, {
+    defaultAuthor: plugin.settings.exportAuthor,
+    creator: `Bigorneau ${plugin.manifest.version}`,
+    created: new Date(),
+    deflate,
+  });
+  return { pdf, composed };
+}
+
+// Opens the note as a PDF in the reader of the system, where it is printed with the usual print window. The PDF is written in the
+// folder of the plugin (not in the notes), under the name of the note; the next print replaces it.
+export async function printNote(plugin: MindmapWritingPlugin, file: TFile): Promise<void> {
+  if (!Platform.isDesktop) return;
+  const notice = new Notice(t(`Composition du PDF…`), 0);
+  try {
+    const { pdf } = await makePdf(plugin, file);
+    const adapter = plugin.app.vault.adapter;
+    const folder = `${plugin.manifest.dir ?? `.obsidian/plugins/${plugin.manifest.id}`}/impression`;
+    if (!(await adapter.exists(folder))) await adapter.mkdir(folder);
+    const path = `${folder}/${file.basename.replace(/[\\/:*?"<>|]/g, `_`)}.pdf`;
+    await adapter.writeBinary(path, pdf.slice().buffer);
+    notice.hide();
+    const open = (plugin.app as unknown as { openWithDefaultApp?: (p: string) => Promise<void> | void }).openWithDefaultApp;
+    if (typeof open === `function`) {
+      await open.call(plugin.app, path);
+      new Notice(t(`Le PDF s'ouvre dans votre lecteur : imprimez-le depuis celui-ci.`));
+    } else {
+      new Notice(t(`PDF écrit : {0}. Ouvrez-le avec votre lecteur pour l'imprimer.`, path), 10000);
+    }
+  } catch (e) {
+    notice.hide();
+    new Notice(t(`L'impression a échoué : {0}`, e instanceof Error ? e.message : String(e)), 8000);
+  }
+}
+
 export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile): Promise<void> {
   if (!Platform.isDesktop) return;
   const target = await askTarget(plugin, file);
@@ -31,19 +75,7 @@ export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile)
   const path = targetPath(target);
   const notice = new Notice(t(`Composition du PDF…`), 0);
   try {
-    const text = plugin.getOpenText(file) ?? (await plugin.app.vault.read(file));
-    // Laisse le temps d'afficher le message avant le calcul.
-    await new Promise((r) => window.setTimeout(r, 30));
-    await plugin.fonts.refresh();
-    const { images, formulas, urls } = await loadAssets(plugin.app, text, file.name, file.path, plugin.scripts.service<MathRenderer>(MATH_SERVICE));
-    const composed = composeNote(text, file.name, undefined, pageStyleOf(plugin.settings), { images, formulas, created: file.stat.ctime, modified: file.stat.mtime, defaultAuthor: plugin.settings.exportAuthor });
-    for (const u of urls) URL.revokeObjectURL(u);
-    const pdf = await composeToPdf(composed, {
-      defaultAuthor: plugin.settings.exportAuthor,
-      creator: `Bigorneau ${plugin.manifest.version}`,
-      created: new Date(),
-      deflate,
-    });
+    const { pdf, composed } = await makePdf(plugin, file);
     const folder = path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``;
     if (folder !== `` && !plugin.app.vault.getAbstractFileByPath(folder)) await plugin.app.vault.createFolder(folder);
     const existing = plugin.app.vault.getAbstractFileByPath(path);
