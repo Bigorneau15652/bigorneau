@@ -17,7 +17,7 @@ import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
 import { FORMULAS_SCRIPT } from "./script-formulas";
 import { ICON_FOOTNOTE, ICON_LOREM, registerCustomIcons } from "./custom-icons";
-import { drawFigure, insertNamedImage } from "./drawing";
+import { drawFigure, insertNamedImage, nameAfterPaste } from "./drawing";
 import { LoremModal } from "./lorem-dialog";
 import { createPageScript } from "./script-page";
 import { ScriptManager } from "./scripts";
@@ -172,6 +172,13 @@ export default class MindmapWritingPlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on(`rename`, (file) => {
         if (this.lastFile && file === this.lastFile) this.refreshViews();
+      })
+    );
+    // Une image collee (Ctrl + V) : Obsidian ecrit son lien sans nom ; la fenetre du nom de la figure s'ouvre ensuite.
+    this.registerEvent(
+      this.app.workspace.on(`editor-paste`, (evt, editor) => {
+        if (!this.settings.namePastedImages || evt.defaultPrevented) return;
+        if (Array.from(evt.clipboardData?.files ?? []).some((f) => f.type.startsWith(`image/`))) nameAfterPaste(this.app, editor);
       })
     );
     // La carte suit la frappe dans l'editeur d'Obsidian sans attendre l'enregistrement du fichier.

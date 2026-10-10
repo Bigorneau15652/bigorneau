@@ -100,3 +100,16 @@ test(`place du nom d'une figure dans sa ligne`, () => {
   assert.equal(at(`![[image.png]]`), null);
   assert.equal(at(`du texte`), null);
 });
+
+test(`une image collee sans nom est reperee apres le collage`, async () => {
+  const { addedPicture, pastedImageName, nameDrawing } = await import(`../src/figure-insert`);
+  const before = `Texte\n\n![[ancienne.png|Nom]]\n`;
+  const after = `Texte\n\n![[ancienne.png|Nom]]\n![[Pasted image 20261010111529.png]]\n`;
+  const added = addedPicture(before, after);
+  assert.ok(added);
+  assert.equal(added.target, `Pasted image 20261010111529.png`);
+  assert.equal(addedPicture(after, after), null);
+  assert.equal(addedPicture(before, before + `![[doc.pdf]]\n`), null);
+  assert.deepEqual(nameDrawing(added, `Ma capture`).insert, `![[Pasted image 20261010111529.png|Ma capture]]`);
+  assert.equal(pastedImageName(new Date(2026, 9, 10, 11, 15, 29)), `Pasted image 20261010111529`);
+});

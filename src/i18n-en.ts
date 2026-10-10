@@ -828,6 +828,13 @@ const PAIRS: [string, string][] = [
   [`Fichiers déjà présents et identiques : {0}`, `Files already present and identical: {0}`],
   [`Fichiers refusés (trop volumineux, illisibles ou copie impossible) : {0}`, `Files refused (too large, unreadable or copy failed): {0}`],
   [`nom en double`, `duplicate name`],
+  [`Image du presse-papiers`, `Clipboard image`],
+  [`Une capture d'écran ou une image copiée est enregistrée dans le dossier des pièces jointes d'Obsidian, puis insérée.`, `A screenshot or a copied image is saved in the attachments folder of Obsidian, then inserted.`],
+  [`Coller l'image`, `Paste the image`],
+  [`Le presse-papiers ne contient pas d'image.`, `The clipboard does not contain an image.`],
+  [`Nom des images collées`, `Name of pasted images`],
+  [`Après un collage d'image (Ctrl + V), une fenêtre demande le nom de la figure, qui devient sa légende dans l'export. Un nom vide laisse l'image sans légende.`, `After an image is pasted (Ctrl + V), a window asks for the name of the figure, which becomes its caption in the export. An empty name leaves the image without a caption.`],
+
   [`Image ou fichier intégré non imprimé : il n'est pas seul sur sa ligne (phrase, liste ou tableau) : {0}`, `Embedded image or file not printed: it is not alone on its line (sentence, list or table): {0}`],
   [`Note intégrée non reprise, remplacée par un repère : {0}`, `Embedded note not included, replaced by a placeholder: {0}`],
   [`Bloc {0} imprimé comme texte source : Bigorneau n'exécute pas les requêtes ni les diagrammes.`, `Block {0} printed as source text: Bigorneau does not run queries or diagrams.`],

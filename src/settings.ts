@@ -164,6 +164,8 @@ export interface MmSettings {
   exportFloats: `float` | `inline`;
   // Legende des figures : sous l'image ou au-dessus.
   exportFigureCaption: `below` | `above`;
+  // Apres le collage d'une image (Ctrl + V), propose d'ecrire le nom de la figure (sa legende dans l'export).
+  namePastedImages: boolean;
   // Bouton Lorem ipsum : dernieres tailles saisies, et ligne vide entre les paragraphes generes.
   loremSpec: string;
   loremBlankLine: boolean;
@@ -278,6 +280,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   exportAuthor: ``,
   exportFloats: `float`,
   exportFigureCaption: `below`,
+  namePastedImages: true,
   loremSpec: `6`,
   loremBlankLine: false,
   exportPageRefs: false,
@@ -386,6 +389,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.loremSpec = typeof merged.loremSpec === `string` && merged.loremSpec.trim() !== `` ? merged.loremSpec.slice(0, 80) : `6`;
   merged.loremBlankLine = merged.loremBlankLine === true;
   if (merged.exportFigureCaption !== `below` && merged.exportFigureCaption !== `above`) merged.exportFigureCaption = `below`;
+  merged.namePastedImages = merged.namePastedImages !== false;
   merged.exportPageRefs = merged.exportPageRefs === true;
   if (merged.exportMedia !== `frame` && merged.exportMedia !== `text`) merged.exportMedia = `frame`;
   if (![`chapter`, `title`, `none`].includes(merged.exportHeader)) merged.exportHeader = `chapter`;
