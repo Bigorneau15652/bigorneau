@@ -260,3 +260,41 @@ test(`les cadres d'une bande ont la meme hauteur et contiennent les images, meme
     assert.ok(img && img.kind === `image` && img.y >= a.y + 4 - 1e-6 && img.y + img.height <= a.y + a.height);
   }
 });
+
+test(`une note qui n'a qu'un reglage de page garde le numero de page general`, () => {
+  const text = noteWith((c) => {
+    c.layout = { ...c.layout, orientation: `landscape` };
+  }, longBody());
+  const c = composeNote(text, `N.md`);
+  assert.ok(c.pages.length > 1);
+  assert.ok(c.pages.every((p) => (p.decor ?? []).length === 0));
+  assert.ok(c.pages.every((p) => p.footer === String(p.number)), `le numero de page general est conserve`);
+});
+
+test(`une note qui definit une bande remplace l'en-tete et le pied de page generaux`, () => {
+  const text = noteWith((c) => {
+    c.footer.zones.center = `{page}`;
+  }, longBody());
+  const c = composeNote(text, `N.md`);
+  assert.ok(c.pages.every((p) => p.footer === undefined && (p.decor ?? []).length > 0));
+});
+
+test(`le compte rendu signale ce que l'export ne peut pas imprimer`, async () => {
+  const { warningLines } = await import(`../src/export-report`);
+  const text = [
+    `# Rapport`,
+    ``,
+    `Une phrase avec ![[photo.png]] au milieu et un ~~ancien prix~~ barre.`,
+    ``,
+    `- Une liste avec ![[autre.png]]`,
+    ``,
+    `![[Autre note]]`,
+    ``,
+    "```dataview",
+    `TABLE x FROM "y"`,
+    "```",
+  ].join(`\n`);
+  const warnings = composeNote(text, `N.md`).typeset.warnings;
+  for (const code of [`inlineimage:photo.png`, `inlineimage:autre.png`, `strike`, `embed:Autre note`, `block:dataview`]) assert.ok(warnings.includes(code), code);
+  assert.ok(warningLines(warnings).length >= 5);
+});

@@ -94,6 +94,15 @@ export const PLUGIN_HELP: HelpEntry[] = [
     keywords: { fr: `pdf apercu exporter imprimer document long`, en: `pdf preview export print long document` },
   },
   {
+    id: `export-limits`,
+    title: { fr: `Limites connues de l'export`, en: `Known limits of the export` },
+    text: {
+      fr: `L'export ne reprend pas tout ce qu'Obsidian affiche. Une image ou un fichier intégré avec ![[...]] n'est imprimé que s'il est seul sur sa ligne : dans une phrase, une liste ou un tableau, il est retiré. Une note intégrée devient un repère « [Figure : nom] ». Les blocs dataview, dataviewjs, mermaid et tasks sont imprimés comme texte source. Le texte barré est imprimé sans barre. Un en-tête et un numéro de page des réglages généraux sont conservés tant que la note ne définit pas elle-même une bande (en-tête, pied de page ou bord). Après chaque export, le compte rendu liste ces cas pour la note exportée.`,
+      en: `The export does not reproduce everything that Obsidian shows. An image or a file embedded with ![[...]] is printed only when it is alone on its line: inside a sentence, a list or a table it is dropped. An embedded note becomes a "[Figure: name]" placeholder. The blocks dataview, dataviewjs, mermaid and tasks are printed as source text. Struck-through text is printed without the bar. The header and page number of the general settings are kept as long as the note does not define a band of its own (header, footer or edge). After each export, the report lists these cases for the exported note.`,
+    },
+    keywords: { fr: `limites export pdf image integree dataview mermaid barre en-tete`, en: `limits export pdf embedded image dataview mermaid strikethrough header` },
+  },
+  {
     id: `typography`,
     title: { fr: `Typographie de l'export`, en: `Typography of the export` },
     text: {
