@@ -3,6 +3,7 @@
 import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, imageCandidates, isImageTarget, isWebTarget, jpegInfo, stripJpegMetadata, targetPixels } from "./export/image";
+import { noteError } from "./diagnostics";
 import { excalidrawSvg } from "./excalidraw-export";
 import { isExcalidrawTarget } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
@@ -52,7 +53,13 @@ function fileFor(app: App, target: string, sourcePath: string): TFile | null {
   } catch {
     // Adresse deja en clair.
   }
-  return app.metadataCache.getFirstLinkpathDest(decoded, sourcePath) ?? app.metadataCache.getFirstLinkpathDest(clean, sourcePath);
+  const found = app.metadataCache.getFirstLinkpathDest(decoded, sourcePath) ?? app.metadataCache.getFirstLinkpathDest(clean, sourcePath);
+  if (found) return found;
+  // The index of the links does not know the file (for instance a picture that has just been added): the files of the vault are
+  // searched by their path, then by their name, without regard to the case.
+  const wanted = decoded.replace(/^\/+/, ``).toLowerCase();
+  const files = app.vault.getFiles();
+  return files.find((f) => f.path.toLowerCase() === wanted) ?? files.find((f) => f.name.toLowerCase() === wanted.split(`/`).pop()) ?? null;
 }
 
 // Charge les images des figures de la note : lues dans le coffre, decodees par le navigateur, reduites a 300 points par pouce au
@@ -71,15 +78,20 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
     // Un dessin Excalidraw se lit par son export image (.excalidraw.svg ou .excalidraw.png), sinon la cible elle-meme.
     for (const name of imageCandidates(target)) {
       const file = fileFor(app, name, sourcePath);
-      if (!file || !isImageTarget(file.name) || /\.excalidraw(\.md)?$/i.test(file.name)) continue;
+      if (!file) {
+        noteError(`Image de l'export`, new Error(`fichier introuvable dans le coffre : ${name}`));
+        continue;
+      }
+      if (!isImageTarget(file.name) || /\.excalidraw(\.md)?$/i.test(file.name)) continue;
       try {
         const asset = await loadOne(app, file, width, bounds, urls);
         if (asset) {
           images.set(target, asset);
           break;
         }
-      } catch {
-        // Image illisible : traitee comme absente.
+      } catch (e) {
+        // Image illisible : traitee comme absente, avec la raison dans le diagnostic.
+        noteError(`Image de l'export (${file.path})`, e);
       }
     }
     // Dessin Excalidraw sans fichier d'export : l'image est demandee au plugin Excalidraw.
@@ -207,7 +219,7 @@ async function loadBytes(bytes: Uint8Array<ArrayBuffer>, ext: string, requestedW
   canvas.width = pw;
   canvas.height = ph;
   const ctx = canvas.getContext(`2d`);
-  if (!ctx) return null;
+  if (!ctx) throw new Error(`le navigateur n'a pas fourni de surface de dessin pour ${pw} x ${ph} pixels`);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = `high`;
   ctx.drawImage(img, 0, 0, pw, ph);

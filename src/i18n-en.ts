@@ -472,7 +472,7 @@ const PAIRS: [string, string][] = [
   [`En simple texte`, `As plain text`],
   [`Formule non dessinée, son texte est gardé tel quel : {0}`, `Formula not drawn, its text is kept as written: {0}`],
   [`Média remplacé par un cadre avec son adresse : {0}`, `Media replaced by a frame with its address: {0}`],
-  [`Image introuvable : {0}`, `Image not found: {0}`],
+  [`Image introuvable ou illisible : {0}. La raison est notée dans le diagnostic.`, `Image not found or unreadable: {0}. The reason is recorded in the diagnostic.`],
   [`Image du web non téléchargée, remplacée par son adresse : {0}`, `Web image not downloaded, replaced by its address: {0}`],
   [`Renvoi sans cible dans la note : {0}`, `Reference with no target in the note: {0}`],
   [`Nom écrit dans les propriétés du PDF quand la note n'a pas de propriété author ou auteur.`, `Name written in the PDF properties when the note has no author or auteur property.`],
