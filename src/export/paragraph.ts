@@ -4,7 +4,7 @@
 // l'espacement de chaque ligne justifiee d'apres la largeur reelle du texte affiche (ligatures et crenage compris).
 import { FINE_SPACE, FontStyle, measureText, NO_BREAK_SPACE, variantFrom, variantOf, withVariant } from "./font-metrics";
 import { getLanguage, HyphenationLanguage, hyphenPoints, LanguageCode } from "./hyphenate";
-import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON, MATH_END, MATH_ON } from "./inline";
+import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON, MATH_END, MATH_ON, STRIKE_OFF, STRIKE_ON } from "./inline";
 import type { MathAsset } from "./math";
 import { breakParagraph, Item } from "./line-break";
 import { DEFAULT_TEX_PARAMS, DECENT, Fitness, INF_PENALTY, TexParams } from "./tex-params";
@@ -45,6 +45,8 @@ export interface LineRun {
   sup?: boolean;
   // Formule en ligne : dessinee a la place du texte (qui est vide).
   math?: MathAsset;
+  // Texte barre : une barre est tracee au milieu des lettres.
+  strike?: boolean;
 }
 
 export interface TypesetLine {
@@ -87,7 +89,7 @@ const SPECIAL = new RegExp(`${NOTE_CALL.source}|${MATH_ON}(\\d+)${MATH_END}`, `g
 
 // Vrai si le mot a autre chose que des reperes de style (et le numero qui suit un repere de lien) a afficher.
 function hasContent(w: string): boolean {
-  return w.replace(/\uE014\d*\uE015/g, ``).replace(/[\uE010-\uE016]/g, ``) !== ``;
+  return w.replace(/\uE014\d*\uE015/g, ``).replace(/[\uE010-\uE016\uE019\uE01A]/g, ``) !== ``;
 }
 
 const WORD_RUN = /[\p{L}\x27’]+/gu;
@@ -97,6 +99,7 @@ const APOSTROPHE = /[\x27’]/;
 interface CharMeta {
   style: FontStyle;
   link: number;
+  strike: boolean;
 }
 
 // Style du texte en gras ou en italique dans un paragraphe de police de base `base` : la famille reste la meme (celle du paragraphe).
@@ -120,23 +123,27 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
   let bold = false;
   let italic = false;
   let link = -1;
+  let strike = false;
+  // Le dernier morceau ecrit etait barre : l'espace entre deux mots barres l'est aussi.
+  let lastStruck = false;
   let gluePending = false;
 
   const pushBox = (s: string, meta: CharMeta): void => {
     if (s === ``) return;
     if (gluePending) {
-      items.push(glue(` `));
+      items.push({ ...glue(` `), ...(meta.strike && lastStruck ? { strike: true } : {}) });
       gluePending = false;
     }
     const m = measureText(s, size, meta.style);
     missing.push(...m.missing);
-    items.push({ type: `box`, width: m.width, text: s, style: meta.style, ...(meta.link >= 0 ? { link: meta.link } : {}) });
+    lastStruck = meta.strike;
+    items.push({ type: `box`, width: m.width, text: s, style: meta.style, ...(meta.link >= 0 ? { link: meta.link } : {}), ...(meta.strike ? { strike: true } : {}) });
   };
   // Boite dont les caracteres peuvent differer de police ou de lien : une boite par morceau uniforme.
   const pushMeta = (plain: string, meta: CharMeta[], from: number, to: number): void => {
     let start = from;
     for (let i = from + 1; i <= to; i++) {
-      if (i === to || meta[i].style !== meta[start].style || meta[i].link !== meta[start].link) {
+      if (i === to || meta[i].style !== meta[start].style || meta[i].link !== meta[start].link || meta[i].strike !== meta[start].strike) {
         pushBox(plain.slice(start, i), meta[start]);
         start = i;
       }
@@ -193,6 +200,8 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
       else if (ch === BOLD_OFF) bold = false;
       else if (ch === ITALIC_ON) italic = true;
       else if (ch === ITALIC_OFF) italic = false;
+      else if (ch === STRIKE_ON) strike = true;
+      else if (ch === STRIKE_OFF) strike = false;
       else if (ch === LINK_ON) {
         const end = piece.indexOf(LINK_NUM_END, i);
         // A marker without the end of its number is ignored (it cannot come from the parser, which writes both).
@@ -202,7 +211,7 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
       } else if (ch === LINK_OFF) link = -1;
       else {
         plain += ch;
-        meta.push({ style: combine(base, bold, italic), link });
+        meta.push({ style: combine(base, bold, italic), link, strike });
       }
     }
     return { plain, meta };
@@ -263,11 +272,11 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
     parts.forEach((part, pi) => {
       if (part === NO_BREAK_SPACE) {
         // Espace insecable : colle etirable devant laquelle on ne coupe pas.
-        items.push({ type: `penalty`, width: 0, penalty: INF_PENALTY, flagged: false, text: `` }, glue(NO_BREAK_SPACE));
+        items.push({ type: `penalty`, width: 0, penalty: INF_PENALTY, flagged: false, text: `` }, { ...glue(NO_BREAK_SPACE), ...(strike && lastStruck ? { strike: true } : {}) });
         gluePending = false;
       } else if (part === FINE_SPACE) {
         // Espace fine insecable : largeur fixe, jamais etiree.
-        pushBox(FINE_SPACE, { style: combine(base, bold, italic), link });
+        pushBox(FINE_SPACE, { style: combine(base, bold, italic), link, strike });
       } else {
         const lastPart = wi === lastIndex && pi === parts.length - 1;
         pushPieceWithCalls(part, o.hyphenateLastWord === true || !lastPart);
@@ -291,12 +300,12 @@ function buildItems(input: InlineText, o: ParagraphOptions, p: TexParams, lang: 
 // qui laisse les ligatures et le crenage se former au-dessus des coupures de cesure invisibles.
 function lineRuns(items: Item[], from: number, to: number, base: FontStyle, links: string[]): LineRun[] {
   const runs: LineRun[] = [];
-  const add = (text: string, style: FontStyle, link: number | undefined, sup: boolean): void => {
+  const add = (text: string, style: FontStyle, link: number | undefined, sup: boolean, struck = false): void => {
     if (text === ``) return;
     const url = link !== undefined && link >= 0 ? links[link] : undefined;
     const prev = runs[runs.length - 1];
-    if (prev && !prev.math && !sup && !prev.sup && prev.style === style && prev.link === url) prev.text += text;
-    else runs.push({ text, style, ...(url !== undefined ? { link: url } : {}), ...(sup ? { sup: true } : {}) });
+    if (prev && !prev.math && !sup && !prev.sup && prev.style === style && prev.link === url && (prev.strike === true) === struck) prev.text += text;
+    else runs.push({ text, style, ...(url !== undefined ? { link: url } : {}), ...(sup ? { sup: true } : {}), ...(struck ? { strike: true } : {}) });
   };
   for (let i = from; i < to; i++) {
     const it = items[i];
@@ -304,8 +313,8 @@ function lineRuns(items: Item[], from: number, to: number, base: FontStyle, link
       runs.push({ text: ``, style: (it.style as FontStyle | undefined) ?? base, math: it.math });
       continue;
     }
-    if (it.type === `box`) add(it.text, (it.style as FontStyle | undefined) ?? base, it.link, it.sup === true);
-    else if (it.type === `glue` && it.text !== ``) add(it.text, base, undefined, false);
+    if (it.type === `box`) add(it.text, (it.style as FontStyle | undefined) ?? base, it.link, it.sup === true, it.strike === true);
+    else if (it.type === `glue` && it.text !== ``) add(it.text, base, undefined, false, it.strike === true);
   }
   const end = items[to];
   if (end.type === `penalty` && end.hyphen) add(end.text, (end.style as FontStyle | undefined) ?? base, undefined, false);

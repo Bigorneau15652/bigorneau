@@ -229,6 +229,8 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
       if (link) ops.push(`q 0.102 0.31 0.612 rg`);
       else if (color) ops.push(`q ${color} rg`);
       ops.push(`BT /${u.name} ${num(sz)} Tf ${num(x)} ${num(H - y)} Td [${parts.join(` `)}] TJ ET`);
+      // Texte barre : un trait a mi-hauteur des lettres, de la couleur du texte.
+      if (run.strike) ops.push(`${num(x)} ${num(H - y + 0.3 * sz)} ${num(width)} ${num(Math.max(0.4, sz * 0.05))} re f`);
       if (link) {
         // Soulignement et zone cliquable du lien.
         ops.push(`${num(x)} ${num(H - baseline - 1.4)} ${num(width)} 0.4 re f Q`);

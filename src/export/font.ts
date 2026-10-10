@@ -532,7 +532,8 @@ export class OpenTypeFont {
     for (const ch of text) {
       const cp = ch.codePointAt(0)!;
       const gid = this.cmap.get(cp) ?? this.cmap.get(fallback) ?? 0;
-      glyphs.push({ gid, text: ch });
+      // A character missing from the font is drawn as the fallback glyph and copied as that character (not as the missing one).
+      glyphs.push({ gid, text: this.cmap.has(cp) ? ch : String.fromCodePoint(fallback) });
     }
     if (this.ligatures.size > 0) {
       const out: { gid: number; text: string }[] = [];

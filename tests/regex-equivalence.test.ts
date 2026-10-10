@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOLD_OFF, BOLD_ON, emphasize, ITALIC_OFF, ITALIC_ON } from "../src/export/inline";
+import { BOLD_OFF, BOLD_ON, emphasize, ITALIC_OFF, ITALIC_ON, STRIKE_OFF, STRIKE_ON } from "../src/export/inline";
 import { findMath } from "../src/export/math";
 import { abbreviationSpacing } from "../src/export/typography";
 import { NO_BREAK_SPACE } from "../src/export/font-metrics";
@@ -33,7 +33,7 @@ const OLD_EMPHASIS: [RegExp, string][] = [
   [new RegExp(String.raw`(?<![\p{L}\d])__(?=\S)(.+?)(?<=\S)__(?![\p{L}\d])`, `gu`), `${BOLD_ON}$1${BOLD_OFF}`],
   [new RegExp(String.raw`\*(?=[^\s*])([^*]+?)(?<=[^\s*])\*`, `g`), `${ITALIC_ON}$1${ITALIC_OFF}`],
   [new RegExp(String.raw`(?<![\p{L}\d_])_(?=[^\s_])([^_]+?)(?<=[^\s_])_(?![\p{L}\d_])`, `gu`), `${ITALIC_ON}$1${ITALIC_OFF}`],
-  [new RegExp(String.raw`~~(?=\S)(.+?)(?<=\S)~~`, `g`), `$1`],
+  [new RegExp(String.raw`~~(?=\S)(.+?)(?<=\S)~~`, `g`), `${STRIKE_ON}$1${STRIKE_OFF}`],
   [new RegExp(String.raw`==(?=\S)(.+?)(?<=\S)==`, `g`), `$1`],
 ];
 

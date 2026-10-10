@@ -12,9 +12,9 @@ export type Item =
   // `sup` : appel de note de bas de page en exposant ; `note` : cle de la note appelee.
   // `style` et `link` : police du texte et numero de son lien, que l'algorithme ne lit pas.
   // `math` : formule en ligne, dessinee a la place du texte.
-  | { type: `box`; width: number; text: string; sup?: boolean; note?: number; style?: string; link?: number; math?: MathAsset }
+  | { type: `box`; width: number; text: string; sup?: boolean; note?: number; style?: string; link?: number; math?: MathAsset; strike?: boolean }
   // Espace : largeur naturelle, etirement et compression. `fil` indique un etirement infini (fin de paragraphe).
-  | { type: `glue`; width: number; stretch: number; shrink: number; fil?: boolean; text: string; style?: string }
+  | { type: `glue`; width: number; stretch: number; shrink: number; fil?: boolean; text: string; style?: string; strike?: boolean }
   // Endroit de coupure possible. `width` est la largeur ajoutee a la ligne si l'on coupe ici (le tiret d'une cesure).
   // `flagged` marque une coupure sur un tiret (pour les demerites de cesures consecutives). `hyphen` marque une cesure
   // automatique, ignoree par la premiere passe.
