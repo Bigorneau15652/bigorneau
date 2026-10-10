@@ -7,11 +7,16 @@ import { markPageZones, PageZone, zoneFromSentinel } from "../page-zone";
 import { markParagraphMarkers, ParagraphFormat, splitParagraphSentinel } from "../paragraph-format";
 import { markTableMarkers, styleFromSentinel, TABLE_MARKER_SENTINEL, TableStyle } from "../table-marker";
 import { MmNode, parseNote, splitLines } from "../model";
+import { splitCells } from "../table-edit";
 
 export interface DocListItem {
   text: string;
   // Profondeur d'imbrication : 0 pour le premier niveau.
   depth: number;
+  // Genre de l'element quand il differe de celui de la liste (une puce sous une etape numerotee, ou l'inverse).
+  kind?: `ordered` | `bullet`;
+  // Numero ecrit du premier element numerote d'un niveau, quand ce n'est pas 1 (« 3. »).
+  start?: number;
 }
 
 // Alignement d'une colonne de tableau, d'apres la ligne de separation (:--- gauche, :---: centre, ---: droite).
@@ -235,11 +240,10 @@ export function splitFootnoteDefinitions(text: string): { text: string; defs: Re
   return { text: out.join(`\n`), defs };
 }
 
+// Cellules d'une ligne de tableau. Une barre protegee par une barre oblique inverse (\|, comme Obsidian l ecrit dans [[note\|alias]]) ne
+// coupe pas la cellule ; son texte garde la barre seule.
 function splitRow(line: string): string[] {
-  let s = line.trim();
-  if (s.startsWith(`|`)) s = s.slice(1);
-  if (s.endsWith(`|`)) s = s.slice(0, -1);
-  return s.split(`|`).map((c) => c.trim());
+  return splitCells(line).map((c) => c.replace(/\\\|/g, `|`));
 }
 
 function indentWidth(s: string): number {
@@ -417,13 +421,34 @@ export function parseBlocks(text: string): DocBlock[] {
       const first = LIST_RE.exec(line)!;
       const items: DocListItem[] = [];
       const indents: number[] = [];
-      while (i < lines.length && lines[i].trim() !== ``) {
+      const topOrdered = /^\d/.test(first[2]);
+      // Pour chaque niveau : le numero du premier element numerote est-il deja pris en compte ?
+      const started: boolean[] = [];
+      while (i < lines.length) {
+        if (lines[i].trim() === ``) {
+          // Une ligne vide ne coupe pas la liste quand l'element suivant la poursuit : un sous-element, ou un element du meme genre.
+          let j = i;
+          while (j < lines.length && lines[j].trim() === ``) j++;
+          const next = j < lines.length && !RULE_RE.test(lines[j]) ? LIST_RE.exec(lines[j]) : null;
+          if (next && (indentWidth(next[1]) > indents[0] || (indentWidth(next[1]) === indents[0] && /^\d/.test(next[2]) === topOrdered))) {
+            i = j;
+            continue;
+          }
+          break;
+        }
         const m = LIST_RE.exec(lines[i]);
         if (m && !RULE_RE.test(lines[i])) {
           const w = indentWidth(m[1]);
           while (indents.length > 0 && indents[indents.length - 1] > w) indents.pop();
           if (indents.length === 0 || indents[indents.length - 1] < w) indents.push(w);
-          items.push({ text: m[3].trim(), depth: indents.length - 1 });
+          const depth = indents.length - 1;
+          const ordered = /^\d/.test(m[2]);
+          started.length = depth + 1;
+          const item: DocListItem = { text: m[3].trim(), depth };
+          if (ordered !== topOrdered) item.kind = ordered ? `ordered` : `bullet`;
+          if (ordered && !started[depth] && parseInt(m[2], 10) !== 1) item.start = parseInt(m[2], 10);
+          started[depth] = ordered;
+          items.push(item);
         } else if (/^[ \t]/.test(lines[i]) && items.length > 0) {
           // Suite d'un element de liste sur la ligne suivante.
           items[items.length - 1].text += ` ` + lines[i].trim();

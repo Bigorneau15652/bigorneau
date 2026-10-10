@@ -89,6 +89,41 @@ function replaceAfter(text: string, open: string, re: RegExp, okBefore: (prev: s
   return out + text.slice(last);
 }
 
+// Chiffres et signes qui ont une forme en indice ou en exposant dans la police embarquee.
+const SUB_CHARS: Record<string, string> = { "0": `₀`, "1": `₁`, "2": `₂`, "3": `₃`, "4": `₄`, "5": `₅`, "6": `₆`, "7": `₇`, "8": `₈`, "9": `₉`, "+": `₊`, "-": `₋`, "=": `₌`, "(": `₍`, ")": `₎` };
+const SUP_CHARS: Record<string, string> = { "0": `⁰`, "1": `¹`, "2": `²`, "3": `³`, "4": `⁴`, "5": `⁵`, "6": `⁶`, "7": `⁷`, "8": `⁸`, "9": `⁹`, "+": `⁺`, "-": `⁻`, "=": `⁼`, "(": `⁽`, ")": `⁾`, n: `ⁿ`, i: `ⁱ` };
+
+// Indice ou exposant : le texte est ecrit avec les signes en indice ou en exposant quand ils existent tous, sinon il reste du texte simple.
+function scripted(text: string, table: Record<string, string>): string {
+  const chars = Array.from(text);
+  return chars.every((c) => table[c] !== undefined) ? chars.map((c) => table[c]).join(``) : text;
+}
+
+const NAMED_ENTITIES: Record<string, string> = { nbsp: `\u00A0`, amp: `&`, lt: `<`, gt: `>`, quot: `"`, apos: `'`, ndash: `–`, mdash: `—`, hellip: `…`, times: `×`, deg: `°`, laquo: `«`, raquo: `»`, shy: `` };
+
+// Balises HTML simples et entites que Obsidian affiche : <br> devient une espace, <sub> et <sup> deviennent des indices et des
+// exposants, <b> <strong> <i> <em> <s> <del> mettent en forme, les autres balises simples (<u>, <span>, <mark>...) sont retirees en
+// gardant leur texte. Les entites courantes (&nbsp; &amp; ...) sont decodees, sans jamais produire un repere interne.
+export function normalizeHtml(text: string): string {
+  if (!text.includes(`<`) && !text.includes(`&`)) return text;
+  let s = text;
+  s = s.replace(/<br\s*\/?>/gi, ` `);
+  s = s.replace(/<sub>([^<]*)<\/sub>/gi, (_m, t: string) => scripted(t, SUB_CHARS));
+  s = s.replace(/<sup>([^<]*)<\/sup>/gi, (_m, t: string) => scripted(t, SUP_CHARS));
+  s = s.replace(/<(\/?)(b|strong)>/gi, (_m, close: string) => (close ? BOLD_OFF : BOLD_ON));
+  s = s.replace(/<(\/?)(i|em)>/gi, (_m, close: string) => (close ? ITALIC_OFF : ITALIC_ON));
+  s = s.replace(/<(\/?)(s|del)>/gi, (_m, close: string) => (close ? STRIKE_OFF : STRIKE_ON));
+  s = s.replace(/<\/?(?:u|sub|sup|mark|small|big|span|kbd|ins|abbr|cite|q|font|center)(?:\s[^<>]*)?>/gi, ``);
+  s = s.replace(/&(?:#(\d{1,7})|#x([0-9a-f]{1,6})|([a-z]+));/gi, (m: string, dec: string | undefined, hex: string | undefined, name: string | undefined) => {
+    if (name !== undefined) return NAMED_ENTITIES[name.toLowerCase()] ?? m;
+    const cp = dec !== undefined ? Number(dec) : parseInt(hex as string, 16);
+    // Control characters, surrogates and the private-use area (where the markers live) are never produced.
+    if (cp < 32 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xf8ff)) return m;
+    return String.fromCodePoint(cp);
+  });
+  return s;
+}
+
 const NOT_WORD = (prev: string): boolean => prev === `` || !/[\p{L}\d]/u.test(prev);
 const NOT_WORD_OR_UNDERSCORE = (prev: string): boolean => prev === `` || !/[\p{L}\d_]/u.test(prev);
 
@@ -142,6 +177,13 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
     }
     s = out + s.slice(last);
   }
+  // Balises HTML simples, entites, et signes de ponctuation proteges par une barre oblique inverse (\\* \\_ \\# ...) : ces derniers sont
+  // mis a l'abri comme du texte, pour que l'emphase et les liens ne les lisent pas.
+  s = normalizeHtml(s);
+  s = s.replace(/\\([\\`*_{}[\]()#+\-.!|~<>$%&"'=])/g, (_m, ch: string) => {
+    codes.push(ch);
+    return `${CODE_ON}${codes.length - 1}${CODE_OFF}`;
+  });
   // Images integrees ![[fichier]] et ![texte](adresse).
   // An embedded file inside a sentence, a list or a table cannot be drawn: it is dropped and reported.
   s = s.replace(/!\[\[([^\]]*)\]\]/g, (_m, target: string) => {

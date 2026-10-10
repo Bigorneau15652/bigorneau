@@ -676,13 +676,15 @@ class Typesetter {
         break;
       }
       case `list`: {
-        const counters: number[] = [];
+        const counters: (number | undefined)[] = [];
         for (const item of b.items) {
+          const ordered = item.kind ? item.kind === `ordered` : b.ordered;
           counters.length = item.depth + 1;
-          counters[item.depth] = (counters[item.depth] ?? 0) + 1;
+          // A numbered item continues the count of its level (or starts it at the number written); a bullet restarts the count.
+          counters[item.depth] = ordered ? (counters[item.depth] === undefined ? (item.start ?? 1) : (counters[item.depth] as number) + 1) : undefined;
           const x = 6 + item.depth * 18;
           // Liste a puces : le symbole depend du niveau (reglage de l'export) ; liste numerotee : le numero.
-          const mark = b.ordered ? { glyph: `${counters[item.depth]}.` } : bulletMark(bulletAt(this.style.bullets ?? DEFAULT_BULLETS, item.depth));
+          const mark = ordered ? { glyph: `${counters[item.depth]}.` } : bulletMark(bulletAt(this.style.bullets ?? DEFAULT_BULLETS, item.depth));
           const marker = mark && `glyph` in mark ? mark.glyph : undefined;
           const bullet = mark && `shape` in mark ? mark.shape : undefined;
           this.paragraph(item.text, `list`, x + 16, this.textWidth - x - 16, { indent: 0, justify: false, hyphenate: true, fontSize: size, ...(marker !== undefined ? { marker } : {}), ...(bullet ? { bullet } : {}) });
