@@ -75,10 +75,14 @@ export default class MindmapWritingPlugin extends Plugin {
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
 
+  // Faux tant que les reglages enregistres n'ont pas ete lus : rien n'est ecrit avant, pour ne pas remplacer le fichier par les valeurs par defaut.
+  private settingsLoaded = false;
+
   async onload() {
     const started = performance.now();
     const stored: unknown = await this.loadData();
     this.settings = migrateSettings(stored);
+    this.settingsLoaded = true;
     setLanguage(this.settings.language);
     this.scripts.bindState({ enabled: this.settings.scriptsEnabled });
     this.fixed = this.settings.fixedViews.map((entry) => ({ entry: { ...entry }, leaf: null }));
@@ -199,18 +203,22 @@ export default class MindmapWritingPlugin extends Plugin {
       const timer = window.setTimeout(() => void this.fonts.refresh(), FONT_LOAD_DELAY);
       this.register(() => window.clearTimeout(timer));
     });
-    const refreshFonts = debounce(() => void this.fonts.refresh(), 600, true);
-    const fontFileChanged = (file: { path: string }): void => {
-      if (this.fonts.isFontPath(file.path)) refreshFonts();
-    };
-    this.registerEvent(this.app.vault.on(`create`, fontFileChanged));
-    this.registerEvent(this.app.vault.on(`modify`, fontFileChanged));
-    this.registerEvent(this.app.vault.on(`delete`, fontFileChanged));
-    this.registerEvent(
-      this.app.vault.on(`rename`, (file, oldPath) => {
-        if (this.fonts.isFontPath(file.path) || this.fonts.isFontPath(oldPath)) refreshFonts();
-      })
-    );
+    // Les evenements du coffre sont suivis apres l'ouverture de l'espace de travail : au demarrage, Obsidian signale la creation de
+    // chaque fichier du coffre, et le plugin n'a pas a les examiner un par un.
+    this.app.workspace.onLayoutReady(() => {
+      const refreshFonts = debounce(() => void this.fonts.refresh(), 600, true);
+      const fontFileChanged = (file: { path: string }): void => {
+        if (this.fonts.isFontPath(file.path)) refreshFonts();
+      };
+      this.registerEvent(this.app.vault.on(`create`, fontFileChanged));
+      this.registerEvent(this.app.vault.on(`modify`, fontFileChanged));
+      this.registerEvent(this.app.vault.on(`delete`, fontFileChanged));
+      this.registerEvent(
+        this.app.vault.on(`rename`, (file, oldPath) => {
+          if (this.fonts.isFontPath(file.path) || this.fonts.isFontPath(oldPath)) refreshFonts();
+        })
+      );
+    });
     this.register(this.fonts.onChange(() => this.refreshExportPreviews()));
     // Obsidian signale souvent plusieurs changements de volets de suite : un seul recalcul du panneau.
     const syncPanelSoon = debounce(() => this.panel.sync(), 60, true);
@@ -493,7 +501,7 @@ export default class MindmapWritingPlugin extends Plugin {
   }
 
   onunload() {
-    void this.saveData(this.settings);
+    if (this.settingsLoaded) void this.saveData(this.settings);
     this.fonts.destroy();
     this.forEachView((v) => v.clearActive());
     for (const cm of this.editorViews) if (this.fixedFor(cm)) clearFixedState(cm);
@@ -936,7 +944,27 @@ export default class MindmapWritingPlugin extends Plugin {
     await this.saveSettings(false);
   }
 
-  private persistLater = debounce(() => void this.saveData(this.settings), 400, true);
+  private persistLater = debounce(() => {
+    if (this.settingsLoaded) void this.saveData(this.settings);
+  }, 400, true);
+
+  // Le fichier des reglages a ete modifie par un autre appareil (synchronisation) : il est relu. Ce qui depend de l'appareil
+  // (notes fixes ouvertes, chapitres ouverts, dossiers crees, modules actifs) reste tel qu'ici.
+  async onExternalSettingsChange(): Promise<void> {
+    if (!this.settingsLoaded) return;
+    const local = this.settings;
+    const next = migrateSettings(await this.loadData());
+    next.fixedViews = local.fixedViews;
+    next.openChapters = local.openChapters;
+    next.foldersCreated = local.foldersCreated;
+    next.scriptsEnabled = local.scriptsEnabled;
+    this.settings = next;
+    setLanguage(this.settings.language);
+    this.applyBodySettings();
+    this.panel.sync();
+    this.forEachView((v) => v.redraw());
+    this.refreshExportPreviewsSoon();
+  }
 
   // Polices et titres : style general, polices du coffre et dossier des polices (fenetre « Polices et titres » et reglages).
   typographyHost(): Omit<TypographyHost, `note`> {

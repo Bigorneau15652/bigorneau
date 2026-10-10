@@ -1,6 +1,6 @@
 // Profils : copie nommee des reglages du plugin (apparence de la carte, options et mise en forme de l'export, polices et titres, puces,
 // panneau de boutons...), gardee dans un fichier du coffre. Ce module ne depend pas d'Obsidian.
-import { migrateSettings, MmSettings } from "./settings";
+import { migrateSettings, MmSettings, sanitizeTags, TagDef } from "./settings";
 
 export const PROFILE_KIND = `bigorneau-profile`;
 export const PROFILE_VERSION = 1;
@@ -77,6 +77,13 @@ export function parseProfile(text: string): Profile | null {
   };
 }
 
+// Etiquettes apres le chargement d'un profil : celles du profil (son nom et ses couleurs l'emportent pour un meme identifiant),
+// puis celles de la carte qui n'y figurent pas, pour que les notes gardent leurs etiquettes.
+export function mergeTags(current: TagDef[], fromProfile: TagDef[]): TagDef[] {
+  const known = new Set(fromProfile.map((t) => t.id));
+  return sanitizeTags([...fromProfile, ...current.filter((t) => !known.has(t.id))]);
+}
+
 // Reglages obtenus en chargeant le profil : ceux du profil, verifies comme au demarrage du plugin, sauf ce qu'un profil ne contient pas.
 export function applyProfile(current: MmSettings, profile: Profile): MmSettings {
   const base = JSON.parse(JSON.stringify(current)) as MmSettings;
@@ -85,5 +92,6 @@ export function applyProfile(current: MmSettings, profile: Profile): MmSettings 
   const target = merged as unknown as Record<string, unknown>;
   for (const key of PROFILE_EXCLUDED) target[key] = keep[key];
   merged.settingsVersion = base.settingsVersion;
+  if (profile.settings.tags !== undefined) merged.tags = mergeTags(base.tags, merged.tags);
   return merged;
 }
