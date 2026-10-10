@@ -990,7 +990,7 @@ export class MindmapView extends ItemView {
     this.doc = doc;
     this.selectedKey = key;
     this.noteCursors.set(key, { line: line0, ch: head - line.from });
-    renderer.setDoc(doc, this.mapKey, serializeNote(doc) === text);
+    renderer.setDoc(doc, this.mapKey, serializeNote(doc) === text, text);
     renderer.reveal(key);
     // A group of selected titles survives the cursor moving to one of them.
     const group = renderer.getSelection();
