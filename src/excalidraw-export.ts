@@ -20,7 +20,9 @@ export async function excalidrawSvg(app: App, file: TFile): Promise<string | nul
   if (!ea || typeof ea.createSVG !== `function`) return null;
   try {
     ea.reset?.();
-    const svg = await ea.createSVG(file.path, true, { withBackground: true, withTheme: false }, undefined, `light`);
+    // Excalidraw may never answer: after 10 seconds the drawing is treated as absent instead of blocking the preview and the export.
+    const wait = new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 10000));
+    const svg = await Promise.race([ea.createSVG(file.path, true, { withBackground: true, withTheme: false }, undefined, `light`), wait]);
     return svg ? new XMLSerializer().serializeToString(svg) : null;
   } catch {
     return null;

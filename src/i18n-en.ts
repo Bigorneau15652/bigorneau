@@ -828,6 +828,7 @@ const PAIRS: [string, string][] = [
   [`Fichiers déjà présents et identiques : {0}`, `Files already present and identical: {0}`],
   [`Fichiers refusés (trop volumineux, illisibles ou copie impossible) : {0}`, `Files refused (too large, unreadable or copy failed): {0}`],
   [`nom en double`, `duplicate name`],
+  [`L'aperçu n'a pas pu être composé : {0}. Le détail est dans le diagnostic (bouton bigorneau du panneau, Modules et boutons).`, `The preview could not be composed: {0}. The details are in the diagnostic (bigorneau button of the panel, Modules and buttons).`],
   [`Image du presse-papiers`, `Clipboard image`],
   [`Une capture d'écran ou une image copiée est enregistrée dans le dossier des pièces jointes d'Obsidian, puis insérée.`, `A screenshot or a copied image is saved in the attachments folder of Obsidian, then inserted.`],
   [`Coller l'image`, `Paste the image`],
