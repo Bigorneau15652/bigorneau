@@ -58,3 +58,11 @@ test(`les graisses autres que normal et gras forment leurs propres familles`, ()
   const byName = Object.fromEntries(lib.families.map((f) => [f.name, variantsOf(f)]));
   assert.deepEqual(byName, { Lato: [`regular`, `italic`, `bold`, `boldItalic`], "Lato Black": [`regular`], "Lato Light": [`regular`, `italic`], "Lato Thin": [`regular`] });
 });
+
+test(`un sous-nom qui repete le nom de la famille ne double pas le nom`, () => {
+  const fake = (family: string, subfamily: string) => ({ family, subfamily, isBold: false, isItalic: false, embeddingRestricted: false, isVariable: false });
+  const table: Record<string, ReturnType<typeof fake>> = { "a/1942.ttf": fake(`1942 report`, `1942 report`), "a/Open.ttf": fake(`Open Sans`, `Semibold`) };
+  const files = Object.keys(table).map((path) => ({ path, bytes: new TextEncoder().encode(path) }));
+  const lib = buildLibrary(files, (bytes) => table[new TextDecoder().decode(bytes)] as never);
+  assert.deepEqual(lib.families.map((f) => f.name), [`1942 report`, `Open Sans Semibold`]);
+});
