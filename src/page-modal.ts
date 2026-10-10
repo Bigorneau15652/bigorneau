@@ -4,7 +4,7 @@
 import { App, ColorComponent, Modal, Setting, TextComponent } from "obsidian";
 import { imageFile, ImagePicker } from "./image-picker";
 import { t } from "./i18n";
-import { Band, defaultConfig, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
+import { Band, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
 
 export type PageTab = `header` | `footer` | `edge`;
 
@@ -83,10 +83,11 @@ export class PageModal extends Modal {
     this.renderBand(contentEl, this.tab);
     new Setting(contentEl).addButton((b) =>
       b
-        .setButtonText(t(`Réinitialiser tous les réglages de page`))
+        .setButtonText(t(`Réinitialiser cet onglet`))
         .setWarning()
         .onClick(() => {
-          this.config = defaultConfig();
+          // Only the band shown is emptied: the sheet format, the columns, the paragraphs and the fonts of the note are kept.
+          this.config[this.tab] = defaultBand();
           this.save();
           this.render();
         })

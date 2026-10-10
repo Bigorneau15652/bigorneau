@@ -11,6 +11,7 @@ export interface ReportOptions {
 export function warningLines(warnings: string[], opts: ReportOptions = { formulasEnabled: true }): string[] {
   const out: string[] = [];
   let formulas = false;
+  let strike = false;
   for (const w of warnings) {
     if (w.startsWith(`note:`)) out.push(t(`Note de bas de page sans définition : {0}`, w.slice(5)));
     else if (w.startsWith(`image:`)) {
@@ -24,7 +25,12 @@ export function warningLines(warnings: string[], opts: ReportOptions = { formula
       if (opts.formulasEnabled) out.push(t(`Formule non dessinée, son texte est gardé tel quel : {0}`, w.slice(8)));
       else formulas = true;
     } else if (w.startsWith(`media:`)) out.push(t(`Média remplacé par un cadre avec son adresse : {0}`, w.slice(6)));
+    else if (w.startsWith(`inlineimage:`)) out.push(t(`Image ou fichier intégré non imprimé : il n'est pas seul sur sa ligne (phrase, liste ou tableau) : {0}`, w.slice(12)));
+    else if (w.startsWith(`embed:`)) out.push(t(`Note intégrée non reprise, remplacée par un repère : {0}`, w.slice(6)));
+    else if (w.startsWith(`block:`)) out.push(t(`Bloc {0} imprimé comme texte source : Bigorneau n'exécute pas les requêtes ni les diagrammes.`, w.slice(6)));
+    else if (w === `strike`) strike = true;
   }
   if (formulas) out.push(t(`Le script Formules est désactivé : les formules restent écrites telles quelles. Activez-le avec le bouton bigorneau du panneau.`));
+  if (strike) out.push(t(`Texte barré imprimé sans barre : « 120 barré 90 » se lirait comme deux valeurs.`));
   return out;
 }

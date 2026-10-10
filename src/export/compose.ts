@@ -1,6 +1,6 @@
 // Export de haute qualite : de la note au fichier PDF, sans rien qui depende d'Obsidian (se teste avec node --test).
 import { layoutDecor } from "./page-decor";
-import { findPageConfig } from "../page-config";
+import { anyDecor, findPageConfig } from "../page-config";
 import { defaultParagraphSettings, effectiveParagraphs } from "../paragraph-format";
 import { applyOverrides, defaultTypography } from "../text-style";
 import { buildExportDoc } from "./doc-tree";
@@ -143,8 +143,9 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
     known = found;
     ({ typeset, pages } = build((a: string) => found.get(a)));
   }
-  // En-tete, pied de page et numero d'apres les reglages ecrits dans la note : ils remplacent ceux d'origine.
-  if (found) {
+  // En-tete, pied de page et numero d'apres les reglages ecrits dans la note : ils remplacent ceux d'origine, mais seulement quand la
+  // note definit au moins une bande. Une note qui n'a qu'un reglage de page (paysage, colonnes...) garde l'en-tete et le numero generaux.
+  if (found && anyDecor(found.config)) {
     const english = languageOf(doc.language) === `en`;
     const format = new Intl.DateTimeFormat(english ? `en-GB` : `fr-FR`, { dateStyle: `long` });
     const date = assets.date ?? format.format(new Date());

@@ -140,7 +140,12 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
     s = out + s.slice(last);
   }
   // Images integrees ![[fichier]] et ![texte](adresse).
-  s = s.replace(/!\[\[[^\]]*\]\]/g, ``).replace(/!\[([^\]]*)\]\([^)]*\)/g, `$1`);
+  // An embedded file inside a sentence, a list or a table cannot be drawn: it is dropped and reported.
+  s = s.replace(/!\[\[([^\]]*)\]\]/g, (_m, target: string) => {
+    ctx?.warn?.(`inlineimage:${target.split(`|`)[0].trim()}`);
+    return ``;
+  });
+  s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, `$1`);
   // Liens internes : renvois a un titre ou a un bloc de la note (cliquables), sinon le texte seul (alias, titre vise ou nom
   // de la note).
   s = s.replace(/\[\[([^\]|#]*)(?:#([^\]|]*))?(?:\|([^\]]*))?\]\]/g, (_m, file: string, heading: string | undefined, alias: string | undefined) => {
@@ -179,6 +184,8 @@ export function parseInline(source: string, ctx?: InlineContext): InlineText {
     links.push(clean);
     return `${LINK_ON}${links.length - 1}${LINK_NUM_END}${clean}${LINK_OFF}${tail}`;
   });
+  // The strikethrough bar is not drawn: the text stays, without its bar.
+  if (/~~(\S(?:.*?\S)??)~~/.test(s)) ctx?.warn?.(`strike`);
   s = emphasize(s);
   s = s.replace(new RegExp(`${CODE_ON}(\\d+)${CODE_OFF}`, `g`), (_m, i: string) => codes[Number(i)]);
   return { text: s, links, ...(maths.length > 0 ? { maths } : {}) };

@@ -587,10 +587,11 @@ export class MapRenderer {
     }
 
     const stats = computeStats(this.doc);
+    const opening = this.doc.opening?.[0];
     this.statusEl.textContent = `${stats.nodeCount > 1 ? t(`{0} nœuds`, stats.nodeCount) : t(`{0} nœud`, stats.nodeCount)}. ${
       this.identical ? t(`Reconstruction de la note identique au fichier.`) : t(`ATTENTION : reconstruction différente du fichier, ne rien modifier.`)
-    }`;
-    this.statusEl.classList.toggle(`mmw-ko`, !this.identical);
+    }${opening !== undefined ? ` ${t(`ATTENTION : le titre « {0} » ouvre un commentaire ou une formule (%%, <!-- ou double signe dollar) qui masque les titres suivants.`, opening)}` : ``}`;
+    this.statusEl.classList.toggle(`mmw-ko`, !this.identical || opening !== undefined);
 
     this.controls.refresh();
     if (this.fitPending) this.fit();

@@ -696,6 +696,8 @@ class Typesetter {
         this.space(lead * 0.5);
         break;
       case `code`:
+        // Blocks written for a plugin (query, diagram) are printed as their source: the report says so.
+        if (/^(dataview|dataviewjs|mermaid|tasks|query)$/i.test(b.lang.trim())) this.warnings.push(`block:${b.lang.trim().toLowerCase()}`);
         this.codeRows(b.text.split(`\n`));
         break;
       case `table`:
@@ -854,6 +856,7 @@ class Typesetter {
           this.warnings.push(`image:${b.target}`);
         } else {
           text = `[Figure : ${caption || b.target}]`;
+          this.warnings.push(`embed:${b.target}`);
         }
         this.push({ kind: `figure`, text, x: 0, width: this.textWidth, fontSize: size, height: lead * 1.5, wordSpacing: 0, align: `center`, runs: [{ text, style: `regular` }], breakAfter: label ? INF_PENALTY : 0 });
       }

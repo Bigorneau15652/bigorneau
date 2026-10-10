@@ -36,6 +36,8 @@ export interface MmDoc {
   floats: MmNode[];
   floatStart?: number;
   floatRaw: string;
+  // Titles of the headings that open a comment (%%, <!--) or a formula ($$) left open: the headings that follow are hidden (as in Obsidian).
+  opening?: string[];
 }
 
 export interface MmStats {
@@ -120,7 +122,9 @@ function scanInline(s: string, st: InlineState): void {
 }
 
 // Repere les lignes qui sont de vrais titres : hors blocs de code, commentaires et formules.
-function findHeadings(lines: string[]): (RegExpExecArray | null)[] {
+// When `opening` is given, the title of every heading whose line opens a comment or a formula that stays open (and so hides the lines
+// that follow, headings included) is added to it.
+function findHeadings(lines: string[], opening?: string[]): (RegExpExecArray | null)[] {
   const result: (RegExpExecArray | null)[] = [];
   let fence: Fence | null = null;
   const st: InlineState = { percent: false, html: false, math: false };
@@ -143,8 +147,10 @@ function findHeadings(lines: string[]): (RegExpExecArray | null)[] {
       result.push(null);
       continue;
     }
-    result.push(HEADING_RE.exec(s));
+    const heading = HEADING_RE.exec(s);
+    result.push(heading);
     scanInline(s, st);
+    if (heading && opening && (st.percent || st.html || st.math)) opening.push((heading[2] ?? ``).trim());
   }
   return result;
 }
@@ -241,7 +247,8 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
   const floats = floatStart === undefined ? [] : parseFloats(allLinesFull, markers);
   const frontmatter = allLines.slice(0, fmCount).join(``);
   const lines = allLines.slice(fmCount);
-  const matches = findHeadings(lines);
+  const opening: string[] = [];
+  const matches = findHeadings(lines, opening);
 
   const headingIdx: number[] = [];
   matches.forEach((m, i) => {
@@ -286,7 +293,7 @@ export function parseNote(text: string, fileName: string, opts: ParseOptions = {
     stack.push(node);
   }
 
-  return { frontmatter, root, eol, floats, floatRaw, ...(floatStart !== undefined ? { floatStart } : {}) };
+  return { frontmatter, root, eol, floats, floatRaw, ...(floatStart !== undefined ? { floatStart } : {}), ...(opening.length > 0 ? { opening } : {}) };
 }
 
 function pushPiece(out: string[], piece: string, eol: string): void {

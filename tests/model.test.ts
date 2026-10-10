@@ -287,3 +287,14 @@ test(`chapitre actif : la racine se limite a son introduction`, () => {
   assert.deepEqual(activeLines(withTitle, `r`, true), { startLine: 0, endLine: 4 });
   assert.equal(nodeAtLine(withTitle, 1).key, `r`);
 });
+
+test(`un titre qui ouvre un commentaire ou une formule est signale`, () => {
+  const open = parseNote([`## A`, `## test %% test`, `## B`, `texte %%`, `## C`].join(`\n`), `n.md`);
+  assert.deepEqual(open.opening, [`test %% test`]);
+  // « ## B » is inside the comment, which ends at the next %%: it is not a heading.
+  assert.deepEqual(open.root.children.map((c) => c.title), [`A`, `test %% test`, `C`]);
+  assert.deepEqual(parseNote([`## a $$ b`, `## c`].join(`\n`), `n.md`).opening, [`a $$ b`]);
+  assert.deepEqual(parseNote([`## a <!-- b`, `## c`].join(`\n`), `n.md`).opening, [`a <!-- b`]);
+  // Comment closed on the line, or comment in the body: no warning.
+  assert.equal(parseNote([`## a %% b %%`, `## c`, `texte %% x`, `## d`, `y %%`].join(`\n`), `n.md`).opening, undefined);
+});
