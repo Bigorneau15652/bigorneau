@@ -102,3 +102,21 @@ test(`un caractere d'usage prive tape dans une note ne fabrique pas de repere`, 
   assert.deepEqual(r.links, []);
   assert.equal(parseInline(`ab`).text, `ab`);
 });
+
+test(`les balises HTML simples et les entites sont traitees`, () => {
+  const plain = (s: string): string => plainOf(parseInline(s).text);
+  assert.equal(plain(`ligne<br>suite et<br/>fin`), `ligne suite et fin`);
+  assert.equal(plain(`CO<sub>2</sub> et m<sup>3</sup> et x<sup>-1</sup>`), `CO₂ et m³ et x⁻¹`);
+  assert.equal(plain(`H<sub>abc</sub>`), `Habc`);
+  assert.equal(plain(`<u>souligne</u> <span class="x">texte</span> <mark>marque</mark>`), `souligne texte marque`);
+  assert.equal(plain(`a&nbsp;b &amp; c &lt;d&gt; &#176; &#x20AC;`), `a\u00A0b & c <d> ° €`);
+  assert.equal(plain(`&#xE014; &#1; &unknown;`), `&#xE014; &#1; &unknown;`);
+  assert.equal(parseInline(`<b>gras</b> <i>ital</i> <s>barre</s>`).text.includes(BOLD_ON), true);
+});
+
+test(`une ponctuation protegee par une barre oblique inverse reste du texte`, () => {
+  const plain = (s: string): string => plainOf(parseInline(s).text);
+  assert.equal(plain(String.raw`\*pas italique\* et \_ici\_ \# \[x\] 5\.`), `*pas italique* et _ici_ # [x] 5.`);
+  assert.equal(plain(String.raw`chemin C:\Users\x et \\ double`), String.raw`chemin C:\Users\x et \ double`);
+  assert.equal(parseInline(String.raw`\*texte\*`).text.includes(ITALIC_ON), false);
+});

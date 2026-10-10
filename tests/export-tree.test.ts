@@ -230,3 +230,43 @@ test(`les commentaires d'un titre ne sortent pas dans l'export`, () => {
   const doc = buildExportDoc([`# Rapport`, `## Partie %% a revoir %% une <!-- prix: 40 000 --> fin`, `texte`].join(`\n`), `Rapport.md`);
   assert.equal(doc.sections[0].sections[0].title, `Partie  une  fin`);
 });
+
+test(`une barre protegee dans une cellule de tableau ne coupe pas la cellule`, () => {
+  const blocks = parseBlocks([`| Note | Valeur |`, `| --- | --- |`, "| [[Dossier/Note\\|alias]] | 12 |", `| a \\| b | 3 |`].join(`\n`));
+  const table = blocks.find((b) => b.type === `table`);
+  assert.ok(table && table.type === `table`);
+  assert.deepEqual(table.rows, [[`Note`, `Valeur`], [`[[Dossier/Note|alias]]`, `12`], [`a | b`, `3`]]);
+});
+
+test(`une ligne vide entre deux etapes numerotees ne relance pas la numerotation`, () => {
+  const blocks = parseBlocks([`1. premiere`, ``, `2. deuxieme`, ``, `3. troisieme`].join(`\n`));
+  assert.equal(blocks.length, 1);
+  const list = blocks[0];
+  assert.ok(list.type === `list` && list.ordered);
+  assert.deepEqual(list.items.map((i) => i.text), [`premiere`, `deuxieme`, `troisieme`]);
+});
+
+test(`des puces sous une etape numerotee sont des puces, et le numero de depart est garde`, () => {
+  const blocks = parseBlocks([`3. etape trois`, `   - detail`, `   - autre detail`, `4. etape quatre`].join(`\n`));
+  assert.equal(blocks.length, 1);
+  const list = blocks[0];
+  assert.ok(list.type === `list`);
+  assert.deepEqual(list.items, [
+    { text: `etape trois`, depth: 0, start: 3 },
+    { text: `detail`, depth: 1, kind: `bullet` },
+    { text: `autre detail`, depth: 1, kind: `bullet` },
+    { text: `etape quatre`, depth: 0 },
+  ]);
+});
+
+test(`une ligne vide entre deux listes de genres differents les separe`, () => {
+  const blocks = parseBlocks([`1. un`, ``, `- puce`].join(`\n`));
+  assert.equal(blocks.filter((b) => b.type === `list`).length, 2);
+});
+
+test(`les numeros et les puces d'une liste melangee sont imprimes comme ecrits`, async () => {
+  const { composeNote } = await import(`../src/export/compose`);
+  const c = composeNote([`# A`, ``, `3. trois`, `   - detail`, `4. quatre`, ``, `5. cinq`].join(`\n`), `N.md`);
+  const markers = c.pages.flatMap((p) => p.rows).map((r) => r.marker).filter((m) => m !== undefined);
+  assert.deepEqual(markers.filter((m) => /^\d/.test(m as string)), [`3.`, `4.`, `5.`]);
+});
