@@ -159,6 +159,7 @@ export class MapRenderer {
 
   private doc: MmDoc | null = null;
   private identical = true;
+  private lastText: string | undefined;
   private fileKey = ``;
   private collapsed = new Set<string>();
   // Noeud principal selectionne (celui que la note suit) et ensemble des noeuds selectionnes.
@@ -346,9 +347,14 @@ export class MapRenderer {
     this.cleanups.push(() => target.removeEventListener(type, fn, opts));
   }
 
-  setDoc(doc: MmDoc | null, fileKey: string, identical: boolean): void {
+  // text : texte de la note d'ou vient `doc`, donne seulement quand le curseur de la note change de ligne. S'il est identique au
+  // precedent, la carte n'est pas reconstruite. Tout autre appel (sans texte) reconstruit toujours la carte.
+  setDoc(doc: MmDoc | null, fileKey: string, identical: boolean, text?: string): void {
     // Un glisser en cours ne survit pas a une nouvelle version de la note ; un apercu en attente est abandonne.
     if (this.nodeDrag?.started) this.finishNodeDrag(true);
+    const unchanged = text !== undefined && text === this.lastText && fileKey === this.fileKey && !!doc && !!this.doc && !this.previewDoc && !this.needsRebuild && identical === this.identical;
+    this.lastText = text;
+    if (unchanged) return;
     this.clearPreviewState();
     if (fileKey === this.fileKey && this.doc && doc) this.remapFolds(this.doc, doc);
     if (fileKey !== this.fileKey) {
@@ -528,14 +534,17 @@ export class MapRenderer {
     } else {
       this.listWidth = 0;
     }
+    // Every size is read first, then the boxes are enlarged: alternating reads and writes would force a new layout for each box.
     for (const n of this.list) {
       const el = this.els.get(n.key)!;
       n.w = el.offsetWidth;
       n.h = el.offsetHeight;
-      // Les formes a pointes et l'ovale ont besoin de plus de place que le texte pour qu'il reste dans le contour.
-      if (!list) {
+    }
+    if (!list) {
+      for (const n of this.list) {
+        // Les formes a pointes et l'ovale ont besoin de plus de place que le texte pour qu'il reste dans le contour.
         const st = this.styleOf(n);
-        if (st.showFrames) this.inflate(el, n, st);
+        if (st.showFrames) this.inflate(this.els.get(n.key)!, n, st);
       }
     }
     this.bounds = list ? computeListLayout(this.root, indent, this.listWidth, LIST_ROW_GAP) : computeLayout(this.root, s.compactness);
