@@ -2,7 +2,7 @@
 // Lit la mise en forme du texte (gras, italique, liens), mesure les mots avec la police de chacun, place les points de
 // cesure, applique les conventions typographiques francaises, coupe le paragraphe en lignes (Knuth et Plass) et calcule
 // l'espacement de chaque ligne justifiee d'apres la largeur reelle du texte affiche (ligatures et crenage compris).
-import { FINE_SPACE, FontStyle, measureText, NO_BREAK_SPACE, variantFrom, variantOf, withVariant } from "./font-metrics";
+import { FINE_SPACE, FontStyle, fontsEpoch, measureText, NO_BREAK_SPACE, variantFrom, variantOf, withVariant } from "./font-metrics";
 import { getLanguage, HyphenationLanguage, hyphenPoints, LanguageCode } from "./hyphenate";
 import { BOLD_OFF, BOLD_ON, InlineText, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON, MATH_END, MATH_ON, STRIKE_OFF, STRIKE_ON } from "./inline";
 import type { MathAsset } from "./math";
@@ -321,7 +321,37 @@ function lineRuns(items: Item[], from: number, to: number, base: FontStyle, link
   return runs;
 }
 
+// Composed paragraphs are kept so that a preview refreshed after a small change composes only the paragraphs that changed.
+// The key holds the text and every option that influences the result, and the state of the fonts. The cache is emptied when it
+// grows too large. A paragraph with an inline formula is never kept (its result holds the drawing itself).
+const CACHE_LIMIT = 4000;
+const composed = new Map<string, TypesetParagraph>();
+const objectIds = new WeakMap<object, number>();
+let nextObjectId = 1;
+
+function idOf(value: object | undefined): number {
+  if (!value) return 0;
+  let id = objectIds.get(value);
+  if (id === undefined) {
+    id = nextObjectId++;
+    objectIds.set(value, id);
+  }
+  return id;
+}
+
 export function typesetParagraph(text: string | InlineText, o: ParagraphOptions): TypesetParagraph {
+  const input: InlineText = typeof text === `string` ? { text, links: [] } : text;
+  if (input.maths && input.maths.length > 0) return composeParagraph(input, o);
+  const key = JSON.stringify([input.text, input.links, o.language, o.fontSize, o.lineWidth, o.indent, o.align, o.hyphenate, o.hyphenateLastWord, o.hyphenateCapitalized, o.protrusion, o.style, idOf(o.params), idOf(o.hyphenation), fontsEpoch()]);
+  const hit = composed.get(key);
+  if (hit) return hit;
+  const result = composeParagraph(input, o);
+  if (composed.size >= CACHE_LIMIT) composed.clear();
+  composed.set(key, result);
+  return result;
+}
+
+function composeParagraph(text: string | InlineText, o: ParagraphOptions): TypesetParagraph {
   const input: InlineText = typeof text === `string` ? { text, links: [] } : text;
   const p = o.params ?? DEFAULT_TEX_PARAMS;
   const lang = o.hyphenation ?? getLanguage(o.language);

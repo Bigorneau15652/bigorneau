@@ -50,12 +50,21 @@ const FALLBACK_ORDER: Record<Variant, Variant[]> = {
   boldItalic: [`boldItalic`, `bold`, `italic`, `regular`],
 };
 
+// Counter that changes each time the registered fonts change: results computed with other fonts must not be reused.
+let fontEpoch = 0;
+
+export function fontsEpoch(): number {
+  return fontEpoch;
+}
+
 export function registerFontFamily(id: string, fonts: Partial<Record<Variant, OpenTypeFont>>): void {
   families.set(id, fonts);
+  fontEpoch++;
 }
 
 export function clearFontFamilies(): void {
   families.clear();
+  fontEpoch++;
 }
 
 export const isFamilyRegistered = (id: string): boolean => families.has(id);
