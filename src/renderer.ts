@@ -16,6 +16,10 @@ import { WebDialog, WebDialogOptions } from "./web-dialog";
 import { describeScope, globalStyle, NodeStyle, resolveStyle, shapeChoice, ShapeChoice, shapePatch, StylePatch } from "./style";
 import { record } from "./diagnostics";
 import { setSvg } from "./dom";
+import { rangeBetween, toggled } from "./selection";
+
+// True on a Mac, where Cmd + click toggles a title (Ctrl + click opens the context menu there); elsewhere Ctrl + click toggles.
+const IS_MAC = typeof navigator !== `undefined` && /Mac|iPhone|iPad/.test(navigator.platform || ``);
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
 export interface MapEdit {
@@ -160,6 +164,9 @@ export class MapRenderer {
   // Noeud principal selectionne (celui que la note suit) et ensemble des noeuds selectionnes.
   private selected: string | null = null;
   private selectedKeys = new Set<string>();
+  // Title from which a Shift + click range starts, and title of a group on which a click is pending (see onPointerUp).
+  private anchor: string | null = null;
+  private collapseOnRelease: string | null = null;
   private root: LNode | null = null;
   private floatRoots: LNode[] = [];
   // Cadre de la carte principale (sans les sujets flottants) et, en vue Liste, ordonnee du trait qui ouvre la zone flottante.
@@ -1252,6 +1259,7 @@ export class MapRenderer {
     if (this.selectedLink) this.selectLink(null);
     this.selected = key && this.els.has(key) ? key : null;
     this.selectedKeys = this.selected ? new Set([this.selected]) : new Set();
+    if (this.selected) this.anchor = this.selected;
     if (this.selected) {
       const n = this.list.find((x) => x.key === this.selected);
       if (n) this.ensureVisible(n);
@@ -1262,13 +1270,21 @@ export class MapRenderer {
 
   // Ajoute ou retire un noeud de la selection (Maj + clic).
   private toggleSelect(key: string): void {
-    if (this.selectedKeys.has(key)) {
-      this.selectedKeys.delete(key);
-      if (this.selected === key) this.selected = [...this.selectedKeys][0] ?? null;
-    } else {
-      this.selectedKeys.add(key);
-      this.selected = key;
-    }
+    if (this.selectedLink) this.selectLink(null);
+    this.selectedKeys = new Set(toggled([...this.selectedKeys], key));
+    if (this.selectedKeys.has(key)) this.selected = key;
+    else if (this.selected === key) this.selected = [...this.selectedKeys][this.selectedKeys.size - 1] ?? null;
+    this.anchor = key;
+    this.selectionChanged();
+    this.callbacks.onSelect?.(this.selected);
+  }
+
+  // Selects every displayed title between the anchor (last clicked title) and this one.
+  private selectRange(key: string): void {
+    if (this.selectedLink) this.selectLink(null);
+    const from = this.anchor && this.els.has(this.anchor) ? this.anchor : this.selected ?? key;
+    this.selectedKeys = new Set(rangeBetween(this.list.map((n) => n.key), from, key));
+    this.selected = key;
     this.selectionChanged();
     this.callbacks.onSelect?.(this.selected);
   }
@@ -1484,8 +1500,16 @@ export class MapRenderer {
     const node = target.closest<HTMLElement>(`.mmw-node`);
     if (node) {
       const key = node.dataset.key!;
-      if (e.shiftKey) this.toggleSelect(key);
-      else {
+      const toggleKey = IS_MAC ? e.metaKey : e.ctrlKey;
+      if (toggleKey) {
+        // Cmd (Mac) or Ctrl (PC) + click: adds or removes one title.
+        this.lastDown = null;
+        this.toggleSelect(key);
+      } else if (e.shiftKey) {
+        // Shift + click: every displayed title between the last clicked one and this one.
+        this.lastDown = null;
+        this.selectRange(key);
+      } else {
         {
           const box = node.getBoundingClientRect();
           this.nodeDrag = {
@@ -1511,7 +1535,11 @@ export class MapRenderer {
           this.lastDown = { key, time: now };
           this.dblKey = null;
         }
-        this.select(key);
+        // A click on a title of a group keeps the group (it may be dragged); the group collapses on release if nothing moved.
+        if (this.selectedKeys.size > 1 && this.selectedKeys.has(key)) {
+          this.collapseOnRelease = key;
+          this.anchor = key;
+        } else this.select(key);
       }
       return;
     }
@@ -1600,7 +1628,15 @@ export class MapRenderer {
     if (this.nodeDrag) {
       const { started } = this.nodeDrag;
       this.finishNodeDrag(false);
-      if (started) return;
+      if (started) {
+        this.collapseOnRelease = null;
+        return;
+      }
+    }
+    if (this.collapseOnRelease) {
+      const key = this.collapseOnRelease;
+      this.collapseOnRelease = null;
+      this.select(key);
     }
     if (this.dblKey) {
       // Double clic : ouvre la fenetre du titre, apres le relachement pour que le focus donne par le navigateur ne la ferme pas.
@@ -1733,7 +1769,11 @@ export class MapRenderer {
       const dirs: Record<string, MoveDir> = { ArrowUp: `up`, ArrowDown: `down`, ArrowLeft: `left`, ArrowRight: `right` };
       if (this.selected && dirs[e.key]) {
         e.preventDefault();
-        this.callbacks.onEdit?.({ kind: `move`, key: this.selected, keys: [this.selected], dir: dirs[e.key] });
+        const group = this.getSelection();
+        // A group moves from its first title when going up or left, from its last one when going down or right.
+        const order = this.list.map((n) => n.key).filter((k) => group.includes(k));
+        const lead = group.length > 1 && order.length > 0 ? order[e.key === `ArrowUp` || e.key === `ArrowLeft` ? 0 : order.length - 1] : this.selected;
+        this.callbacks.onEdit?.({ kind: `move`, key: lead, keys: group.length > 1 ? group : [lead], dir: dirs[e.key] });
       }
       return;
     }
@@ -2035,12 +2075,12 @@ export class MapRenderer {
       this.resetPreview();
       this.callbacks.onEdit?.({ kind: `float`, key: d.key, keys: [d.key], ...(this.isList() ? {} : d.free) });
     } else if (target && this.isList()) {
-      this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: [d.key], parentKey: target.parentKey, index: target.index });
+      this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: this.dragKeys(d.key), parentKey: target.parentKey, index: target.index });
     } else if (target && this.previewDoc) {
       // L'apercu reste affiche jusqu'a ce que la note ait ete modifiee et la carte relue.
       if (this.settleTimer !== null) window.clearTimeout(this.settleTimer);
       this.settleTimer = window.setTimeout(() => this.resetPreview(), 2500);
-      this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: [d.key], parentKey: target.parentKey, index: target.index });
+      this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: this.dragKeys(d.key), parentKey: target.parentKey, index: target.index });
     } else {
       this.resetPreview();
     }
@@ -2067,6 +2107,11 @@ export class MapRenderer {
   // Ouvre le panneau d'apparence pour la selection (menu contextuel).
   openStylePanel(): void {
     this.controls.openStyle();
+  }
+
+  // Titles carried by a drag: the whole selection when the grabbed title belongs to a group, otherwise the title alone.
+  private dragKeys(key: string): string[] {
+    return this.selectedKeys.size > 1 && this.selectedKeys.has(key) ? this.getSelection() : [key];
   }
 
   private emitEdit(kind: MapEdit[`kind`], key: string): void {

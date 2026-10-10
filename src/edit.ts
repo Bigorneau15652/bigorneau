@@ -259,6 +259,60 @@ export function moveNode(text: string, fileName: string, key: string, parentKey:
   return { text: next, key: entry.key };
 }
 
+// Moves several titles (each with its sub-titles) under a new parent, in document order. The destination is given like for moveNode,
+// for the title `primary` (rank among the children of the parent, the primary title not counted). Every moved title takes the level
+// of its new siblings. Returns null when the move is impossible (destination inside a moved title, floating subject, level 6 exceeded).
+export function moveNodes(text: string, fileName: string, keys: string[], primary: string, parentKey: string, index: number): EditResult | null {
+  const doc = parseNote(text, fileName);
+  const targets = topLevelTargets(doc, keys);
+  if (targets.length === 0) return null;
+  if (targets.length === 1) return moveNode(text, fileName, targets[0].key, parentKey, index);
+  if (targets.some((x) => isFloatRoot(x.key) || isInside(parentKey, x.key))) return null;
+  const parent = nodeByKey(doc, parentKey);
+  if (!parent || parent.line === undefined && parent !== doc.root) return null;
+
+  // The title that follows the destination (the first one that is not itself moved), found before anything is removed.
+  const moved = new Set(targets.map((x) => x.node));
+  const primaryNode = nodeByKey(doc, primary);
+  const others = parent.children.filter((c) => c !== primaryNode);
+  let anchor: MmNode | null = null;
+  for (let i = Math.max(0, index); i < others.length; i++) {
+    if (!moved.has(others[i])) {
+      anchor = others[i];
+      break;
+    }
+  }
+
+  const markdown = extractBranches(text, fileName, keys);
+  const removal = deleteNodes(text, fileName, keys);
+  if (markdown === null || !removal) return null;
+  const ranges = targets.map((x) => ({ to: branchEnd(x.node), size: branchEnd(x.node) - (x.node.line ?? 0) }));
+  const shiftAt = (line: number): number => ranges.filter((r) => r.to <= line).reduce((sum, r) => sum + r.size, 0);
+
+  const rest = parseNote(removal.text, fileName);
+  const flat = flattenDoc(rest);
+  let newParentKey = `r`;
+  if (parent !== doc.root) {
+    const found = flat.find((e) => e.key !== `r` && e.node.line === (parent.line ?? 0) - shiftAt(parent.line ?? 0));
+    if (!found) return null;
+    newParentKey = found.key;
+  }
+  const newParent = nodeByKey(rest, newParentKey);
+  if (!newParent) return null;
+  let rank = newParent.children.length;
+  if (anchor) {
+    const anchorLine = (anchor.line ?? 0) - shiftAt(anchor.line ?? 0);
+    const at = newParent.children.findIndex((c) => c.line === anchorLine);
+    if (at < 0) return null;
+    rank = at;
+  }
+  const inserted = insertBranches(removal.text, fileName, newParentKey, rank, markdown);
+  if (!inserted) return null;
+  // Control: nothing is lost or created.
+  if (flattenDoc(parseNote(inserted.text, fileName)).length !== flattenDoc(doc).length) return null;
+  return inserted;
+}
+
 export interface MovePreview {
   doc: MmDoc;
   // Noeud du document d'apercu -> noeud du document d'origine.

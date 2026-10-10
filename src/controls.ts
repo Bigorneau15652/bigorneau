@@ -408,6 +408,9 @@ export class MapControls {
     section(t(`Organiser`), [
       [t(`Glisser`), t(`Déplacer un titre avec sa branche`)],
       [t(`{0} + Maj + flèches`, mod), t(`Déplacer au clavier`)],
+      [t(`{0} + clic`, mod), t(`Ajouter ou retirer un titre de la sélection`)],
+      [t(`Maj + clic`), t(`Sélectionner les titres entre le dernier clic et celui-ci`)],
+      [t(`Glisser un titre sélectionné`), t(`Déplacer toute la sélection`)],
       [t(`Maj + glisser`), t(`Sélectionner plusieurs titres`)],
       [t(`Clic droit`), t(`Menu du titre`)],
       [t(`Double clic sur le fond`), t(`Nouveau sujet flottant`)],
