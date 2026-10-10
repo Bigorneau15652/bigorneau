@@ -96,7 +96,7 @@ Bigorneau does not connect to the internet. It has no telemetry, no advertising,
 What it reads and writes:
 
 - Your notes, in the vault, when you edit headings from the map, insert a table or a figure, or write the page settings of a note.
-- The folders of the fonts and of the profiles in the vault. Fonts that you add from your computer (`.ttf`, `.otf` or `.zip` files that you choose yourself) are copied into the fonts folder.
+- The folders of the fonts and of the profiles in the vault. Fonts that you add from your computer (`.ttf`, `.otf` or `.zip` files that you choose yourself) are copied into the fonts folder. Refused: a font file larger than 50 MB, and an archive that holds more than 500 files or more than 150 MB once unpacked. A file with the same name and identical content is not copied again, and a file with the same name and different content is replaced and reported.
 - Its own technical folder, `.obsidian/plugins/bigorneau`, which holds `data.json`: your settings, the name of the PDF author if you enter one, the names and colours of the labels, and the titles of the fixed notes that are open.
 - For Excalidraw drawings in the export, the plugin asks the Excalidraw plugin (another plugin) for the drawing.
 - The clipboard, only when you copy, cut or paste headings, or click the copy button of the diagnostic.

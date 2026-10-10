@@ -12,6 +12,9 @@ export interface ShapedGlyph {
   text: string;
 }
 
+// Units of work allowed for the reading of one table of a font (see OpenTypeFont.spend). An ordinary font needs well below one million.
+const MAX_FONT_WORK = 4_000_000;
+
 interface Coverage {
   has(gid: number): number;
 }
@@ -69,6 +72,9 @@ export class OpenTypeFont {
   // demarrage d'Obsidian, et lire le crenage et les ligatures de toutes les polices a ce moment-la ralentit le chargement.
   private tables = new Map<string, { offset: number; length: number }>();
   private shapingReady = false;
+  // Work counter of the table readers: a crafted font can declare ranges of billions of glyphs. Each reader spends one unit per entry
+  // it creates, and the reading of a table stops (the table is ignored) when the budget MAX_FONT_WORK is spent.
+  private work = 0;
   private numHMetrics = 0;
 
   constructor(readonly data: Uint8Array) {
@@ -127,12 +133,20 @@ export class OpenTypeFont {
     if (macStyle & 2) this.isItalic = true;
   }
 
+  // Spends `n` units of the reading budget; throws when it is exhausted.
+  private spend(n: number): void {
+    if (n <= 0) return;
+    this.work += n;
+    if (this.work > MAX_FONT_WORK) throw new Error(`police trop complexe`);
+  }
+
   // Lit la table des caracteres, les largeurs, les ligatures et le crenage, une seule fois, au premier besoin. Une table de
   // ligatures ou de crenage abimee n'empeche pas d'utiliser la police : ces reglages typographiques sont alors ignores.
   private ensureShaping(): void {
     if (this.shapingReady) return;
     this.shapingReady = true;
     const tables = this.tables;
+    this.work = 0;
     try {
       const hmtx = tables.get(`hmtx`)!.offset;
       let last = 0;
@@ -144,18 +158,21 @@ export class OpenTypeFont {
     } catch {
       // Table des caracteres illisible : la police n'a alors aucun caractere.
     }
+    this.work = 0;
     try {
       const gsub = tables.get(`GSUB`);
       if (gsub) this.readGsub(gsub.offset);
     } catch {
       this.ligatures.clear();
     }
+    this.work = 0;
     try {
       const gpos = tables.get(`GPOS`);
       if (gpos) this.readGpos(gpos.offset);
     } catch {
       this.kernLookups = [];
     }
+    this.work = 0;
     try {
       if (this.kernLookups.length === 0) {
         const kern = tables.get(`kern`);
@@ -219,6 +236,7 @@ export class OpenTypeFont {
       // Horizontal (bit 0), sans valeurs minimales ni remplacement, format 0.
       if ((coverage & 1) !== 0 && coverage >> 8 === 0) {
         const pairs = v.getUint16(off + 6);
+        this.spend(pairs);
         for (let i = 0; i < pairs; i++) {
           const o = off + 14 + 6 * i;
           if (o + 6 > base + length) break;
@@ -263,11 +281,13 @@ export class OpenTypeFont {
     if (best < 0) throw new Error(`table cmap sans correspondance Unicode`);
     if (bestFormat === 12) {
       const groups = v.getUint32(best + 12);
+      this.spend(groups);
       for (let g = 0; g < groups; g++) {
         const o = best + 16 + 12 * g;
         const start = v.getUint32(o);
         const end = v.getUint32(o + 4);
         const gid = v.getUint32(o + 8);
+        this.spend(end - start + 1);
         for (let c = start; c <= end; c++) this.cmapTable.set(c, gid + (c - start));
       }
       return;
@@ -277,11 +297,13 @@ export class OpenTypeFont {
     const startO = endO + segX2 + 2;
     const deltaO = startO + segX2;
     const rangeO = deltaO + segX2;
+    this.spend(segX2 / 2);
     for (let s = 0; s < segX2 / 2; s++) {
       const end = v.getUint16(endO + 2 * s);
       const start = v.getUint16(startO + 2 * s);
       const delta = v.getInt16(deltaO + 2 * s);
       const ro = v.getUint16(rangeO + 2 * s);
+      this.spend(end - start + 1);
       for (let c = start; c <= end && c !== 0xffff; c++) {
         let gid: number;
         if (ro === 0) gid = (c + delta) & 0xffff;
@@ -301,6 +323,7 @@ export class OpenTypeFont {
     const format = v.getUint16(off);
     const count = v.getUint16(off + 2);
     const index = new Map<number, number>();
+    this.spend(count);
     if (format === 1) {
       for (let i = 0; i < count; i++) index.set(v.getUint16(off + 4 + 2 * i), i);
     } else {
@@ -309,6 +332,7 @@ export class OpenTypeFont {
         const start = v.getUint16(o);
         const end = v.getUint16(o + 2);
         const first = v.getUint16(o + 4);
+        this.spend(end - start + 1);
         for (let g = start; g <= end; g++) index.set(g, first + (g - start));
       }
     }
@@ -322,13 +346,16 @@ export class OpenTypeFont {
     if (format === 1) {
       const start = v.getUint16(off + 2);
       const count = v.getUint16(off + 4);
+      this.spend(count);
       for (let i = 0; i < count; i++) map.set(start + i, v.getUint16(off + 6 + 2 * i));
     } else {
       const count = v.getUint16(off + 2);
+      this.spend(count);
       for (let i = 0; i < count; i++) {
         const o = off + 4 + 6 * i;
         const start = v.getUint16(o);
         const end = v.getUint16(o + 2);
+        this.spend(end - start + 1);
         const cls = v.getUint16(o + 4);
         for (let g = start; g <= end; g++) map.set(g, cls);
       }
@@ -383,6 +410,7 @@ export class OpenTypeFont {
         const setCount = v.getUint16(sub + 4);
         // Les glyphes de depart de ce sous-tableau, dans l'ordre de leur indice de couverture.
         const firsts: number[] = [];
+        this.spend(this.numGlyphs + setCount);
         for (let gid = 0; gid < this.numGlyphs; gid++) {
           const idx = cov.has(gid);
           if (idx >= 0 && idx < setCount) firsts[idx] = gid;
@@ -392,11 +420,13 @@ export class OpenTypeFont {
           if (first === undefined) continue;
           const set = sub + v.getUint16(sub + 6 + 2 * s);
           const n = v.getUint16(set);
+          this.spend(n);
           const rules = this.ligatures.get(first) ?? [];
           for (let r = 0; r < n; r++) {
             const lig = set + v.getUint16(set + 2 + 2 * r);
             const ligature = v.getUint16(lig);
             const comps = v.getUint16(lig + 2);
+            this.spend(comps);
             const components: number[] = [];
             for (let c = 0; c < comps - 1; c++) components.push(v.getUint16(lig + 4 + 2 * c));
             rules.push({ components, ligature });
@@ -440,9 +470,11 @@ export class OpenTypeFont {
         if (format === 1) {
           const setCount = v.getUint16(sub + 8);
           const sets: Map<number, number>[] = [];
+          this.spend(setCount);
           for (let s = 0; s < setCount; s++) {
             const set = sub + v.getUint16(sub + 10 + 2 * s);
             const n = v.getUint16(set);
+            this.spend(n);
             const m = new Map<number, number>();
             for (let i = 0; i < n; i++) {
               const rec = set + 2 + i * (2 + size1 + size2);
