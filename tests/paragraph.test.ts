@@ -160,3 +160,16 @@ test(`une police de base en gras s'applique a tout le paragraphe`, () => {
   assert.ok(r.lines[0].runs.every((x) => x.style === `bold`));
   assert.equal(r.lines[0].width, measureText(`Un titre`, 11, `bold`).width);
 });
+
+test(`un paragraphe deja compose est reutilise, et chaque option change le resultat`, () => {
+  const o: ParagraphOptions = { language: `fr`, fontSize: 11, lineWidth: 300, indent: 0, align: `justify`, hyphenate: true };
+  const a = typesetParagraph(TEXT, o);
+  assert.equal(typesetParagraph(TEXT, o), a);
+  assert.equal(typesetParagraph(TEXT, { ...o }), a);
+  const narrow = typesetParagraph(TEXT, { ...o, lineWidth: 200 });
+  assert.notEqual(narrow, a);
+  assert.ok(narrow.lines.length > a.lines.length);
+  assert.notEqual(typesetParagraph(`${TEXT} Fin.`, o), a);
+  assert.notEqual(typesetParagraph(TEXT, { ...o, hyphenate: false }), a);
+  assert.notEqual(typesetParagraph(TEXT, { ...o, align: `left` }), a);
+});
