@@ -16,6 +16,29 @@ export const MATH_SERVICE = `math.render`;
 export type MathSvgRenderer = (tex: string, display: boolean) => Promise<string | null>;
 export const MATH_SVG_SERVICE = `math.svg`;
 
+// Loads the MathJax module of the plugin. Obsidian has its own global MathJax object, which has a loader without the function that
+// the code of the library calls when it starts (MathJax.loader.preLoad): the library would fail on its first line. The global object
+// is hidden while the module starts, then put back, so that the plugin's copy never meets Obsidian's.
+export async function loadMathJax(): Promise<typeof import("./export/mathjax")> {
+  const host = window as unknown as { MathJax?: unknown };
+  const saved = host.MathJax;
+  try {
+    host.MathJax = undefined;
+  } catch {
+    // The global object cannot be replaced: the module is loaded as it is.
+  }
+  try {
+    return await import(`./export/mathjax`);
+  } finally {
+    try {
+      if (saved === undefined) delete host.MathJax;
+      else host.MathJax = saved;
+    } catch {
+      // Nothing to put back.
+    }
+  }
+}
+
 export const FORMULAS_SCRIPT: OfficialScript = {
   id: `formulas`,
   name: { fr: `Formules`, en: `Formulas` },
@@ -29,11 +52,11 @@ export const FORMULAS_SCRIPT: OfficialScript = {
   load(api) {
     const render: MathRenderer = async (tex, display) => {
       // MathJax est evalue ici, a la premiere formule.
-      const { renderTex } = await import(`./export/mathjax`);
+      const { renderTex } = await loadMathJax();
       return renderTex(tex, display);
     };
     api.provide(MATH_SERVICE, render);
-    const renderSvg: MathSvgRenderer = async (tex, display) => (await import(`./export/mathjax`)).renderTexSvg(tex, display);
+    const renderSvg: MathSvgRenderer = async (tex, display) => (await loadMathJax()).renderTexSvg(tex, display);
     api.provide(MATH_SVG_SERVICE, renderSvg);
     api.addHelp(
       courseSections().map((c) => ({
