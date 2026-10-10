@@ -83,3 +83,14 @@ test(`les couleurs de contour et de fond refusent tout ce qui n'est pas une coul
   assert.equal(ok.strokeColor, `#336699`);
   assert.equal(ok.fillColor, `#fa0`);
 });
+
+test(`les raccourcis de navigation sont vides par defaut, et ceux deja enregistres sont conserves`, () => {
+  assert.equal(DEFAULT_SETTINGS.keyPrev, ``);
+  assert.equal(DEFAULT_SETTINGS.keyNext, ``);
+  assert.equal(DEFAULT_SETTINGS.keyParent, ``);
+  assert.equal(DEFAULT_SETTINGS.keyChild, ``);
+  const kept = migrateSettings({ keyPrev: `Mod-ArrowUp`, keyChild: `Mod-ArrowRight` });
+  assert.equal(kept.keyPrev, `Mod-ArrowUp`);
+  assert.equal(kept.keyChild, `Mod-ArrowRight`);
+  assert.equal(kept.keyNext, ``);
+});

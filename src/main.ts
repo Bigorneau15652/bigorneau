@@ -122,8 +122,9 @@ export default class MindmapWritingPlugin extends Plugin {
         },
         key: (event, cm) => {
           if (!this.isLinkedEditor(cm)) return false;
-          // Cmd ou Ctrl + Entree dans la note reliee : retour a la carte (meme raccourci que pour aller dans la note).
-          if (isModEnter(event)) {
+          // Cmd ou Ctrl + Maj + Entree dans la note reliee : retour a la carte (meme raccourci que pour aller dans la note).
+          // Cmd ou Ctrl + Entree sans Maj reste a Obsidian (case a cocher, ouverture d'un lien).
+          if (isModEnter(event) && event.shiftKey) {
             event.preventDefault();
             this.forEachView((v) => {
               if (v.ownsEditor(cm)) v.focusMap();

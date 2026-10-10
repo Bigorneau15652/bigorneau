@@ -686,6 +686,20 @@ export class MmSettingTab extends PluginSettingTab {
     this.addKeySetting(el, t(`Premier sous-titre`), `keyChild`);
   }
 
+  // Ends the key capture in progress, if any: the listener on the window is removed and the button shows its combination again.
+  private endCapture: (() => void) | null = null;
+
+  private stopCapture(): void {
+    const end = this.endCapture;
+    this.endCapture = null;
+    end?.();
+  }
+
+  // The settings page is closed: no capture may stay active and swallow the next key typed elsewhere.
+  hide(): void {
+    this.stopCapture();
+  }
+
   // Ligne de reglage d'une touche : un bouton qui attend la combinaison a enregistrer.
   private addKeySetting(containerEl: HTMLElement, name: string, field: KeyField) {
     const s = this.plugin.settings;
@@ -696,12 +710,14 @@ export class MmSettingTab extends PluginSettingTab {
       .addButton((btn) => {
         btn.setButtonText(comboLabel(s[field], isMac));
         btn.onClick(() => {
+          // A capture still waiting (another button clicked before typing) is ended first.
+          this.stopCapture();
           btn.setButtonText(t(`Tapez la combinaison...`));
           const listener = (e: KeyboardEvent) => {
             if ([`Control`, `Shift`, `Alt`, `Meta`].includes(e.key)) return;
             e.preventDefault();
             e.stopPropagation();
-            window.removeEventListener(`keydown`, listener, true);
+            this.stopCapture();
             if (e.key !== `Escape`) {
               s[field] = eventToCombo(e, isMac);
               void this.plugin.saveSettings(false);
@@ -709,6 +725,10 @@ export class MmSettingTab extends PluginSettingTab {
             btn.setButtonText(comboLabel(s[field], isMac));
           };
           window.addEventListener(`keydown`, listener, true);
+          this.endCapture = () => {
+            window.removeEventListener(`keydown`, listener, true);
+            btn.setButtonText(comboLabel(s[field], isMac));
+          };
         });
       })
       .addExtraButton((b) =>
