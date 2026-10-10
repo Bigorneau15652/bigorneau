@@ -270,3 +270,11 @@ test(`les numeros et les puces d'une liste melangee sont imprimes comme ecrits`,
   const markers = c.pages.flatMap((p) => p.rows).map((r) => r.marker).filter((m) => m !== undefined);
   assert.deepEqual(markers.filter((m) => /^\d/.test(m as string)), [`3.`, `4.`, `5.`]);
 });
+
+test(`des puces entre deux etapes numerotees ne relancent pas la numerotation`, async () => {
+  const { composeNote } = await import(`../src/export/compose`);
+  // Obsidian ecrit « 1. » apres des puces du meme niveau : la suite doit rester 3.
+  const c = composeNote([`# A`, ``, `1. un`, `2. deux`, `- puce`, `- autre puce`, `1. trois`, `1. quatre`].join(`\n`), `N.md`);
+  const numbers = c.pages.flatMap((p) => p.rows).map((r) => r.marker).filter((m): m is string => m !== undefined && /^\d/.test(m));
+  assert.deepEqual(numbers, [`1.`, `2.`, `3.`, `4.`]);
+});
