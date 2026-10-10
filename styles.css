@@ -2727,3 +2727,40 @@ table.mmw-t-equal td {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Impression de l'apercu : une copie des pages est placee en fin de page ; pendant l'impression, le reste de la fenetre est cache. */
+.mmw-print-root {
+  display: none;
+}
+
+@media print {
+  body.mmw-printing > *:not(.mmw-print-root) {
+    display: none !important;
+  }
+
+  body.mmw-printing .mmw-print-root {
+    display: block !important;
+  }
+
+  body.mmw-printing {
+    background: #fff !important;
+  }
+
+  .mmw-print-page {
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+    color: #1a1a1a;
+    break-after: page;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .mmw-print-page:last-child {
+    break-after: auto;
+  }
+
+  .mmw-print-page .mmw-export-page {
+    transform: none !important;
+  }
+}

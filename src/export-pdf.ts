@@ -42,32 +42,6 @@ async function makePdf(plugin: MindmapWritingPlugin, file: TFile): Promise<{ pdf
   return { pdf, composed };
 }
 
-// Opens the note as a PDF in the reader of the system, where it is printed with the usual print window. The PDF is written in the
-// folder of the plugin (not in the notes), under the name of the note; the next print replaces it.
-export async function printNote(plugin: MindmapWritingPlugin, file: TFile): Promise<void> {
-  if (!Platform.isDesktop) return;
-  const notice = new Notice(t(`Composition du PDF…`), 0);
-  try {
-    const { pdf } = await makePdf(plugin, file);
-    const adapter = plugin.app.vault.adapter;
-    const folder = `${plugin.manifest.dir ?? `.obsidian/plugins/${plugin.manifest.id}`}/impression`;
-    if (!(await adapter.exists(folder))) await adapter.mkdir(folder);
-    const path = `${folder}/${file.basename.replace(/[\\/:*?"<>|]/g, `_`)}.pdf`;
-    await adapter.writeBinary(path, pdf.slice().buffer);
-    notice.hide();
-    const open = (plugin.app as unknown as { openWithDefaultApp?: (p: string) => Promise<void> | void }).openWithDefaultApp;
-    if (typeof open === `function`) {
-      await open.call(plugin.app, path);
-      new Notice(t(`Le PDF s'ouvre dans votre lecteur : imprimez-le depuis celui-ci.`));
-    } else {
-      new Notice(t(`PDF écrit : {0}. Ouvrez-le avec votre lecteur pour l'imprimer.`, path), 10000);
-    }
-  } catch (e) {
-    notice.hide();
-    new Notice(t(`L'impression a échoué : {0}`, e instanceof Error ? e.message : String(e)), 8000);
-  }
-}
-
 export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile): Promise<void> {
   if (!Platform.isDesktop) return;
   const target = await askTarget(plugin, file);

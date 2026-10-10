@@ -1,7 +1,7 @@
 // Apercu de l'export de haute qualite : volet qui montre la note ouverte telle que l'export la composera.
 // Phase 2 : coupure de lignes de Knuth et Plass avec cesure ; la pagination definitive et le PDF arrivent aux phases suivantes.
 import { noteError, record } from "./diagnostics";
-import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Platform, WorkspaceLeaf } from "obsidian";
 import { composeNote } from "./export/compose";
 import type { ImageAsset } from "./export/image";
 import type { MathAsset } from "./export/math";
@@ -64,6 +64,59 @@ export class ExportPreviewView extends ItemView {
     this.observer?.disconnect();
     this.observer = null;
     this.releaseImages();
+  }
+
+  // Prints the pages of the preview with the print window of the system, without any other program: a copy of the pages is put at the
+  // end of the body, the rest of the window is hidden for the printing (see @media print in styles.css), then the copy is removed.
+  // Each distinct sheet size has its own named page, so that a landscape zone is printed on a landscape sheet.
+  async printNow(): Promise<void> {
+    if (this.sheets.length === 0) await this.refresh();
+    if (this.sheets.length === 0) {
+      new Notice(t(`Rien à imprimer : l'aperçu n'a pas pu être composé.`));
+      return;
+    }
+    const root = document.body.createDiv({ cls: `mmw-print-root` });
+    const names = new Map<string, string>();
+    const rules: string[] = [];
+    this.sheets.forEach((sheet, i) => {
+      const own = this.sheetSetups[i] ?? this.setup;
+      const key = `${own.width}x${own.height}`;
+      let name = names.get(key);
+      if (!name) {
+        name = `mmwp${names.size}`;
+        names.set(key, name);
+        rules.push(`@page ${name} { size: ${own.width}pt ${own.height}pt; margin: 0; }`);
+      }
+      const wrap = root.createDiv({ cls: `mmw-print-page` });
+      wrap.style.width = `${own.width}pt`;
+      wrap.style.height = `${own.height}pt`;
+      wrap.style.setProperty(`page`, name);
+      const page = sheet.firstElementChild?.cloneNode(true);
+      if (page) wrap.appendChild(page);
+    });
+    const pageRules = new CSSStyleSheet();
+    pageRules.replaceSync(rules.join(`\n`));
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, pageRules];
+    document.body.addClass(`mmw-printing`);
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
+      window.removeEventListener(`afterprint`, cleanup);
+      document.body.removeClass(`mmw-printing`);
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== pageRules);
+      root.remove();
+    };
+    window.addEventListener(`afterprint`, cleanup);
+    // Safety net: the copy never stays in the window if the end of the printing is not announced.
+    window.setTimeout(cleanup, 120000);
+    try {
+      window.print();
+    } catch (e) {
+      cleanup();
+      noteError(`Impression de l'aperçu`, e);
+      new Notice(t(`La boîte d'impression ne s'est pas ouverte. Exportez en PDF, puis imprimez le fichier.`), 8000);
+    }
   }
 
   private releaseImages() {
@@ -407,7 +460,7 @@ export class ExportPreviewView extends ItemView {
     const exportBtn = head.createEl(`button`, { cls: `mod-cta mmw-export-button`, text: t(`Exporter en PDF…`) });
     exportBtn.addEventListener(`click`, () => void this.plugin.exportPdf());
     const printBtn = head.createEl(`button`, { cls: `mmw-export-button`, text: t(`Imprimer…`) });
-    printBtn.addEventListener(`click`, () => void this.plugin.printPdf());
+    printBtn.addEventListener(`click`, () => void this.printNow());
 
     const host = root.createDiv({ cls: `mmw-export-pages` });
     this.sheets = [];
