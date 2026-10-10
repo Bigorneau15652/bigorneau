@@ -6,7 +6,7 @@ import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-ed
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
-import { exportNoteToPdf, printNote } from "./export-pdf";
+import { exportNoteToPdf } from "./export-pdf";
 import { DiagnosticModal } from "./diagnostic-modal";
 import { noteError, record } from "./diagnostics";
 import { FunctionRegistry, isSeparator, panelOrder, PanelFunction } from "./functions";
@@ -1044,7 +1044,7 @@ export default class MindmapWritingPlugin extends Plugin {
     await exportNoteToPdf(this, this.lastFile);
   }
 
-  // Ouvre la note en PDF dans le lecteur du systeme, pour l'imprimer.
+  // Imprime les pages de l'apercu avec la boite d'impression du systeme (l'apercu s'ouvre s'il ne l'est pas).
   async printPdf() {
     if (!Platform.isDesktop) return;
     this.rememberFile(this.app.workspace.getActiveFile());
@@ -1052,7 +1052,9 @@ export default class MindmapWritingPlugin extends Plugin {
       new Notice(t(`Ouvrez d'abord une note.`));
       return;
     }
-    await printNote(this, this.lastFile);
+    await this.openExportPreview();
+    const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_EXPORT).map((l) => l.view).find((v) => v instanceof ExportPreviewView);
+    if (view instanceof ExportPreviewView) await view.printNow();
   }
 
   // Ouvre l'apercu de l'export a cote de la note (ou le montre s'il est deja ouvert).
