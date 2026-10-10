@@ -5,7 +5,7 @@ import { moveCursorOutOfHidden, setHideEnabled, setHideInactive, setHideMeta } f
 import { openBlankLine, releaseTempLine } from "./temp-line";
 import { revealRange } from "./reveal";
 import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
-import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNode, renameTitle } from "./edit";
+import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNodes, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { resolveFixed } from "./fixed";
 import { branchToFloat, createFloat, floatToBranch, moveFloat } from "./float";
@@ -270,7 +270,7 @@ export class MindmapView extends ItemView {
     }
     const before = await readText();
     // Une direction (fleches) s'applique a la case selectionnee au moment du traitement, pas a celle de l'appui.
-    if (edit.kind === `move` && edit.dir) edit.key = renderer.getSelectedKey() ?? edit.key;
+    if (edit.kind === `move` && edit.dir && edit.keys.length <= 1) edit.key = renderer.getSelectedKey() ?? edit.key;
     if (edit.kind === `rename` && edit.key === `r`) {
       await this.renameFile(file, edit.title ?? ``);
       return;
@@ -326,9 +326,11 @@ export class MindmapView extends ItemView {
       const target = edit.dir
         ? arrowTarget(parseNote(before, file.name), edit.key, edit.dir)
         : { parentKey: edit.parentKey ?? `r`, index: edit.index ?? 0 };
-      result = target ? moveNode(before, file.name, edit.key, target.parentKey, target.index) : null;
+      result = target ? moveNodes(before, file.name, edit.keys, edit.key, target.parentKey, target.index) : null;
       if (!target) new Notice(this.noMoveReason(edit.dir), 2500);
-      else if (!result) new Notice(t(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`));
+      else if (!result) {
+        new Notice(edit.keys.length > 1 ? t(`Déplacement impossible : la destination est dans l'un des titres déplacés, ou le niveau de titre maximum (6) serait dépassé.`) : t(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`));
+      }
       if (!result || result.text === before) {
         renderer.resetPreview();
         return;
@@ -990,7 +992,9 @@ export class MindmapView extends ItemView {
     this.noteCursors.set(key, { line: line0, ch: head - line.from });
     renderer.setDoc(doc, this.mapKey, serializeNote(doc) === text);
     renderer.reveal(key);
-    renderer.select(key, false);
+    // A group of selected titles survives the cursor moving to one of them.
+    const group = renderer.getSelection();
+    if (!(group.length > 1 && group.includes(key))) renderer.select(key, false);
     this.updateActiveRange();
   }
 
