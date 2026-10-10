@@ -57,6 +57,8 @@ export function renameTitle(text: string, fileName: string, key: string, title: 
   const node = nodeByKey(doc, key);
   if (!node || node.line === undefined || node.level === 0) return null;
   const next = applyLineEdits(text, [{ kind: `replace`, line: node.line, text: renderHeading(node.level, cleanTitle(title), ``) }], doc.eol);
+  // A title that opens a comment or a formula (%%, $$, <!--) would hide the headings that follow it: such a rename is refused.
+  if (flattenDoc(parseNote(next, fileName)).length !== flattenDoc(doc).length) return null;
   return { text: next, key };
 }
 

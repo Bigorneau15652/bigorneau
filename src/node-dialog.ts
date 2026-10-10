@@ -2,6 +2,7 @@
 // N'utilise que le DOM standard, pour pouvoir etre verifiee hors d'Obsidian.
 import type { TagDef } from "./settings";
 import { t } from "./i18n";
+import { MAX_COMMENT, MAX_SHORT } from "./style";
 
 export interface DialogValues {
   title: string;
@@ -70,6 +71,7 @@ export class NodeDialog {
         input.type = `text`;
         input.value = opts.values.short;
         input.placeholder = t(`Facultatif`);
+        input.maxLength = MAX_SHORT;
         return input;
       });
       this.commentInput = this.field(t(`Commentaire`), () => {
@@ -77,6 +79,7 @@ export class NodeDialog {
         area.rows = 3;
         area.value = opts.values.comment;
         area.placeholder = t(`Facultatif`);
+        area.maxLength = MAX_COMMENT;
         return area;
       });
       this.buildTags();

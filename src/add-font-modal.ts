@@ -71,6 +71,9 @@ export class AddFontModal extends Modal {
 
     if (report) {
       if (report.added.length > 0) contentEl.createDiv({ cls: `mmw-addfont-ok`, text: t(`Fichiers copiés : {0}`, report.added.join(`, `)) });
+      if (report.replaced.length > 0) contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Fichiers remplacés (même nom, contenu différent) : {0}`, report.replaced.join(`, `)) });
+      if (report.unchanged.length > 0) contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Fichiers déjà présents et identiques : {0}`, report.unchanged.join(`, `)) });
+      if (report.failed.length > 0) contentEl.createDiv({ cls: `mmw-typo-problem`, text: t(`Fichiers refusés (trop volumineux, illisibles ou copie impossible) : {0}`, report.failed.join(`, `)) });
       if (report.skipped.length > 0) contentEl.createDiv({ cls: `mmw-typo-problem`, text: t(`Fichiers ignorés (aucune police .ttf ou .otf) : {0}`, report.skipped.join(`, `)) });
       if (report.added.length > 0) contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Les polices apparaissent dans les listes de police. Un fichier que Bigorneau ne peut pas utiliser est signalé dans la fenêtre Polices et titres.`) });
     }

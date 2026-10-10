@@ -337,3 +337,10 @@ test(`copier puis coller reproduit la branche sur des notes aleatoires`, () => {
   }
   assert.equal(refused, 0);
 });
+
+test(`un renommage qui ouvrirait un commentaire ou une formule est refuse`, () => {
+  for (const bad of [`x %% y`, `x $$ y`, `x <!-- y`, `$$`]) assert.equal(renameTitle(NOTE, `n.md`, `r.0.0`, bad), null, bad);
+  const ok = renameTitle(NOTE, `n.md`, `r.0.0`, `Nouveau titre`);
+  assert.ok(ok);
+  assert.ok(ok.text.includes(`### Nouveau titre`));
+});

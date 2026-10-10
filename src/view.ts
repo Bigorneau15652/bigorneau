@@ -16,12 +16,16 @@ import { appearanceDefaults, PanePosition } from "./settings";
 import { MetaChange, metaEditsFor, planReset, planStyle } from "./style-edit";
 import type { MmMeta, StylePatch } from "./style";
 import { MapEdit, MapRenderer } from "./renderer";
+import { noteError } from "./diagnostics";
+
+// The text of the note changed between its reading and its writing: nothing is written.
+class NoteChangedError extends Error {}
 
 // Fenetre de confirmation avant de supprimer des titres et leur contenu.
 class ConfirmDeleteModal extends Modal {
   private confirmed = false;
 
-  constructor(app: import("obsidian").App, private report: DeletionReport, private done: (ok: boolean) => void) {
+  constructor(app: import("obsidian").App, private report: DeletionReport, private done: (ok: boolean) => void, private undoable: boolean) {
     super(app);
   }
 
@@ -32,7 +36,13 @@ class ConfirmDeleteModal extends Modal {
     const parts: string[] = [];
     if (r.subtitles > 0) parts.push(r.subtitles > 1 ? t(`{0} sous-titres`, r.subtitles) : t(`1 sous-titre`));
     parts.push(r.words > 1 ? t(`environ {0} mots de texte`, r.words) : t(`environ 1 mot de texte`));
-    this.contentEl.createEl(`p`, { text: t(`Cette suppression retire aussi {0}. Vous pourrez l'annuler avec l'historique de la note (Cmd ou Ctrl + Z).`, parts.join(t(` et `))) });
+    // The undo history exists only while the note is open in an editor.
+    const removed = parts.join(t(` et `));
+    this.contentEl.createEl(`p`, {
+      text: this.undoable
+        ? t(`Cette suppression retire aussi {0}. Vous pourrez l'annuler avec l'historique de la note (Cmd ou Ctrl + Z).`, removed)
+        : t(`Cette suppression retire aussi {0}. La note n'est pas ouverte dans l'éditeur : la suppression ne pourra pas être annulée.`, removed),
+    });
     let confirmButton: HTMLElement | null = null;
     new Setting(this.contentEl)
       .addButton((b) => {
@@ -204,7 +214,7 @@ export class MindmapView extends ItemView {
   // de la note en une seule transaction, ce qui rend l'annulation d'Obsidian utilisable.
   // Les modifications se font l'une apres l'autre : des appuis rapproches sur les fleches ne se melangent pas.
   private onEdit(edit: MapEdit) {
-    this.editQueue = this.editQueue.then(() => this.runEdit(edit)).catch(() => undefined);
+    this.editQueue = this.editQueue.then(() => this.runEdit(edit)).catch((e) => this.failed(e));
   }
 
   private async runEdit(edit: MapEdit) {
@@ -241,13 +251,23 @@ export class MindmapView extends ItemView {
         new Notice(t(`La racine ne peut pas être supprimée.`));
         return;
       }
-      const ok = await new Promise<boolean>((resolve) => new ConfirmDeleteModal(this.app, report, resolve).open());
+      const ok = await new Promise<boolean>((resolve) => new ConfirmDeleteModal(this.app, report, resolve, !!this.plugin.getOpenEditor(file)).open());
       if (!ok) {
         renderer.focus();
         return;
       }
     }
 
+    // The clipboard is read before the note: the note is read last, right before the edit is computed and written.
+    let clip = ``;
+    if (edit.kind === `paste` || edit.kind === `pasteAfter`) {
+      try {
+        clip = await navigator.clipboard.readText();
+      } catch {
+        new Notice(t(`Impossible de lire le presse-papiers.`));
+        return;
+      }
+    }
     const before = await readText();
     // Une direction (fleches) s'applique a la case selectionnee au moment du traitement, pas a celle de l'appui.
     if (edit.kind === `move` && edit.dir) edit.key = renderer.getSelectedKey() ?? edit.key;
@@ -261,13 +281,6 @@ export class MindmapView extends ItemView {
       result = duplicateNodes(before, file.name, edit.keys);
       if (!result) new Notice(t(`Le nom de la note ne se duplique pas : sélectionnez un titre.`));
     } else if (edit.kind === `paste` || edit.kind === `pasteAfter`) {
-      let clip = ``;
-      try {
-        clip = await navigator.clipboard.readText();
-      } catch {
-        new Notice(t(`Impossible de lire le presse-papiers.`));
-        return;
-      }
       let parentKey = edit.key;
       let index = Number.MAX_SAFE_INTEGER;
       if (edit.kind === `pasteAfter` && !isFloatRoot(edit.key)) {
@@ -284,8 +297,10 @@ export class MindmapView extends ItemView {
       const pos = { x: edit.x, y: edit.y };
       result = isFloatRoot(edit.key) ? moveFloat(before, file.name, edit.key, pos) : branchToFloat(before, file.name, edit.key, pos);
       if (!result) new Notice(t(`Ce titre ne peut pas devenir un sujet flottant.`));
-    } else if (edit.kind === `rename`) result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
-    else if (edit.kind === `move`) {
+    } else if (edit.kind === `rename`) {
+      result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
+      if (!result) new Notice(t(`Ce titre n'a pas été enregistré : %%, <!-- ou un double signe dollar masqueraient la suite de la note.`), 4000);
+    } else if (edit.kind === `move`) {
       if (isFloatRoot(edit.key) && !edit.dir) {
         // Un sujet flottant depose pres de la structure entre dans la carte : son niveau s'adapte a sa nouvelle place.
         result = floatToBranch(before, file.name, edit.key, edit.parentKey ?? `r`, edit.index ?? 0);
@@ -356,7 +371,7 @@ export class MindmapView extends ItemView {
   // etiquettes vont dans le commentaire invisible sous le titre. Une seule modification de la note (une seule
   // etape d'annulation).
   private applyDetails(key: string, values: DialogValues) {
-    this.editQueue = this.editQueue.then(() => this.runDetails(key, values)).catch(() => undefined);
+    this.editQueue = this.editQueue.then(() => this.runDetails(key, values)).catch((e) => this.failed(e));
   }
 
   private async runDetails(key: string, values: DialogValues) {
@@ -376,6 +391,7 @@ export class MindmapView extends ItemView {
     if (cleanTitle(values.title) !== node.title) {
       const renamed = renameTitle(text, file.name, key, values.title);
       if (renamed) text = renamed.text;
+      else new Notice(t(`Ce titre n'a pas été enregistré : %%, <!-- ou un double signe dollar masqueraient la suite de la note.`), 4000);
     }
     const doc = parseNote(text, file.name);
     const current = nodeByKey(doc, key);
@@ -406,7 +422,16 @@ export class MindmapView extends ItemView {
   // ---------------------------------------------------------------- liens entre titres
 
   private queue(job: () => Promise<void>) {
-    this.editQueue = this.editQueue.then(job).catch(() => undefined);
+    this.editQueue = this.editQueue.then(job).catch((e) => this.failed(e));
+  }
+
+  // One handling of every failure of an edit of the note: the error is recorded in the diagnostic, the user is told, and the map is
+  // drawn again from the note (the edit that failed is not shown as done).
+  private failed(error: unknown): void {
+    noteError(`Modification de la note`, error);
+    new Notice(error instanceof NoteChangedError ? t(`La note a changé pendant l'opération : elle n'a pas été modifiée. Recommencez.`) : t(`La modification de la note a échoué. Le détail est dans le diagnostic.`), 4000);
+    this.renderer?.resetPreview();
+    void this.refresh();
   }
 
   private linkName(file: TFile): string {
@@ -757,9 +782,18 @@ export class MindmapView extends ItemView {
   private async writeText(file: TFile, before: string, after: string) {
     const editor = this.plugin.getOpenEditor(file);
     if (!editor) {
-      await this.app.vault.process(file, (data) => (data === before ? after : data));
+      let changed = false;
+      await this.app.vault.process(file, (data) => {
+        if (data !== before) {
+          changed = true;
+          return data;
+        }
+        return after;
+      });
+      if (changed) throw new NoteChangedError(`note modifiee entre la lecture et l'ecriture`);
       return;
     }
+    if (editor.getValue() !== before) throw new NoteChangedError(`editeur modifie entre la lecture et l'ecriture`);
     const limit = Math.min(before.length, after.length);
     let start = 0;
     while (start < limit && before[start] === after[start]) start++;

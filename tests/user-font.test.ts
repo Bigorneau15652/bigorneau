@@ -39,3 +39,43 @@ test(`une police OpenType a contours CFF garde son comportement, et un fichier q
   assert.throws(() => new OpenTypeFont(new Uint8Array(Buffer.from(`wOF2xxxxxxxxxxxxxxxx`))), /WOFF/);
   assert.throws(() => new OpenTypeFont(new Uint8Array(text.subarray(0, 40))));
 });
+
+// Police de test dont la table cmap est remplacee : un seul groupe (format 12) qui declare des milliards de caracteres.
+function fontWithHostileCmap(): Uint8Array {
+  const src = readFileSync(`tests/fonts/TestSerif-Regular.ttf`);
+  const tableCount = src.readUInt16BE(4);
+  const cmap = Buffer.alloc(12 + 8 + 16 + 12);
+  cmap.writeUInt16BE(0, 0);
+  cmap.writeUInt16BE(1, 2);
+  cmap.writeUInt16BE(3, 4);
+  cmap.writeUInt16BE(10, 6);
+  cmap.writeUInt32BE(12, 8);
+  cmap.writeUInt16BE(12, 12);
+  cmap.writeUInt32BE(16 + 12, 16);
+  cmap.writeUInt32BE(1, 24);
+  cmap.writeUInt32BE(0, 28);
+  cmap.writeUInt32BE(0xffffffff, 32);
+  cmap.writeUInt32BE(1, 36);
+  const out = Buffer.concat([src, cmap]);
+  for (let i = 0; i < tableCount; i++) {
+    const at = 12 + 16 * i;
+    if (out.toString(`latin1`, at, at + 4) === `cmap`) {
+      out.writeUInt32BE(src.length, at + 8);
+      out.writeUInt32BE(cmap.length, at + 12);
+    }
+  }
+  return new Uint8Array(out);
+}
+
+test(`une police qui declare des milliards de caracteres est lue sans saturer la memoire`, () => {
+  const font = new OpenTypeFont(fontWithHostileCmap());
+  const start = Date.now();
+  const before = process.memoryUsage().heapUsed;
+  assert.equal(font.cmap.size, 0);
+  assert.ok(Date.now() - start < 1000, `duree ${Date.now() - start} ms`);
+  assert.ok(process.memoryUsage().heapUsed - before < 200 * 1024 * 1024);
+});
+
+test(`une police ordinaire garde tous ses caracteres`, () => {
+  assert.ok(load(`TestSerif-Regular.ttf`).cmap.size > 50);
+});
