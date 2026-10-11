@@ -16,9 +16,7 @@ import {
   LongTitles,
   MmSettings,
   NewNoteFolderMode,
-  PanePosition,
   Roughness,
-  ViewMode,
 } from "./settings";
 import { SHAPE_CHOICES, ShapeChoice, shapeChoice, shapePatch } from "./style";
 import { setSvg } from "./dom";
@@ -46,13 +44,14 @@ export class MmSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.addClass(`mmw-settings`);
+    containerEl.createEl(`p`, {
+      cls: `setting-item-description`,
+      text: t(`Les éléments affichés, le type de vue (Mindmap ou Liste), le chapitre actif et la position de la note se règlent depuis la carte : barre de commandes, menu de l'œil, menu burger et bouton Apparence.`),
+    });
 
     this.chapter(`general`, t(`Langue et ouverture`), t(`Langue du plugin et vue affichée à l'ouverture`), (el) => this.buildGeneral(el));
     this.chapter(`mindmap`, t(`Vue Mindmap`), t(`Cases, branches, traits, police et contraste de la carte mentale`), (el) => this.buildMindmap(el));
-    this.chapter(`list`, t(`Vue Liste`), t(`Liste condensée : un titre par ligne`), (el) => this.buildList(el));
-    this.chapter(`display`, t(`Éléments affichés`), t(`Ce que la carte montre par défaut (menu de l'œil)`), (el) => this.buildDisplay(el));
     this.chapter(`writing`, t(`Rédaction`), t(`Position de la note, curseur et commentaires du plugin`), (el) => this.buildWriting(el));
-    this.chapter(`active`, t(`Chapitre actif`), t(`Grisage ou masquage des chapitres inactifs dans la note`), (el) => this.buildActive(el));
     this.chapter(`fixed`, t(`Notes fixes`), t(`Copies d'un chapitre dans leur propre volet`), (el) => this.buildFixed(el));
     this.chapter(`floats`, t(`Sujets flottants`), t(`Sujets de notes libres, hors de la carte : niveau, forme, couleurs`), (el) => this.buildFloats(el));
     this.chapter(`links`, t(`Liens et icônes`), t(`Icônes et couleurs des repères de liens`), (el) => this.buildLinks(el));
@@ -157,10 +156,6 @@ export class MmSettingTab extends PluginSettingTab {
             this.display();
           })
       );
-    this.dropdown(el, t(`Vue à l'ouverture`), t(`Type de vue utilisé par la carte : carte mentale ou liste condensée. Le bouton de la barre de commandes permet d'en changer à tout moment.`), `viewMode`, [
-      [`map`, t(`Mindmap`)],
-      [`list`, t(`Liste`)],
-    ], (v) => v as ViewMode);
   }
 
   private buildMindmap(el: HTMLElement): void {
@@ -236,28 +231,7 @@ export class MmSettingTab extends PluginSettingTab {
     return names[c];
   }
 
-  private buildList(el: HTMLElement): void {
-    this.toggle(el, t(`Une ligne sur deux plus foncée`), t(`Alterne deux teintes de fond pour suivre facilement les lignes.`), `listStripes`);
-    this.toggle(el, t(`Police de la carte`), t(`Désactivé : la liste utilise la police normale de l'interface. Activé : elle reprend la police choisie pour la carte.`), `listMapFont`);
-  }
-
-  private buildDisplay(el: HTMLElement): void {
-    this.toggle(el, t(`Étiquettes`), t(`Affiche les étiquettes à côté des titres.`), `showTags`);
-    this.toggle(el, t(`Bulles de commentaire`), t(`Affiche un repère sur les titres qui ont un commentaire.`), `showComments`);
-    this.toggle(el, t(`Liens web (mappemonde)`), t(`Affiche le repère des liens web et des vidéos intégrées.`), `showWebLinks`);
-    this.toggle(el, t(`Liens vers d'autres notes`), t(`Affiche les cases des notes liées. Désactivé : un repère coloré les remplace.`), `showExternalLinks`);
-    this.toggle(el, t(`Liens dans la note (flèches)`), t(`Affiche les flèches entre titres. Désactivé : un repère coloré les remplace.`), `showInternalLinks`);
-    this.toggle(el, t(`Vue noir et blanc`), t(`Affiche la carte sans couleur.`), `blackWhite`);
-    this.toggle(el, t(`Flèches toujours colorées`), t(`Les flèches de lien prennent la couleur des liens du thème en permanence. Sinon elles sont neutres et prennent la couleur quand on les sélectionne.`), `linkColored`);
-  }
-
   private buildWriting(el: HTMLElement): void {
-    this.dropdown(el, t(`Position de la note`), t(`Emplacement de la note, ouverte à côté de la carte, par rapport à la carte.`), `panePosition`, [
-      [`right`, t(`À droite de la carte`)],
-      [`left`, t(`À gauche de la carte`)],
-      [`top`, t(`Au-dessus de la carte`)],
-      [`bottom`, t(`En dessous de la carte`)],
-    ], (v) => v as PanePosition);
     this.toggle(el, t(`Passer directement à la saisie au clic sur un titre`), t(`Désactivé : un clic sur un titre de la carte amène la note au chapitre sans quitter la carte, et Entrée passe à la saisie. Activé : le clavier passe aussitôt dans la note.`), `focusNoteOnSelect`);
     this.dropdown(el, t(`Position du curseur à l'ouverture d'un paragraphe`), t(`S'applique à la sélection d'un titre dans la carte. Par défaut, le curseur est à la fin du texte du chapitre pour le compléter.`), `cursorPosition`, [
       [`last`, t(`Là où la saisie s'était arrêtée`)],
@@ -265,26 +239,6 @@ export class MmSettingTab extends PluginSettingTab {
       [`end`, t(`À la fin du paragraphe`)],
     ], (v) => v as CursorPosition);
     this.toggle(el, t(`Masquer les commentaires de la carte dans la note`), t(`Les étiquettes, le titre court, le commentaire et les styles d'un titre sont conservés dans une ligne de commentaire sous le titre (%% mmw ... %%). Activé : cette ligne n'apparaît pas dans la note. Désactivé : elle reste visible.`), `hideMetaLines`);
-  }
-
-  private buildActive(el: HTMLElement): void {
-    const s = this.plugin.settings;
-    this.toggle(el, t(`Griser les chapitres inactifs dans la note`), t(`Le chapitre qui contient le curseur reste en contraste normal, les autres sont grisés mais lisibles. S'applique à l'éditeur (modes Édition et Aperçu en direct) de la note reliée à la carte.`), `contrastEnabled`);
-    this.toggle(el, t(`Masquer les chapitres inactifs dans la note`), t(`Activé : la note ne montre que le chapitre actif. Les autres chapitres restent dans le fichier et réapparaissent en sélectionnant leur titre dans la carte. Désactivé : ils sont seulement grisés.`), `hideInactive`);
-    new Setting(el)
-      .setName(t(`Contraste des chapitres inactifs`))
-      .setDesc(t(`Plus la valeur est basse, plus le texte inactif est clair.`))
-      .addSlider((sl) =>
-        sl
-          .setLimits(15, 90, 5)
-          .setValue(Math.round(s.inactiveOpacity * 100))
-          .setDynamicTooltip()
-          .onChange(async (v) => {
-            s.inactiveOpacity = v / 100;
-            await this.plugin.saveSettings();
-          })
-      );
-    this.toggle(el, t(`Inclure les dépendances dans le chapitre actif`), t(`Désactivé : seul le titre où se trouve le curseur et son texte sont actifs. Activé : ses sous-titres le sont aussi.`), `includeSubtitles`);
   }
 
   private buildFixed(el: HTMLElement): void {
