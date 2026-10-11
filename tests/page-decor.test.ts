@@ -319,34 +319,72 @@ const textsOf = (note: string): { x: number; text: string }[] => {
   return (c.pages[0].decor ?? []).flatMap((i) => (i.kind === `text` ? [{ x: i.x, text: i.text }] : []));
 };
 
-test(`un texte unique est aligne a gauche, au centre, a droite ou justifie sur toute la largeur`, async () => {
+test(`chaque zone aligne son texte dans sa case : a gauche, au centre, a droite ou justifie`, async () => {
   const { measureText } = await import(`../src/export/font-metrics`);
+  const left = 72;
+  const right = 595.28 - 72;
+  const third = (right - left) / 3;
+  const width = (text: string): number => measureText(text, 10, `regular`).width;
   const note = (align: `left` | `center` | `right` | `justify`): string =>
     noteWith((c) => {
-      c.header.align = align;
+      c.header.zones.center = `Bonjour le monde`;
+      c.header.aligns.center = align;
+    }, `# Titre\n\nTexte.`);
+  // La zone du milieu occupe le tiers central de la ligne.
+  const a = left + third;
+  const b = a + third;
+  assert.ok(Math.abs(textsOf(note(`left`))[0].x - a) < 0.01);
+  assert.ok(Math.abs(textsOf(note(`center`))[0].x - ((a + b) / 2 - width(`Bonjour le monde`) / 2)) < 0.01);
+  assert.ok(Math.abs(textsOf(note(`right`))[0].x - (b - width(`Bonjour le monde`))) < 0.01);
+  const j = textsOf(note(`justify`));
+  assert.deepEqual(j.map((w) => w.text), [`Bonjour`, `le`, `monde`]);
+  assert.ok(Math.abs(j[0].x - a) < 0.01);
+  assert.ok(Math.abs(j[2].x + width(`monde`) - b) < 0.01);
+});
+
+test(`les alignements par defaut gardent la place des trois zones d'avant`, async () => {
+  const { measureText } = await import(`../src/export/font-metrics`);
+  const t = textsOf(noteWith((c) => {
+    c.footer.zones.left = `G`;
+    c.footer.zones.center = `Milieu`;
+    c.footer.zones.right = `D`;
+  }, `# Titre\n\nTexte.`));
+  const w = (s: string): number => measureText(s, 10, `regular`).width;
+  const byText = (s: string): number => t.find((i) => i.text === s)!.x;
+  assert.ok(Math.abs(byText(`G`) - 72) < 0.01);
+  assert.ok(Math.abs(byText(`Milieu`) - (595.28 / 2 - w(`Milieu`) / 2)) < 0.01);
+  assert.ok(Math.abs(byText(`D`) - (595.28 - 72 - w(`D`))) < 0.01);
+});
+
+test(`une seule case : le texte du milieu s'etale sur toute la largeur, justifie ou non`, async () => {
+  const { measureText } = await import(`../src/export/font-metrics`);
+  const note = (align: `left` | `justify`): string =>
+    noteWith((c) => {
+      c.header.single = true;
       c.header.zones.center = `Bonjour le monde`;
       c.header.zones.left = `ignore`;
+      c.header.aligns.center = align;
     }, `# Titre\n\nTexte.`);
   const left = 72;
   const right = 595.28 - 72;
-  const width = measureText(`Bonjour le monde`, 10, `regular`).width;
-  const l = textsOf(note(`left`));
-  assert.equal(l.length, 1);
-  assert.ok(Math.abs(l[0].x - left) < 0.01);
-  const c = textsOf(note(`center`));
-  assert.ok(Math.abs(c[0].x - ((left + right) / 2 - width / 2)) < 0.01);
-  const r = textsOf(note(`right`));
-  assert.ok(Math.abs(r[0].x - (right - width)) < 0.01);
-  // Justifie : le premier mot commence a la marge, le dernier finit a la marge ; le texte des autres zones est ignore.
+  assert.ok(Math.abs(textsOf(note(`left`))[0].x - left) < 0.01);
   const j = textsOf(note(`justify`));
-  assert.deepEqual(j.map((w) => w.text), [`Bonjour`, `le`, `monde`]);
+  assert.equal(j.length, 3);
   assert.ok(Math.abs(j[0].x - left) < 0.01);
   assert.ok(Math.abs(j[2].x + measureText(`monde`, 10, `regular`).width - right) < 0.01);
 });
 
-test(`la disposition d'une bande est ecrite dans la note et relue`, () => {
+test(`la disposition d'une bande est ecrite dans la note, relue, et l'ancien champ align est compris`, () => {
   const c = defaultConfig();
-  c.footer.align = `justify`;
-  assert.equal(parsePageMarker(formatPageMarker(c))?.footer.align, `justify`);
-  assert.equal(sanitizeConfig({ header: { align: `n-importe-quoi` } }).header.align, `zones`);
+  c.footer.single = true;
+  c.footer.aligns.left = `justify`;
+  const back = parsePageMarker(formatPageMarker(c))!;
+  assert.equal(back.footer.single, true);
+  assert.equal(back.footer.aligns.left, `justify`);
+  assert.equal(sanitizeConfig({ header: { aligns: { left: `n-importe-quoi` } } }).header.aligns.left, `left`);
+  // Notes de la version 0.26.9 : un texte unique avec cet alignement.
+  const old = sanitizeConfig({ header: { align: `right` } }).header;
+  assert.equal(old.single, true);
+  assert.equal(old.aligns.center, `right`);
+  assert.equal(sanitizeConfig({ header: { align: `zones` } }).header.single, false);
 });

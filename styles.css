@@ -2868,10 +2868,17 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   width: 6em;
 }
 
-/* Disposition du texte d'une bande : trois zones, ou un texte unique aligne ou justifie. */
+/* Alignement du texte dans la case d'une zone : quatre boutons a droite de son nom. */
+.mmw-pzone-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .mmw-palign {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .mmw-palign-button.is-active {

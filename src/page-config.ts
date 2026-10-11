@@ -47,13 +47,24 @@ export const FRAME_MAX_PADDING = 20;
 export const DISTANCE_MAX_MM = 60;
 export const POINTS_PER_MM = 72 / 25.4;
 
-// Layout of the text of a band: three zones (left, centre, right) or a single text over the whole width, aligned or justified.
-export type BandAlign = `zones` | `left` | `center` | `right` | `justify`;
-export const BAND_ALIGNS: BandAlign[] = [`zones`, `left`, `center`, `right`, `justify`];
+// Alignment of the text inside the box of a zone: left, centre, right, or justified (the spaces are stretched over the whole box).
+export type ZoneAlign = `left` | `center` | `right` | `justify`;
+export const ZONE_ALIGNS: ZoneAlign[] = [`left`, `center`, `right`, `justify`];
+
+export interface ZoneAligns {
+  left: ZoneAlign;
+  center: ZoneAlign;
+  right: ZoneAlign;
+}
+
+// Alignment of each zone when the user has not chosen: the left zone to the left, the centre zone centred, the right zone to the right.
+export const defaultAligns = (): ZoneAligns => ({ left: `left`, center: `center`, right: `right` });
 
 export interface Band {
-  // `zones`: the three zones. Another value: only the text of the centre zone is used, over the whole width, with this alignment.
-  align: BandAlign;
+  // False: three zones, each in a third of the line. True: a single box over the whole line, which holds the text of the centre zone.
+  single: boolean;
+  // How the text is aligned inside each box (with a single box, the alignment of the centre zone is used).
+  aligns: ZoneAligns;
   // Zones des pages de droite (recto), ou de toutes les pages.
   zones: Zones;
   // Pages de gauche differentes de celles de droite : `verso` donne les zones des pages de gauche.
@@ -99,7 +110,8 @@ export const defaultFrame = (): ZoneFrame => ({ shape: `none`, fill: `#fff3bf`, 
 
 export function defaultBand(): Band {
   return {
-    align: `zones`,
+    single: false,
+    aligns: defaultAligns(),
     zones: emptyZones(),
     mirror: false,
     verso: emptyZones(),
@@ -154,7 +166,18 @@ function framesOf(v: unknown): Frames {
 
 function bandOf(v: unknown): Band {
   const r = isObject(v) ? v : {};
-  return { align: pick(r.align, BAND_ALIGNS, `zones`), zones: zonesOf(r.zones), mirror: flag(r.mirror, false), verso: zonesOf(r.verso), rule: flag(r.rule, false), pageShape: shapeOf(r.pageShape),
+  const aligns = isObject(r.aligns) ? r.aligns : {};
+  const d = defaultAligns();
+  // Notes written by version 0.26.9 hold `align` (a single text with this alignment): it is read as a single box with that alignment.
+  const legacy = typeof r.align === `string` && (ZONE_ALIGNS as string[]).includes(r.align) ? (r.align as ZoneAlign) : undefined;
+  return {
+    single: flag(r.single, legacy !== undefined),
+    aligns: { left: pick(aligns.left, ZONE_ALIGNS, d.left), center: pick(aligns.center, ZONE_ALIGNS, legacy ?? d.center), right: pick(aligns.right, ZONE_ALIGNS, d.right) },
+    zones: zonesOf(r.zones),
+    mirror: flag(r.mirror, false),
+    verso: zonesOf(r.verso),
+    rule: flag(r.rule, false),
+    pageShape: shapeOf(r.pageShape),
     pageUpright: flag(r.pageUpright, true),
     frames: framesOf(r.frames),
     distance: typeof r.distance === `number` && Number.isFinite(r.distance) ? Math.min(DISTANCE_MAX_MM, Math.max(0, r.distance)) : null,
@@ -183,7 +206,7 @@ export function sanitizeConfig(raw: unknown): PageConfig {
 
 // Une bande (en-tete ou pied de page) existe des qu'une de ses zones est remplie : il n'y a pas d'interrupteur.
 export function bandUsed(band: Band): boolean {
-  const filled = (z: Zones): boolean => (band.align === `zones` ? [z.left, z.center, z.right] : [z.center]).some((s) => s.trim() !== ``);
+  const filled = (z: Zones): boolean => (band.single ? [z.center] : [z.left, z.center, z.right]).some((s) => s.trim() !== ``);
   return filled(band.zones) || (band.mirror && filled(band.verso));
 }
 
