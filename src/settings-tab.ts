@@ -53,6 +53,7 @@ export class MmSettingTab extends PluginSettingTab {
     this.chapter(`mindmap`, t(`Vue Mindmap`), t(`Cases, branches, traits, police et contraste de la carte mentale`), (el) => this.buildMindmap(el));
     this.chapter(`writing`, t(`Rédaction`), t(`Position de la note, curseur et commentaires du plugin`), (el) => this.buildWriting(el));
     this.chapter(`fixed`, t(`Notes fixes`), t(`Copies d'un chapitre dans leur propre volet`), (el) => this.buildFixed(el));
+    this.chapter(`zen`, t(`Mode Zen`), t(`Plein écran, largeur de la liste, durée d'affichage et fenêtre d'explication`), (el) => this.buildZen(el));
     this.chapter(`floats`, t(`Sujets flottants`), t(`Sujets de notes libres, hors de la carte : niveau, forme, couleurs`), (el) => this.buildFloats(el));
     this.chapter(`links`, t(`Liens et icônes`), t(`Icônes et couleurs des repères de liens`), (el) => this.buildLinks(el));
     this.chapter(`notes`, t(`Nouvelles notes`), t(`Dossier des notes créées depuis la carte`), (el) => this.buildNotes(el));
@@ -119,7 +120,7 @@ export class MmSettingTab extends PluginSettingTab {
       });
   }
 
-  private slider(el: HTMLElement, name: string, desc: string, field: `maxWidth` | `compactness` | `selectionContrast` | `strokeWidth` | `fontScale`, min: number, max: number, step: number): void {
+  private slider(el: HTMLElement, name: string, desc: string, field: `maxWidth` | `compactness` | `selectionContrast` | `strokeWidth` | `fontScale` | `zenListPercent` | `zenPeekSeconds`, min: number, max: number, step: number): void {
     const s = this.plugin.settings;
     new Setting(el)
       .setName(name)
@@ -238,8 +239,15 @@ export class MmSettingTab extends PluginSettingTab {
       [`start`, t(`Au début du paragraphe`)],
       [`end`, t(`À la fin du paragraphe`)],
     ], (v) => v as CursorPosition);
-    this.toggle(el, t(`Expliquer le mode Zen à l'entrée`), t(`Affiche la fenêtre d'explication à chaque entrée dans le mode Zen.`), `zenIntro`);
     this.toggle(el, t(`Masquer les commentaires de la carte dans la note`), t(`Les étiquettes, le titre court, le commentaire et les styles d'un titre sont conservés dans une ligne de commentaire sous le titre (%% mmw ... %%). Activé : cette ligne n'apparaît pas dans la note. Désactivé : elle reste visible.`), `hideMetaLines`);
+  }
+
+  private buildZen(el: HTMLElement): void {
+    this.toggle(el, t(`Expliquer le mode Zen à l'entrée`), t(`Affiche la fenêtre d'explication à chaque entrée dans le mode Zen.`), `zenIntro`);
+    this.toggle(el, t(`Plein écran`), t(`Le mode Zen passe Obsidian en plein écran. Désactivé : la fenêtre garde sa taille et Échap sort du mode.`), `zenFullscreen`);
+    this.toggle(el, t(`Liste en noir et blanc`), t(`La liste des titres s'affiche sans couleur dans le mode Zen. La vue d'avant est rétablie à la sortie.`), `zenBlackWhite`);
+    this.slider(el, t(`Largeur de la liste`), t(`Part de la largeur occupée par la liste, en pourcentage.`), `zenListPercent`, 15, 50, 5);
+    this.slider(el, t(`Durée d'affichage de la liste`), t(`Temps, en secondes, pendant lequel une liste masquée reste affichée après Cmd ou Ctrl + Maj + Entrée.`), `zenPeekSeconds`, 1, 10, 1);
   }
 
   private buildFixed(el: HTMLElement): void {
