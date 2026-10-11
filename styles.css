@@ -382,9 +382,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   min-width: 34px;
-  height: 34px;
-  padding: 0 8px;
+  max-width: 100%;
+  height: auto;
+  min-height: 34px;
+  padding: 4px 8px;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
   border: none;
   border-radius: 8px;
   background: var(--background-modifier-hover);
@@ -457,8 +463,13 @@
 }
 
 .mmw-reset {
+  box-sizing: border-box;
   width: 100%;
+  height: auto;
+  min-height: 34px;
   margin-top: 2px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* Menu burger */
@@ -492,10 +503,8 @@
 .mmw-menu-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
   font-size: 0.93em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .mmw-menu-heading {
@@ -1239,28 +1248,18 @@
   pointer-events: none;
 }
 
-/* Griser et Dependances cote a cote dans le menu de l'oeil. */
+/* Griser et Dependances cote a cote dans le menu de l'oeil ; a la ligne quand le volet est trop etroit. */
 .mmw-menu-pair {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
 }
 
 .mmw-menu-pair .mmw-menu-item {
   width: auto;
-  flex: 0 0 auto;
-  min-width: 0;
+  flex: 1 1 auto;
   gap: 6px;
   padding: 7px 6px;
-}
-
-/* Dependances prend la place restante : son nom n'est pas coupe. */
-.mmw-menu-pair .mmw-menu-item:last-child {
-  flex: 1 1 auto;
-}
-
-.mmw-menu-pair .mmw-menu-label {
-  flex: none;
-  overflow: visible;
 }
 
 /* Etiquettes au survol : nom du bouton puis description */
