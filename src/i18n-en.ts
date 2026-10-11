@@ -133,7 +133,7 @@ const PAIRS: [string, string][] = [
   [`Largeur {0}`, `Width {0}`],
   [`Lignes`, `Lines`],
   [`Unies`, `Plain`],
-  [`Une sur deux foncée`, `Every other one darker`],
+  [`Alternées`, `Alternating`],
   [`Réinitialiser l'apparence`, `Reset the appearance`],
   [`Trait`, `Stroke`],
   [`Arrière-plan`, `Background`],
