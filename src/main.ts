@@ -5,6 +5,7 @@ import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
+import { ZenMode } from "./zen";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
 import { DiagnosticModal } from "./diagnostic-modal";
@@ -54,6 +55,8 @@ export default class MindmapWritingPlugin extends Plugin {
   functions = new FunctionRegistry<FunctionContext>();
   helpEntries = new HelpRegistry();
   panel = new ButtonPanel(this);
+  // Zen mode: full screen, list of titles on the left, note on the right.
+  zen = new ZenMode(this);
   // Polices ajoutees au coffre (dossier des polices).
   fonts = new FontStore(this.app, () => this.settings.fontFolder);
   // Profils : copies nommees des reglages, gardees dans le coffre.
@@ -492,6 +495,12 @@ export default class MindmapWritingPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: `toggle-zen`,
+      name: t(`Mode Zen : entrer ou sortir`),
+      callback: () => void this.zen.toggle(),
+    });
+
+    this.addCommand({
       id: `open-mindmap-view`,
       name: t(`Ouvrir la carte de la note active`),
       callback: () => {
@@ -502,6 +511,7 @@ export default class MindmapWritingPlugin extends Plugin {
   }
 
   onunload() {
+    this.zen.exit();
     if (this.settingsLoaded) void this.saveData(this.settings);
     this.fonts.destroy();
     this.forEachView((v) => v.clearActive());
@@ -1142,12 +1152,12 @@ export default class MindmapWritingPlugin extends Plugin {
   // (a gauche par defaut) : elle ne reste pas cachee derriere la carte.
   // Donne au volet de la liste une part etroite de la largeur (le reste va a la note) ; on l'ajuste ensuite a la souris. Obsidian
   // ne propose pas d'API pour cela : la part de chaque volet est lue dans ses reglages internes, et un echec est sans consequence.
-  private narrowPane(list: WorkspaceLeaf, note: WorkspaceLeaf): void {
+  narrowPane(list: WorkspaceLeaf, note: WorkspaceLeaf, percent: number = LIST_PANE_PERCENT): void {
     type Item = { setDimension?: (percent: number) => void; containerEl?: HTMLElement };
     try {
       const shares: [Item | undefined, number][] = [
-        [(list as unknown as { parent?: Item }).parent, LIST_PANE_PERCENT],
-        [(note as unknown as { parent?: Item }).parent, 100 - LIST_PANE_PERCENT],
+        [(list as unknown as { parent?: Item }).parent, percent],
+        [(note as unknown as { parent?: Item }).parent, 100 - percent],
       ];
       for (const [item, percent] of shares) {
         if (!item) continue;

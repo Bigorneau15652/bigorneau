@@ -72,6 +72,8 @@ export interface MapCallbacks {
   // Notes du coffre proposees pour un lien (chemins) et titres d'une note.
   // Cree une note fixe avec le titre selectionne.
   onAddFixed?: () => void;
+  // Zen mode.
+  onZen?: () => void;
   getVaultFiles?: () => string[];
   getHeadings?: (path: string) => Promise<HeadingItem[]>;
   // Creation d'une note qui n'existe pas encore (renvoie son chemin) et dossier prevu pour elle.
@@ -277,6 +279,7 @@ export class MapRenderer {
       back: () => this.callbacks.onBack?.(),
       toggleView: () => this.callbacks.onChange({ viewMode: this.isList() ? `map` : `list` }),
       addFixed: () => this.callbacks.onAddFixed?.(),
+      zen: () => this.callbacks.onZen?.(),
     });
 
     this.statusEl = createEl(`div`);
