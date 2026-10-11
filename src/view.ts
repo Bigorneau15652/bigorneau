@@ -1173,10 +1173,33 @@ export class MindmapView extends ItemView {
     return this.selectQueue;
   }
 
+  // Tab that already shows this file and belongs to neither a fixed note nor another map; null when there is none. A tab that Obsidian
+  // has not loaded yet (restored at startup) is recognised by its saved state and loaded.
+  private async findOpenNote(file: TFile): Promise<WorkspaceLeaf | null> {
+    const ws = this.app.workspace;
+    const taken = new Set<WorkspaceLeaf>();
+    for (const f of this.plugin.fixed) if (f.leaf) taken.add(f.leaf);
+    for (const l of ws.getLeavesOfType(VIEW_TYPE_MINDMAP)) {
+      if (l.view instanceof MindmapView && l.view !== this && l.view.getNoteLeaf()) taken.add(l.view.getNoteLeaf()!);
+    }
+    for (const l of ws.getLeavesOfType(`markdown`)) {
+      if (taken.has(l) || l === this.leaf) continue;
+      const v = l.view;
+      const path = v instanceof MarkdownView ? v.file?.path : l.isDeferred ? (l.getViewState().state as { file?: string } | undefined)?.file : undefined;
+      if (path !== file.path) continue;
+      if (l.isDeferred) await l.loadIfDeferred();
+      return l;
+    }
+    return null;
+  }
+
   private async ensureNoteLeaf(file: TFile): Promise<WorkspaceLeaf> {
     const ws = this.app.workspace;
     let leaf = this.noteLeaf;
     if (leaf && !ws.getLeavesOfType(`markdown`).includes(leaf)) leaf = null;
+    // A note already open in a tab (for example when Obsidian starts with the map restored from the last session) is used
+    // instead of opening a second window for the same note.
+    if (!leaf) leaf = await this.findOpenNote(file);
     if (!leaf) {
       const pos = this.plugin.settings.panePosition;
       const direction = pos === `right` || pos === `left` ? `vertical` : `horizontal`;

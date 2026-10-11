@@ -576,9 +576,11 @@ export class MapControls {
     return b;
   }
 
-  private menuToggle(label: string, value: boolean, fn: (v: boolean) => void): HTMLElement {
+  // hint : explication affichee au survol (etiquette), sous le nom de la ligne.
+  private menuToggle(label: string, value: boolean, fn: (v: boolean) => void, hint?: string): HTMLElement {
     const b = h(`button`, `mmw-menu-item`);
     b.type = `button`;
+    if (hint) tip(b, label, hint);
     const box = h(`span`, `mmw-check` + (value ? ` mmw-checked` : ``));
     setSvg(box, value ? ICONS.check : ``);
     b.append(box, h(`span`, `mmw-menu-label`, label));
@@ -643,26 +645,25 @@ export class MapControls {
 
     menu.append(
       heading(t(`Visible sur la carte`)),
-      this.menuToggle(t(`Étiquettes`), s.showTags, (v) => a.change({ showTags: v })),
-      this.menuToggle(t(`Bulles de commentaire`), s.showComments, (v) => a.change({ showComments: v })),
-      this.menuToggle(t(`Liens web (mappemonde)`), s.showWebLinks, (v) => a.change({ showWebLinks: v })),
-      this.menuToggle(s.viewMode === `list` ? t(`Repère : autres notes`) : t(`Liens vers d'autres notes`), s.showExternalLinks, (v) => a.change({ showExternalLinks: v })),
-      this.menuToggle(s.viewMode === `list` ? t(`Repère : liens dans la note`) : t(`Liens dans la note (flèches)`), s.showInternalLinks, (v) => a.change({ showInternalLinks: v })),
+      this.menuToggle(t(`Étiquettes`), s.showTags, (v) => a.change({ showTags: v }), t(`Affiche les étiquettes colorées à côté des titres.`)),
+      this.menuToggle(t(`Bulles de commentaire`), s.showComments, (v) => a.change({ showComments: v }), t(`Affiche un repère sur les titres qui ont un commentaire.`)),
+      this.menuToggle(t(`Liens web (mappemonde)`), s.showWebLinks, (v) => a.change({ showWebLinks: v }), t(`Affiche le repère des liens web et des vidéos intégrées.`)),
+      this.menuToggle(s.viewMode === `list` ? t(`Repère : autres notes`) : t(`Liens vers d'autres notes`), s.showExternalLinks, (v) => a.change({ showExternalLinks: v }), t(`Affiche les cases des notes liées. Désactivé : un repère coloré les remplace.`)),
+      this.menuToggle(s.viewMode === `list` ? t(`Repère : liens dans la note`) : t(`Liens dans la note (flèches)`), s.showInternalLinks, (v) => a.change({ showInternalLinks: v }), t(`Affiche les flèches entre titres. Désactivé : un repère coloré les remplace.`)),
       h(`div`, `mmw-menu-sep`),
       heading(t(`Couleurs`)),
-      this.menuToggle(t(`Vue noir et blanc`), s.blackWhite, (v) => a.change({ blackWhite: v })),
-      ...(s.viewMode === `list` ? [] : [this.menuToggle(t(`Flèches toujours colorées`), s.linkColored, (v) => a.change({ linkColored: v }))]),
+      this.menuToggle(t(`Vue noir et blanc`), s.blackWhite, (v) => a.change({ blackWhite: v }), t(`Affiche la carte sans couleur.`)),
+      ...(s.viewMode === `list` ? [] : [this.menuToggle(t(`Flèches toujours colorées`), s.linkColored, (v) => a.change({ linkColored: v }), t(`Les flèches prennent en permanence la couleur des liens du thème. Sinon elles sont neutres et prennent la couleur quand on les sélectionne.`))]),
       h(`div`, `mmw-menu-sep`),
       heading(t(`Chapitres inactifs de la note`))
     );
     // Griser et inclure les dependances cote a cote, puis masquer.
     const pair = h(`div`, `mmw-menu-pair`);
     pair.append(
-      this.menuToggle(t(`Griser`), s.contrastEnabled, (v) => a.change({ contrastEnabled: v })),
-      this.menuToggle(t(`Dépendances`), s.includeSubtitles, (v) => a.change({ includeSubtitles: v }))
+      this.menuToggle(t(`Griser`), s.contrastEnabled, (v) => a.change({ contrastEnabled: v }), t(`Grise, dans la note, les chapitres autres que le chapitre actif. Leur texte reste lisible.`)),
+      this.menuToggle(t(`Dépendances`), s.includeSubtitles, (v) => a.change({ includeSubtitles: v }), t(`Le chapitre actif comprend aussi ses sous-titres, qui ne sont alors ni grisés ni masqués.`))
     );
-    pair.title = t(`Dépendances : le chapitre actif comprend aussi ses sous-titres, qui ne sont alors ni grisés ni masqués.`);
-    menu.append(pair, this.menuToggle(t(`Masquer les chapitres inactifs`), s.hideInactive, (v) => a.change({ hideInactive: v })));
+    menu.append(pair, this.menuToggle(t(`Masquer les chapitres inactifs`), s.hideInactive, (v) => a.change({ hideInactive: v }), t(`La note ne montre que le chapitre actif. Les autres chapitres restent dans le fichier.`)));
 
     const contrast = h(`div`, `mmw-menu-row`);
     contrast.append(h(`div`, `mmw-menu-title`, t(`Contraste des chapitres grisés`)));
