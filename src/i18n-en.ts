@@ -583,8 +583,6 @@ const PAIRS: [string, string][] = [
   [`Tableau : insérer une colonne à gauche`, `Table: insert a column on the left`],
   [`Tableau : supprimer la ligne`, `Table: delete the row`],
   [`Tableau : supprimer la colonne`, `Table: delete the column`],
-  [`Décrire les tableaux de la note (diagnostic)`, `Describe the tables of the note (diagnostic)`],
-  [`Description copiée dans le presse-papiers : {0} tableau(x).`, `Description copied to the clipboard: {0} table(s).`],
   [`Ligne d'en-tête foncée, écriture blanche`, `Dark header row, white text`],
   [`Alternance de lignes légèrement contrastée`, `Alternating rows, slightly contrasted`],
   [`Nom du tableau, à renseigner au-dessus du tableau`, `Table name, to fill in above the table`],
