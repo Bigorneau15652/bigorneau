@@ -473,12 +473,22 @@
 }
 
 /* Menu burger */
+/* Menus : une colonne, avec un petit espace entre les lignes. */
+.mmw-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .mmw-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
+  box-sizing: border-box;
   width: 100%;
   height: auto;
+  min-height: 32px;
+  white-space: normal;
   padding: 7px 8px;
   border: none;
   border-radius: 8px;
@@ -505,6 +515,7 @@
   min-width: 0;
   font-size: 0.93em;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .mmw-menu-heading {
