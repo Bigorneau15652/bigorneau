@@ -30,7 +30,7 @@ export class IllustrationListModal extends Modal {
       const here = present.includes(kind);
       new Setting(contentEl)
         .setName(name)
-        .setDesc(here ? t(`Présente dans la note.`) : t(`Absente de la note.`))
+        .setDesc(here ? `${t(`Présente dans la note.`)} ${t(`Une seule liste de ce genre par note : « Placer ici » la déplace.`)}` : t(`Absente de la note.`))
         .addButton((b) =>
           b.setButtonText(here ? t(`Placer ici`) : t(`Ajouter ici`)).onClick(() => {
             this.host.place(kind);

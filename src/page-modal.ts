@@ -4,9 +4,12 @@
 import { App, ColorComponent, Modal, Setting, TextComponent } from "obsidian";
 import { imageFile, ImagePicker } from "./image-picker";
 import { t } from "./i18n";
+import { renderLayoutTab } from "./layout-modal";
 import { Band, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
 
-export type PageTab = `header` | `footer` | `edge`;
+// Tabs of the window: the sheet (format, margins, columns) and the three bands of the page.
+export type BandTab = `header` | `footer` | `edge`;
+export type PageTab = BandTab | `sheet`;
 
 export interface PageModalHost {
   // Reglages actuels de la note, et ecriture des nouveaux.
@@ -48,6 +51,7 @@ export class PageModal extends Modal {
     this.repaints = [];
     const tabs = contentEl.createDiv({ cls: `mmw-ptabs` });
     const names: [PageTab, string][] = [
+      [`sheet`, t(`Feuille`)],
       [`header`, t(`En-tête`)],
       [`footer`, t(`Pied de page`)],
       [`edge`, t(`Bord extérieur`)],
@@ -60,6 +64,13 @@ export class PageModal extends Modal {
         this.tab = id;
         this.render();
       });
+    }
+    // Sheet tab: the layout choices write into the note themselves; the window only keeps its copy up to date.
+    if (this.tab === `sheet`) {
+      renderLayoutTab(contentEl.createDiv(), this.host, (layout) => {
+        this.config.layout = layout;
+      });
+      return;
     }
     const author = this.host.author;
     if (author) {
@@ -87,16 +98,16 @@ export class PageModal extends Modal {
         .setWarning()
         .onClick(() => {
           // Only the band shown is emptied: the sheet format, the columns, the paragraphs and the fonts of the note are kept.
-          this.config[this.tab] = defaultBand();
+          if (this.tab !== `sheet`) this.config[this.tab] = defaultBand();
           this.save();
           this.render();
         })
     );
   }
 
-  private renderBand(parent: HTMLElement, which: PageTab): void {
+  private renderBand(parent: HTMLElement, which: BandTab): void {
     const band: Band = this.config[which];
-    const notes: Record<PageTab, string> = {
+    const notes: Record<BandTab, string> = {
       header: t(`L'en-tête apparaît dès qu'une zone est remplie.`),
       footer: t(`Le pied de page apparaît dès qu'une zone est remplie.`),
       edge: t(`Le bord extérieur apparaît dès qu'une zone est remplie : le texte y est écrit à 90 degrés, à droite des pages de droite et à gauche des pages de gauche.`),
@@ -129,7 +140,7 @@ export class PageModal extends Modal {
   }
 
   // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande : un chapitre a deplier.
-  private shapeSettings(parent: HTMLElement, band: Band, which: PageTab): void {
+  private shapeSettings(parent: HTMLElement, band: Band, which: BandTab): void {
     const shape = band.pageShape;
     const details = parent.createEl(`details`, { cls: `mmw-pdetails` });
     details.createEl(`summary`, { text: t(`Numéro de page dans cette bande`) });
@@ -196,7 +207,7 @@ export class PageModal extends Modal {
   }
 
   // Cadres de couleur derriere le texte de chaque zone : un chapitre a deplier.
-  private frameSettings(parent: HTMLElement, band: Band, which: PageTab): void {
+  private frameSettings(parent: HTMLElement, band: Band, which: BandTab): void {
     const details = parent.createEl(`details`, { cls: `mmw-pdetails` });
     details.createEl(`summary`, { text: t(`Cadre de couleur derrière le texte`) });
     details.createDiv({ cls: `mmw-pnote`, text: t(`Chaque zone peut avoir son cadre, ajusté à son texte. Le texte de la couleur choisie remplace la couleur habituelle ; vide : couleur habituelle.`) });
@@ -235,8 +246,8 @@ export class PageModal extends Modal {
   }
 
   // Distance entre le bord de la page et la bande : vide, la place habituelle.
-  private distanceSetting(parent: HTMLElement, band: Band, which: PageTab): void {
-    const desc: Record<PageTab, string> = {
+  private distanceSetting(parent: HTMLElement, band: Band, which: BandTab): void {
+    const desc: Record<BandTab, string> = {
       header: t(`Distance entre le haut de la page et l'en-tête (cadre compris). Vide : place habituelle.`),
       footer: t(`Distance entre le bas de la page et le pied de page (cadre compris). Vide : place habituelle.`),
       edge: t(`Distance entre le bord de la page et le texte du côté (cadre compris) : 0 colle le texte ou son cadre au bord. Vide : place habituelle.`),
