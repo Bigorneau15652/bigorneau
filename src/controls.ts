@@ -72,9 +72,10 @@ const ICONS: Record<string, string> = {
   back: svg(`<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>`),
   list: svg(`<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>`),
   network: svg(`<rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="5" rx="1"/><rect x="14" y="17" width="7" height="4" rx="1"/><path d="M6 8v10a1 1 0 0 0 1 1h7M6 12h8"/>`),
-  // A small figure sitting cross-legged in meditation.
-  zen: svg(`<circle cx="12" cy="5" r="2.2"/><path d="M8.5 10.2c1-.9 2.2-1.3 3.5-1.3s2.5.4 3.5 1.3"/><path d="M12 9.2v5.3"/><path d="M8.5 10.2 6.2 14.8M15.5 10.2l2.3 4.6"/><path d="M3.5 19.3c0-2.2 3.8-4.3 8.5-4.3s8.5 2.1 8.5 4.3c0 .8-.8 1.2-2 1.2h-13c-1.2 0-2-.4-2-1.2z"/>`),
-  eye: svg(`<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`),
+  // A figure sitting cross-legged in meditation: filled head, body and legs, arms resting on the knees.
+  zen: svg(
+    `<circle cx="12" cy="4.6" r="3" fill="currentColor" stroke="none"/><path d="M9 9c.9-.6 5.1-.6 6 0l.8 6.2H8.2z" fill="currentColor" stroke="none"/><path d="M8.6 10.4 3.8 14.6M15.4 10.4l4.8 4.2" stroke-width="2.4"/><path d="M2.4 19.2c0-1.4 1-2.3 2.4-2.1l8.4 1.6c1.2.3 1.3 1.4.4 2l-4.2 1.8c-3 .9-7 .6-7-3.3z" fill="currentColor" stroke="none"/><path d="M21.6 19.2c0-1.4-1-2.3-2.4-2.1l-8.4 1.6c-1.2.3-1.3 1.4-.4 2l4.2 1.8c3 .9 7 .6 7-3.3z" fill="currentColor" stroke="none" opacity=".85"/>`
+  ),  eye: svg(`<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`),
   trash: svg(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`, 16),
 };
 

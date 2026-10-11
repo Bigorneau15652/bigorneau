@@ -198,6 +198,11 @@ export interface MmSettings {
   foldersCreated: boolean;
   // Zen mode: show the window that explains the mode each time it starts.
   zenIntro: boolean;
+  // Zen mode: share of the width of the list (percent), time the list stays shown after Cmd + Shift + Enter (seconds), black and white, full screen.
+  zenListPercent: number;
+  zenPeekSeconds: number;
+  zenBlackWhite: boolean;
+  zenFullscreen: boolean;
   typography: TypographyStyle;
   // Panneau de boutons a droite de la zone de redaction : affichage, affichage sur tablette et telephone, ordre des boutons
   // (identifiants de fonctions) et boutons masques.
@@ -303,6 +308,10 @@ export const DEFAULT_SETTINGS: MmSettings = {
   profileFolder: `Bigorneau/Profils`,
   foldersCreated: false,
   zenIntro: true,
+  zenListPercent: 25,
+  zenPeekSeconds: 2,
+  zenBlackWhite: true,
+  zenFullscreen: true,
   typography: defaultTypography(),
   panelVisible: true,
   panelOrder: [],
@@ -424,6 +433,10 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.profileFolder = typeof merged.profileFolder === `string` && merged.profileFolder.trim() !== `` ? merged.profileFolder.trim().replace(/^\/+|\/+$/g, ``) : DEFAULT_SETTINGS.profileFolder;
   merged.foldersCreated = merged.foldersCreated === true;
   merged.zenIntro = merged.zenIntro !== false;
+  merged.zenBlackWhite = merged.zenBlackWhite !== false;
+  merged.zenFullscreen = merged.zenFullscreen !== false;
+  merged.zenListPercent = typeof merged.zenListPercent === `number` && Number.isFinite(merged.zenListPercent) ? Math.max(15, Math.min(50, merged.zenListPercent)) : DEFAULT_SETTINGS.zenListPercent;
+  merged.zenPeekSeconds = typeof merged.zenPeekSeconds === `number` && Number.isFinite(merged.zenPeekSeconds) ? Math.max(1, Math.min(10, merged.zenPeekSeconds)) : DEFAULT_SETTINGS.zenPeekSeconds;
   merged.fontFolder = typeof merged.fontFolder === `string` && merged.fontFolder.trim() !== `` ? merged.fontFolder.trim().replace(/^\/+|\/+$/g, ``) : DEFAULT_SETTINGS.fontFolder;
   merged.typography = sanitizeTypography(data.typography);
   merged.settingsVersion = SETTINGS_VERSION;

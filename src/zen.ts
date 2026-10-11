@@ -8,9 +8,7 @@ import type MindmapWritingPlugin from "./main";
 import { t } from "./i18n";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 
-// Share of the width given to the list, in percent.
-const ZEN_LIST_PERCENT = 25;
-// Time during which the corner button, or a list shown on request, stays visible, in milliseconds.
+// Time during which the corner button stays visible, in milliseconds.
 const SHOW_MS = 4000;
 // Side of the square of the top left corner in which the mouse makes the button appear, in pixels.
 const CORNER_SIZE = 64;
@@ -96,7 +94,7 @@ export class ZenMode {
     const ws = plugin.app.workspace;
     // The list is wanted from the start so that a map opened now is laid out with the note on its right.
     this.previous = { viewMode: plugin.settings.viewMode, blackWhite: plugin.settings.blackWhite };
-    await plugin.updateSettings({ viewMode: `list`, blackWhite: true });
+    await plugin.updateSettings({ viewMode: `list`, blackWhite: plugin.settings.zenBlackWhite ? true : plugin.settings.blackWhite });
     if (!ws.getLeavesOfType(VIEW_TYPE_MINDMAP)[0]) await plugin.activateView();
     const leaf = ws.getLeavesOfType(VIEW_TYPE_MINDMAP)[0];
     const view = leaf?.view;
@@ -107,7 +105,7 @@ export class ZenMode {
     this.view = view;
     await view.showNote();
     const noteLeaf = view.getNoteLeaf();
-    if (noteLeaf) plugin.narrowPane(leaf, noteLeaf, ZEN_LIST_PERCENT);
+    if (noteLeaf) plugin.narrowPane(leaf, noteLeaf, plugin.settings.zenListPercent);
 
     this.active = true;
     this.listHidden = false;
@@ -130,10 +128,12 @@ export class ZenMode {
     });
 
     // Full screen: without it, Escape is handled by the mode itself (see onKey).
-    try {
-      await doc.documentElement.requestFullscreen();
-    } catch {
-      // The window stays as it is: the mode works all the same.
+    if (plugin.settings.zenFullscreen) {
+      try {
+        await doc.documentElement.requestFullscreen();
+      } catch {
+        // The window stays as it is: the mode works all the same.
+      }
     }
     if (plugin.settings.zenIntro) new ZenIntroModal(plugin.app, plugin).open();
   }
@@ -202,7 +202,7 @@ export class ZenMode {
       if (!this.active || !this.listHidden) return;
       this.listTabs()?.addClass(`mmw-zen-list-hidden`);
       this.view?.focusNote();
-    }, SHOW_MS);
+    }, this.plugin.settings.zenPeekSeconds * 1000);
   }
 
   // Single button at the top left: it is only shown when the mouse comes near.
