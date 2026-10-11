@@ -14,7 +14,8 @@ import { PageZoneModal } from "./page-zone-modal";
 import { pageZoneAt, setPageZone } from "./page-zone";
 import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
 import { defaultParagraphSettings, isParagraphSet, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
-import type { OfficialScript } from "./scripts";
+import { MarksModal } from "./marks-modal";
+import type { OfficialScript, ScriptFunction } from "./scripts";
 import { TypographyHost, TypographyModal } from "./typography-modal";
 
 // `defaultAuthor` donne le reglage « Auteur du PDF » du plugin, propose quand la note n'a pas de propriete author.
@@ -95,7 +96,7 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
       },
     });
     // Quatrieme bouton : exception pour le seul paragraphe du curseur. Plus contraste quand ce paragraphe a une exception.
-    api.addFunction({
+    const markParagraph: ScriptFunction = {
       id: `page-paragraph`,
       name: { fr: `Ce paragraphe seulement : alignement et début`, en: `This paragraph only: alignment and start` },
       icon: [ICON_PARAGRAPH, `pilcrow`],
@@ -104,9 +105,11 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
       run: ({ editor }) => {
         if (editor) new ParagraphModal(api.app, paragraphHost(editor), `one`).open();
       },
-    });
+    };
+    // The button is replaced by the button « Marks »: the command stays in the palette.
+    api.addFunction({ ...markParagraph, button: false });
     // Cinquieme bouton : le bloc du curseur (grand tableau, grande image) passe en paysage ou en portrait.
-    api.addFunction({
+    const markZone: ScriptFunction = {
       id: `page-zone`,
       name: { fr: `Orientation de la page : paysage ou portrait pour un bloc`, en: `Page orientation: landscape or portrait for a block` },
       icon: [ICON_ORIENTATION, `rectangle-horizontal`],
@@ -124,7 +127,9 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
           },
         }).open();
       },
-    });
+    };
+    // The button is replaced by the button « Marks »: the command stays in the palette.
+    api.addFunction({ ...markZone, button: false });
     // Septieme bouton : polices, tailles, casse, soulignement et numerotation du corps de texte et des titres.
     api.addFunction({
       id: `page-typography`,
@@ -158,7 +163,7 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
       },
     });
     // Sixieme bouton : listes des figures et des tableaux, placees ou l'on veut par une etiquette cachee.
-    api.addFunction({
+    const markLists: ScriptFunction = {
       id: `page-lists`,
       name: { fr: `Listes des figures et des tableaux`, en: `Lists of figures and tables` },
       icon: [`gallery-vertical-end`, `list-ordered`, `list`],
@@ -176,6 +181,28 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
           place: (kind) => rewrite((text) => placeListMarker(text, offset(), kind)),
           remove: (kind) => rewrite((text) => removeListMarker(text, kind)),
         }).open();
+      },
+    };
+    // The button is replaced by the button « Marks »: the command stays in the palette.
+    api.addFunction({ ...markLists, button: false });
+    // Single button for the three marks: it opens a window that lists them.
+    const marks = [
+      { fn: markParagraph, description: { fr: `Alignement et début du paragraphe où se trouve le curseur, sans changer le reste de la note.`, en: `Alignment and start of the paragraph at the cursor, without changing the rest of the note.` } },
+      { fn: markZone, description: { fr: `Passe le bloc du curseur (grand tableau, grande image) en paysage ou en portrait.`, en: `Turns the block at the cursor (large table, large image) to landscape or portrait.` } },
+      { fn: markLists, description: { fr: `Place, déplace ou retire la liste des figures et la liste des tableaux.`, en: `Places, moves or removes the list of figures and the list of tables.` } },
+    ];
+    const pickText = (v: string | Record<`fr` | `en`, string>): string => (typeof v === `string` ? v : v[api.language()]);
+    api.addFunction({
+      id: `page-marks`,
+      name: { fr: `Repères : paragraphe, orientation d'un bloc et listes`, en: `Marks: paragraph, block orientation and lists` },
+      icon: [`bookmark`, `map-pin`, `pin`],
+      needsEditor: true,
+      active: (ctx) => marks.some((m) => m.fn.active?.(ctx) === true),
+      run: (ctx) => {
+        new MarksModal(
+          api.app,
+          marks.map((m) => ({ name: pickText(m.fn.name), description: pickText(m.description), active: m.fn.active?.(ctx) === true, run: () => void m.fn.run(ctx) }))
+        ).open();
       },
     });
   },
