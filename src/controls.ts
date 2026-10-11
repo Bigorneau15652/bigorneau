@@ -132,11 +132,13 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
 }
 
 // Etiquette affichee quand la souris survole l'element, et lue par les lecteurs d'ecran.
-function tip(el: HTMLElement, text: string, desc?: string): void {
+// named : faux pour une ligne de menu qui porte deja son nom en texte visible ; Obsidian n'ajoute alors pas sa propre bulle (qui doublerait la notre).
+function tip(el: HTMLElement, text: string, desc?: string, named = false): void {
   el.dataset.tip = text;
   if (desc) el.dataset.tipDesc = desc;
   else delete el.dataset.tipDesc;
-  el.setAttribute(`aria-label`, text);
+  if (named) el.removeAttribute(`aria-label`);
+  else el.setAttribute(`aria-label`, text);
   if (desc) el.setAttribute(`aria-description`, desc);
   else el.removeAttribute(`aria-description`);
 }
@@ -442,12 +444,33 @@ export class MapControls {
     if (el.dataset.tipDesc) t.append(h(`div`, `mmw-tip-desc`, el.dataset.tipDesc));
     t.style.display = `block`;
     const r = el.getBoundingClientRect();
+    // The label stays inside the pane of the map (the pane clips what goes outside), or inside the window.
     const view = el.ownerDocument.defaultView ?? window;
-    const left = Math.min(Math.max(r.left + r.width / 2 - t.offsetWidth / 2, 8), view.innerWidth - t.offsetWidth - 8);
-    let top = r.top - t.offsetHeight - 8;
-    if (top < 8) top = r.bottom + 8;
-    t.style.left = `${left}px`;
-    t.style.top = `${top}px`;
+    const area = owner.closest<HTMLElement>(`.mmw-map-host`)?.getBoundingClientRect();
+    const minX = (area?.left ?? 0) + 8;
+    const maxX = (area?.right ?? view.innerWidth) - 8;
+    const minY = (area?.top ?? 0) + 8;
+    const maxY = (area?.bottom ?? view.innerHeight) - 8;
+    // The label sits next to the open menu for a line of this menu, and above the button otherwise (viewport coordinates).
+    const popup = el.closest<HTMLElement>(`.mmw-popup`);
+    let left: number;
+    let top: number;
+    if (popup) {
+      const pr = popup.getBoundingClientRect();
+      left = pr.right + 6;
+      top = r.top;
+      if (left + t.offsetWidth > maxX) left = pr.left - t.offsetWidth - 6;
+    } else {
+      left = r.left + r.width / 2 - t.offsetWidth / 2;
+      top = r.top - t.offsetHeight - 8;
+      if (top < minY) top = r.bottom + 8;
+    }
+    left = Math.max(minX, Math.min(left, maxX - t.offsetWidth));
+    top = Math.max(minY, Math.min(top, maxY - t.offsetHeight));
+    // The label is placed inside its owner (positioned), so the viewport position is turned into the owner's own coordinates.
+    const o = owner.getBoundingClientRect();
+    t.style.left = `${left - o.left}px`;
+    t.style.top = `${top - o.top}px`;
   }
 
   private hideTip(): void {
@@ -580,7 +603,7 @@ export class MapControls {
   private menuToggle(label: string, value: boolean, fn: (v: boolean) => void, hint?: string): HTMLElement {
     const b = h(`button`, `mmw-menu-item`);
     b.type = `button`;
-    if (hint) tip(b, label, hint);
+    if (hint) tip(b, label, hint, true);
     const box = h(`span`, `mmw-check` + (value ? ` mmw-checked` : ``));
     setSvg(box, value ? ICONS.check : ``);
     b.append(box, h(`span`, `mmw-menu-label`, label));
