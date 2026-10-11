@@ -547,14 +547,14 @@
 
 /* Etiquettes au survol des commandes */
 .mmw-tip {
-  position: fixed;
+  position: absolute;
   z-index: 1000;
   max-width: 260px;
   padding: 5px 9px;
   border-radius: 6px;
-  background: var(--background-modifier-message, #222);
-  color: var(--text-normal);
-  border: 1px solid var(--background-modifier-border);
+  background: #1f1f1f;
+  color: #fff;
+  border: 1px solid #000;
   box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.3));
   font-size: var(--font-ui-smaller);
   pointer-events: none;
@@ -1244,6 +1244,7 @@
 }
 
 .mmw-menu-pair .mmw-menu-item {
+  width: auto;
   flex: 0 0 auto;
   min-width: 0;
   gap: 6px;
@@ -1267,12 +1268,13 @@
 }
 
 .mmw-tip-name {
-  font-weight: var(--font-semibold, 600);
+  color: #fff;
+  font-weight: 700;
 }
 
 .mmw-tip-desc {
   margin-top: 2px;
-  color: var(--text-muted);
+  color: #e4e4e4;
   line-height: 1.35;
 }
 
