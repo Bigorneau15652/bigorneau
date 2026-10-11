@@ -5,7 +5,7 @@ import { noteExtension } from "./active-chapter";
 import { applyFixedState, clearFixedState, currentFixedTarget } from "./fixed-editor";
 import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
-import { ZenMode } from "./zen";
+import { ZenMode, ZEN_LIST_COMMAND } from "./zen";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
 import { exportNoteToPdf } from "./export-pdf";
 import { DiagnosticModal } from "./diagnostic-modal";
@@ -498,6 +498,12 @@ export default class MindmapWritingPlugin extends Plugin {
       id: `toggle-zen`,
       name: t(`Mode Zen : entrer ou sortir`),
       callback: () => void this.zen.toggle(),
+    });
+
+    this.addCommand({
+      id: ZEN_LIST_COMMAND,
+      name: t(`Mode Zen : ouvrir ou fermer la liste`),
+      callback: () => this.zen.toggleListCommand(),
     });
 
     this.addCommand({

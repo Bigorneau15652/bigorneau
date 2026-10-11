@@ -238,6 +238,7 @@ export class MmSettingTab extends PluginSettingTab {
       [`start`, t(`Au début du paragraphe`)],
       [`end`, t(`À la fin du paragraphe`)],
     ], (v) => v as CursorPosition);
+    this.toggle(el, t(`Expliquer le mode Zen à l'entrée`), t(`Affiche la fenêtre d'explication à chaque entrée dans le mode Zen.`), `zenIntro`);
     this.toggle(el, t(`Masquer les commentaires de la carte dans la note`), t(`Les étiquettes, le titre court, le commentaire et les styles d'un titre sont conservés dans une ligne de commentaire sous le titre (%% mmw ... %%). Activé : cette ligne n'apparaît pas dans la note. Désactivé : elle reste visible.`), `hideMetaLines`);
   }
 

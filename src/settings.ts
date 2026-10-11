@@ -196,6 +196,8 @@ export interface MmSettings {
   // Dossier des profils (copies nommees des reglages), et vrai une fois les dossiers du plugin crees dans le coffre (premier lancement).
   profileFolder: string;
   foldersCreated: boolean;
+  // Zen mode: show the window that explains the mode each time it starts.
+  zenIntro: boolean;
   typography: TypographyStyle;
   // Panneau de boutons a droite de la zone de redaction : affichage, affichage sur tablette et telephone, ordre des boutons
   // (identifiants de fonctions) et boutons masques.
@@ -300,6 +302,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   fontFolder: `Bigorneau/Polices`,
   profileFolder: `Bigorneau/Profils`,
   foldersCreated: false,
+  zenIntro: true,
   typography: defaultTypography(),
   panelVisible: true,
   panelOrder: [],
@@ -420,6 +423,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   }
   merged.profileFolder = typeof merged.profileFolder === `string` && merged.profileFolder.trim() !== `` ? merged.profileFolder.trim().replace(/^\/+|\/+$/g, ``) : DEFAULT_SETTINGS.profileFolder;
   merged.foldersCreated = merged.foldersCreated === true;
+  merged.zenIntro = merged.zenIntro !== false;
   merged.fontFolder = typeof merged.fontFolder === `string` && merged.fontFolder.trim() !== `` ? merged.fontFolder.trim().replace(/^\/+|\/+$/g, ``) : DEFAULT_SETTINGS.fontFolder;
   merged.typography = sanitizeTypography(data.typography);
   merged.settingsVersion = SETTINGS_VERSION;
