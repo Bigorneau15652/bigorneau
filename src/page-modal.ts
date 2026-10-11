@@ -70,8 +70,25 @@ export class PageModal extends Modal {
       renderLayoutTab(contentEl.createDiv(), this.host, (layout) => {
         this.config.layout = layout;
       });
+      this.commonSettings(contentEl);
       return;
     }
+    this.renderBand(contentEl, this.tab);
+    new Setting(contentEl).addButton((b) =>
+      b
+        .setButtonText(t(`Réinitialiser cet onglet`))
+        .setWarning()
+        .onClick(() => {
+          // Only the band shown is emptied: the sheet format, the columns, the paragraphs and the fonts of the note are kept.
+          if (this.tab !== `sheet`) this.config[this.tab] = defaultBand();
+          this.save();
+          this.render();
+        })
+    );
+  }
+
+  // Settings shared by the whole page: the author of the note and the first page without header, footer or edge.
+  private commonSettings(contentEl: HTMLElement): void {
     const author = this.host.author;
     if (author) {
       new Setting(contentEl)
@@ -91,18 +108,6 @@ export class PageModal extends Modal {
           this.save();
         })
       );
-    this.renderBand(contentEl, this.tab);
-    new Setting(contentEl).addButton((b) =>
-      b
-        .setButtonText(t(`Réinitialiser cet onglet`))
-        .setWarning()
-        .onClick(() => {
-          // Only the band shown is emptied: the sheet format, the columns, the paragraphs and the fonts of the note are kept.
-          if (this.tab !== `sheet`) this.config[this.tab] = defaultBand();
-          this.save();
-          this.render();
-        })
-    );
   }
 
   private renderBand(parent: HTMLElement, which: BandTab): void {
@@ -248,15 +253,16 @@ export class PageModal extends Modal {
   // Distance entre le bord de la page et la bande : vide, la place habituelle.
   private distanceSetting(parent: HTMLElement, band: Band, which: BandTab): void {
     const desc: Record<BandTab, string> = {
-      header: t(`Distance entre le haut de la page et l'en-tête (cadre compris). Vide : place habituelle.`),
-      footer: t(`Distance entre le bas de la page et le pied de page (cadre compris). Vide : place habituelle.`),
-      edge: t(`Distance entre le bord de la page et le texte du côté (cadre compris) : 0 colle le texte ou son cadre au bord. Vide : place habituelle.`),
+      header: t(`Distance entre le haut de la page et l'en-tête (cadre compris). Vide (« auto ») : place habituelle.`),
+      footer: t(`Distance entre le bas de la page et le pied de page (cadre compris). Vide (« auto ») : place habituelle.`),
+      edge: t(`Distance entre le bord de la page et le texte du côté (cadre compris) : 0 colle le texte ou son cadre au bord. Vide (« auto ») : place habituelle.`),
     };
     new Setting(parent)
       .setName(t(`Éloignement du bord de la page (millimètres)`))
       .setDesc(`${desc[which]} ${t(`De 0 à {0}.`, DISTANCE_MAX_MM)}`)
       .addText((x) => {
-        x.setPlaceholder(t(`automatique`)).setValue(band.distance === null ? `` : String(band.distance));
+        x.inputEl.addClass(`mmw-distance`);
+        x.setPlaceholder(t(`auto`)).setValue(band.distance === null ? `` : String(band.distance));
         x.inputEl.type = `number`;
         x.inputEl.min = `0`;
         x.inputEl.max = String(DISTANCE_MAX_MM);
