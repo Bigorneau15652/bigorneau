@@ -774,7 +774,7 @@ export class MapControls {
         this.options(
           [
             { value: `plain`, text: t(`Unies`) },
-            { value: `striped`, text: t(`Une sur deux foncée`) },
+            { value: `striped`, text: t(`Alternées`) },
           ],
           s.listStripes ? `striped` : `plain`,
           (v) => a.change({ listStripes: v === `striped` }),
