@@ -467,22 +467,26 @@ export class MapControls {
     const maxX = (area?.right ?? view.innerWidth) - 8;
     const minY = (area?.top ?? 0) + 8;
     const maxY = (area?.bottom ?? view.innerHeight) - 8;
-    // The label sits next to the open menu for a line of this menu, and above the button otherwise (viewport coordinates).
+    // The label never covers the element it explains. For a line of the open menu: to the right of the menu when there is room,
+    // otherwise below the line, otherwise above it. For a button: above it, otherwise below it.
+    const w = t.offsetWidth;
+    const hgt = t.offsetHeight;
     const popup = el.closest<HTMLElement>(`.mmw-popup`);
-    let left: number;
+    const fitsBelow = r.bottom + 8 + hgt <= maxY;
+    const fitsAbove = r.top - 8 - hgt >= minY;
+    let left = r.left + r.width / 2 - w / 2;
     let top: number;
-    if (popup) {
-      const pr = popup.getBoundingClientRect();
+    const pr = popup?.getBoundingClientRect();
+    if (pr && pr.right + 6 + w <= maxX) {
       left = pr.right + 6;
       top = r.top;
-      if (left + t.offsetWidth > maxX) left = pr.left - t.offsetWidth - 6;
+    } else if (popup) {
+      top = fitsBelow ? r.bottom + 8 : fitsAbove ? r.top - hgt - 8 : r.bottom + 8;
     } else {
-      left = r.left + r.width / 2 - t.offsetWidth / 2;
-      top = r.top - t.offsetHeight - 8;
-      if (top < minY) top = r.bottom + 8;
+      top = fitsAbove ? r.top - hgt - 8 : r.bottom + 8;
     }
-    left = Math.max(minX, Math.min(left, maxX - t.offsetWidth));
-    top = Math.max(minY, Math.min(top, maxY - t.offsetHeight));
+    left = Math.max(minX, Math.min(left, maxX - w));
+    top = Math.max(minY, Math.min(top, maxY - hgt));
     // The label is placed inside its owner (positioned), so the viewport position is turned into the owner's own coordinates.
     const o = owner.getBoundingClientRect();
     t.style.left = `${left - o.left}px`;
