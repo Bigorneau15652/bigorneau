@@ -1,11 +1,11 @@
 // Fenetre des reglages de page d'une note : en-tete, pied de page et numerotation, chacun sur son onglet. Chaque modification est
 // ecrite tout de suite dans la note (ligne de commentaire sous les proprietes). Les zones sont des textes avec un balisage simple,
 // montre dans la ligne de formule : **gras**, *italique*, {xs} {s} {m} {l}, {page}, ![[image.png|hauteur]].
-import { App, ColorComponent, Modal, Setting, TextComponent } from "obsidian";
+import { App, ColorComponent, Modal, setIcon, Setting, TextComponent } from "obsidian";
 import { imageFile, ImagePicker } from "./image-picker";
 import { t } from "./i18n";
 import { renderLayoutTab } from "./layout-modal";
-import { Band, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
+import { Band, BandAlign, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
 
 // Tabs of the window: the sheet (format, margins, columns) and the three bands of the page.
 export type BandTab = `header` | `footer` | `edge`;
@@ -135,6 +135,7 @@ export class PageModal extends Modal {
           this.render();
         })
       );
+    this.alignSetting(parent, band);
     this.toolbar(parent);
     parent.createDiv({ cls: `mmw-pnote`, text: t(`Image : ![[nom.png|200]] fixe la largeur en pixels. Taille maximale : 300 pixels de large et 60 pixels de haut, les proportions sont conservées.`) });
     this.zones(parent, band.mirror ? t(`Pages de droite`) : t(`Toutes les pages`), band.zones, which === `edge`, band);
@@ -142,6 +143,31 @@ export class PageModal extends Modal {
     this.frameSettings(parent, band, which);
     this.shapeSettings(parent, band, which);
     this.distanceSetting(parent, band, which);
+  }
+
+  // Layout of the text of the band: the three zones, or a single text over the whole width (aligned left, centre, right, or justified).
+  private alignSetting(parent: HTMLElement, band: Band): void {
+    const choices: [BandAlign, string, string][] = [
+      [`zones`, `columns-3`, t(`Trois zones : gauche, centre et droite`)],
+      [`left`, `align-left`, t(`Texte unique aligné à gauche`)],
+      [`center`, `align-center`, t(`Texte unique centré`)],
+      [`right`, `align-right`, t(`Texte unique aligné à droite`)],
+      [`justify`, `align-justify`, t(`Texte unique justifié : les espaces sont étirés sur toute la largeur`)],
+    ];
+    const setting = new Setting(parent)
+      .setName(t(`Disposition du texte`))
+      .setDesc(t(`Trois zones, ou un seul texte sur toute la largeur : le texte unique est celui de la zone du milieu, aligné ou justifié.`));
+    const row = setting.controlEl.createDiv({ cls: `mmw-palign` });
+    for (const [value, icon, label] of choices) {
+      const b = row.createEl(`button`, { cls: `mmw-palign-button clickable-icon`, attr: { "aria-label": label, type: `button` } });
+      setIcon(b, icon);
+      if (band.align === value) b.addClass(`is-active`);
+      b.addEventListener(`click`, () => {
+        band.align = value;
+        this.save();
+        this.render();
+      });
+    }
   }
 
   // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande : un chapitre a deplier.
@@ -313,12 +339,14 @@ export class PageModal extends Modal {
 
   private zones(parent: HTMLElement, title: string, zones: Zones, edge: boolean, band: Band): void {
     parent.createDiv({ cls: `mmw-pzone-title`, text: title });
-    const grid = parent.createDiv({ cls: `mmw-pzones` });
-    const preview = parent.createDiv({ cls: `mmw-ppreview` });
+    const single = band.align !== `zones`;
+    const keys: (`left` | `center` | `right`)[] = single ? [`center`] : [`left`, `center`, `right`];
+    const grid = parent.createDiv({ cls: `mmw-pzones` + (single ? ` mmw-pzones-single` : ``) });
+    const preview = parent.createDiv({ cls: `mmw-ppreview` + (single ? ` mmw-ppreview-solo` : ``) });
     const paint = (): void => {
       preview.empty();
-      for (const key of [`left`, `center`, `right`] as const) {
-        const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${key}` });
+      for (const key of keys) {
+        const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${single ? band.align : key}` });
         // Cadre de la zone : meme rendu que l'export (forme, remplissage, contour, marge, couleur du texte).
         const frame = band.frames[key];
         const box = cell.createDiv({ cls: `mmw-ppreview-box` });
@@ -361,9 +389,9 @@ export class PageModal extends Modal {
       }
     };
     const labels: Record<`left` | `center` | `right`, string> = edge ? { left: t(`Haut`), center: t(`Milieu`), right: t(`Bas`) } : { left: t(`Gauche`), center: t(`Centre`), right: t(`Droite`) };
-    for (const key of [`left`, `center`, `right`] as const) {
+    for (const key of keys) {
       const box = grid.createDiv({ cls: `mmw-pzone` });
-      box.createDiv({ cls: `mmw-pzone-label`, text: labels[key] });
+      box.createDiv({ cls: `mmw-pzone-label`, text: single ? t(`Texte`) : labels[key] });
       const input = box.createEl(`textarea`, { cls: `mmw-pzone-input` });
       input.rows = 3;
       input.value = zones[key];

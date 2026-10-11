@@ -313,3 +313,40 @@ test(`le PDF trace la barre du texte barre`, async () => {
   const struck = Buffer.from(await composeToPdf(composeNote(`# A\n\nUn ~~ancien prix~~ ici.`, `N.md`), REQ)).toString(`latin1`);
   assert.ok(struck.length !== plain.length);
 });
+
+const textsOf = (note: string): { x: number; text: string }[] => {
+  const c = composeNote(note, `N.md`);
+  return (c.pages[0].decor ?? []).flatMap((i) => (i.kind === `text` ? [{ x: i.x, text: i.text }] : []));
+};
+
+test(`un texte unique est aligne a gauche, au centre, a droite ou justifie sur toute la largeur`, async () => {
+  const { measureText } = await import(`../src/export/font-metrics`);
+  const note = (align: `left` | `center` | `right` | `justify`): string =>
+    noteWith((c) => {
+      c.header.align = align;
+      c.header.zones.center = `Bonjour le monde`;
+      c.header.zones.left = `ignore`;
+    }, `# Titre\n\nTexte.`);
+  const left = 72;
+  const right = 595.28 - 72;
+  const width = measureText(`Bonjour le monde`, 10, `regular`).width;
+  const l = textsOf(note(`left`));
+  assert.equal(l.length, 1);
+  assert.ok(Math.abs(l[0].x - left) < 0.01);
+  const c = textsOf(note(`center`));
+  assert.ok(Math.abs(c[0].x - ((left + right) / 2 - width / 2)) < 0.01);
+  const r = textsOf(note(`right`));
+  assert.ok(Math.abs(r[0].x - (right - width)) < 0.01);
+  // Justifie : le premier mot commence a la marge, le dernier finit a la marge ; le texte des autres zones est ignore.
+  const j = textsOf(note(`justify`));
+  assert.deepEqual(j.map((w) => w.text), [`Bonjour`, `le`, `monde`]);
+  assert.ok(Math.abs(j[0].x - left) < 0.01);
+  assert.ok(Math.abs(j[2].x + measureText(`monde`, 10, `regular`).width - right) < 0.01);
+});
+
+test(`la disposition d'une bande est ecrite dans la note et relue`, () => {
+  const c = defaultConfig();
+  c.footer.align = `justify`;
+  assert.equal(parsePageMarker(formatPageMarker(c))?.footer.align, `justify`);
+  assert.equal(sanitizeConfig({ header: { align: `n-importe-quoi` } }).header.align, `zones`);
+});
