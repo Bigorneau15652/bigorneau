@@ -284,7 +284,7 @@ export class TypographyModal extends Modal {
     select.addEventListener(`change`, () => this.change(`numbering`, select.value));
     if (this.target === `note` && `numbering` in over) {
       numbering.addClass(`mmw-typo-over`);
-      const b = numbering.createEl(`button`, { cls: `mmw-typo-reset`, attr: { "aria-label": t(`Suivre le style de toutes les notes`), title: t(`Suivre le style de toutes les notes`) } });
+      const b = numbering.createEl(`button`, { cls: `mmw-typo-reset`, attr: { "aria-label": t(`Suivre le style de toutes les notes`) } });
       setIcon(b, `rotate-ccw`);
       b.addEventListener(`click`, () => this.resetPaths(`numbering`));
     }
@@ -361,7 +361,7 @@ export class TypographyModal extends Modal {
       return wrap;
     };
     const iconToggle = (parent: HTMLElement, name: `bold` | `italic` | `underline` | `numbered`, icon: string, title: string, value: boolean): void => {
-      const b = parent.createEl(`button`, { cls: `mmw-typo-icon`, attr: { "aria-label": title, title } });
+      const b = parent.createEl(`button`, { cls: `mmw-typo-icon`, attr: { "aria-label": title } });
       setIcon(b, icon);
       if (value) b.addClass(`mod-cta`);
       b.addEventListener(`click`, () => this.change(path(name), !value));
@@ -369,11 +369,11 @@ export class TypographyModal extends Modal {
     const colorField = (name: string, prop: `color` | `highlight`, icon: string, current: string): void => {
       const wrap = field(name);
       const pair = wrap.createDiv({ cls: `mmw-typo-pair` });
-      const input = pair.createEl(`input`, { type: `color`, attr: { title: name, "aria-label": name } });
+      const input = pair.createEl(`input`, { type: `color`, attr: { "aria-label": name } });
       input.value = current !== `` ? current : prop === `color` ? `#000000` : `#ffff00`;
       if (current === ``) input.addClass(`is-unset`);
       input.addEventListener(`change`, () => this.change(path(prop), input.value));
-      const clear = pair.createEl(`button`, { cls: `mmw-typo-icon`, attr: { "aria-label": t(`Sans couleur`), title: t(`Sans couleur`) } });
+      const clear = pair.createEl(`button`, { cls: `mmw-typo-icon`, attr: { "aria-label": t(`Sans couleur`) } });
       setIcon(clear, current === `` ? icon : `x`);
       clear.addEventListener(`click`, () => {
         if (current !== ``) this.change(path(prop), ``);

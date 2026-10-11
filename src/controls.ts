@@ -136,14 +136,23 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
   return el;
 }
 
-// Etiquette affichee quand la souris survole l'element, et lue par les lecteurs d'ecran.
-// named : faux pour une ligne de menu qui porte deja son nom en texte visible ; Obsidian n'ajoute alors pas sa propre bulle (qui doublerait la notre).
+// Etiquette affichee quand la souris survole l'element (nom, puis description). C'est la seule : un attribut aria-label ferait
+// apparaitre en plus l'infobulle d'Obsidian, et un attribut title celle du navigateur. Le nom reste lu par les lecteurs d'ecran
+// grace a un texte cache dans les boutons sans texte visible.
 function tip(el: HTMLElement, text: string, desc?: string, named = false): void {
   el.dataset.tip = text;
   if (desc) el.dataset.tipDesc = desc;
   else delete el.dataset.tipDesc;
-  if (named) el.removeAttribute(`aria-label`);
-  else el.setAttribute(`aria-label`, text);
+  el.removeAttribute(`aria-label`);
+  if (!named && el.tagName === `BUTTON`) {
+    let hidden = el.querySelector<HTMLElement>(`:scope > .mmw-sr-only`);
+    if (!hidden) {
+      hidden = createEl(`span`);
+      hidden.className = `mmw-sr-only`;
+      el.appendChild(hidden);
+    }
+    hidden.textContent = text;
+  }
   if (desc) el.setAttribute(`aria-description`, desc);
   else el.removeAttribute(`aria-description`);
 }
