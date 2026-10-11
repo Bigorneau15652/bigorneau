@@ -2867,3 +2867,28 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
 .mmw-distance {
   width: 6em;
 }
+
+/* Disposition du texte d'une bande : trois zones, ou un texte unique aligne ou justifie. */
+.mmw-palign {
+  display: flex;
+  gap: 4px;
+}
+
+.mmw-palign-button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.mmw-pzones-single,
+.mmw-ppreview-solo {
+  grid-template-columns: 1fr;
+}
+
+.mmw-ppreview-left {
+  text-align: left;
+}
+
+.mmw-ppreview-justify {
+  text-align: justify;
+  text-align-last: justify;
+}
