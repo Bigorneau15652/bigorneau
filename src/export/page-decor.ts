@@ -7,7 +7,7 @@ import { BASE_POINTS, sizeFactor, styleOf, TextSpec } from "../text-style";
 import type { Page } from "./paginate";
 import type { PageSetup } from "./typeset";
 import { displaySize } from "./image";
-import { Band, bandUsed, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, PageConfig, PageValues, parseZone, POINTS_PER_MM, SIZE_POINTS, SizeCode, valueOf, ZONE_MAX_LINES, ZoneFrame, Zones } from "../page-config";
+import { Band, bandUsed, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, PageConfig, PageValues, parseZone, POINTS_PER_MM, SIZE_POINTS, SizeCode, valueOf, ZONE_MAX_LINES, ZoneAlign, ZoneFrame, Zones } from "../page-config";
 
 export type DecorLeaf =
   | { kind: `text`; x: number; baseline: number; size: number; style: FontStyle; text: string; color: string }
@@ -161,15 +161,14 @@ interface BandLayout {
 
 function layoutBand(band: Band, zonesIn: Zones, rotated: boolean, values: PageValues, ctx: DecorContext, missing: Set<string>): BandLayout {
   // A single text uses only the centre zone.
-  const zones: Zones = band.align === `zones` ? zonesIn : { left: ``, center: zonesIn.center, right: `` };
-  const split = band.align === `justify`;
+  const zones: Zones = band.single ? { left: ``, center: zonesIn.center, right: `` } : zonesIn;
   const lists = { left: [] as Piece[][], center: [] as Piece[][], right: [] as Piece[][] };
   let rows = 1;
   let pad = 0;
   for (const key of KEYS) {
     const frame = band.frames[key];
     const textColor = frame.color !== `` ? frame.color : ctx.typography?.color ? ctx.typography.color : TEXT_COLOR;
-    lists[key] = zoneLines(zones[key]).map((line) => pieces(line, band, rotated, textColor, values, ctx, missing, split));
+    lists[key] = zoneLines(zones[key]).map((line) => pieces(line, band, rotated, textColor, values, ctx, missing, band.aligns[key] === `justify`));
     if (lists[key].some((l) => l.length > 0)) {
       rows = Math.max(rows, lists[key].length);
       if (frame.shape !== `none`) pad = Math.max(pad, frame.padding);
@@ -228,10 +227,22 @@ function stretch(line: Piece[], available: number): Piece[] {
   return inner.map((p) => (p.gap ? { ...p, width: p.width + extra } : p));
 }
 
-// Places the whole text of a band that is a single text: aligned left, centre or right, or justified over `right - left`.
-function placeSingle(m: BandLayout, band: Band, align: `left` | `center` | `right`, left: number, right: number, baselineOf: (i: number) => number, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
-  const lines = band.align === `justify` ? m.lists.center.map((l) => stretch(l, right - left)) : m.lists.center.map((l) => l.filter((p, i, all) => !p.gap || (i > 0 && i < all.length - 1)));
-  placeZone(lines, band.frames.center, m, align, left, right, baselineOf, out, upright);
+// Places the zones of a band inside the line from `from` to `to`: three boxes of one third each, or one box over the whole line when the
+// band is a single box. In each box the text is aligned left, centre or right, or justified over the width of the box. `mirrored`: the
+// line is read from its end (left page of the outer edge), so the boxes come in the reverse order and left and right are swapped.
+function placeBand(m: BandLayout, band: Band, from: number, to: number, mirrored: boolean, baselineOf: (i: number) => number, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
+  const third = (to - from) / 3;
+  const swap: Record<ZoneAlign, ZoneAlign> = { left: `right`, center: `center`, right: `left`, justify: `justify` };
+  for (const key of band.single ? ([`center`] as const) : KEYS) {
+    const index = KEYS.indexOf(key);
+    const slot = mirrored ? 2 - index : index;
+    const a = band.single ? from : from + slot * third;
+    const b = band.single ? to : a + third;
+    const chosen = band.aligns[key];
+    const align = mirrored ? swap[chosen] : chosen;
+    const lines = align === `justify` ? m.lists[key].map((l) => stretch(l, b - a)) : m.lists[key].map((l) => l.filter((p, i, all) => !p.gap || (i > 0 && i < all.length - 1)));
+    placeZone(lines, band.frames[key], m, align === `justify` ? `left` : align, a, b, baselineOf, out, upright);
+  }
 }
 
 function bandItems(band: Band, odd: boolean, edge: `header` | `footer`, values: PageValues, ctx: DecorContext, missing: Set<string>, out: DecorItem[]): void {
@@ -247,8 +258,7 @@ function bandItems(band: Band, odd: boolean, edge: `header` | `footer`, values: 
   if (edge === `header`) firstBase = d === null ? setup.marginTop - HEADER_BASELINE_OFFSET - (m.rows - 1) * ZONE_LINE_HEIGHT : d + m.pad + m.above;
   else firstBase = d === null ? setup.height - FOOTER_BASELINE_OFFSET : setup.height - d - m.pad - m.below - (m.rows - 1) * ZONE_LINE_HEIGHT;
   const baselineOf = (i: number): number => firstBase + i * ZONE_LINE_HEIGHT;
-  if (band.align === `zones`) for (const key of KEYS) placeZone(m.lists[key], band.frames[key], m, key, left, right, baselineOf, out as DecorLeaf[]);
-  else placeSingle(m, band, band.align === `justify` ? `left` : band.align, left, right, baselineOf, out as DecorLeaf[]);
+  placeBand(m, band, left, right, false, baselineOf, out as DecorLeaf[]);
   if (band.rule) {
     const lastBase = baselineOf(m.rows - 1);
     const y = edge === `header` ? lastBase + RULE_GAP + 3 + m.pad : d === null ? firstBase - 14 : firstBase - m.above - m.pad - RULE_GAP;
@@ -267,10 +277,8 @@ function edgeItems(band: Band, odd: boolean, values: PageValues, ctx: DecorConte
   const baselineOf = (i: number): number => (i - (m.rows - 1) / 2) * ZONE_LINE_HEIGHT;
   const leaves: DecorLeaf[] = [];
   const uprights: DecorLeaf[] = [];
-  // Sur les pages de gauche le texte monte : le haut de la page est la fin de la ligne.
-  const alignOf: Record<`left` | `center` | `right`, `left` | `center` | `right`> = odd ? { left: `left`, center: `center`, right: `right` } : { left: `right`, center: `center`, right: `left` };
-  if (band.align === `zones`) for (const key of KEYS) placeZone(m.lists[key], band.frames[key], m, alignOf[key], 0, length, baselineOf, leaves, uprights);
-  else placeSingle(m, band, band.align === `justify` ? `left` : alignOf[band.align], 0, length, baselineOf, leaves, uprights);
+  // Sur les pages de gauche le texte monte : le haut de la page est la fin de la ligne (voir placeBand).
+  placeBand(m, band, 0, length, !odd, baselineOf, leaves, uprights);
   // Le centre du bloc (hauteur de ligne, cadre compris) est a (above - below) / 2 au-dessus de la ligne de base.
   const glyphHalf = (m.above - m.below) / 2;
   // Epaisseur du bloc, cadres compris.

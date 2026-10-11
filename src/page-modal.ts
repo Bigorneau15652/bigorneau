@@ -5,7 +5,7 @@ import { App, ColorComponent, Modal, setIcon, Setting, TextComponent } from "obs
 import { imageFile, ImagePicker } from "./image-picker";
 import { t } from "./i18n";
 import { renderLayoutTab } from "./layout-modal";
-import { Band, BandAlign, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, Zones } from "./page-config";
+import { Band, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, ZoneAlign, Zones } from "./page-config";
 
 // Tabs of the window: the sheet (format, margins, columns) and the three bands of the page.
 export type BandTab = `header` | `footer` | `edge`;
@@ -145,29 +145,40 @@ export class PageModal extends Modal {
     this.distanceSetting(parent, band, which);
   }
 
-  // Layout of the text of the band: the three zones, or a single text over the whole width (aligned left, centre, right, or justified).
+  // Three zones, or a single box over the whole line (it holds the text of the middle zone).
   private alignSetting(parent: HTMLElement, band: Band): void {
-    const choices: [BandAlign, string, string][] = [
-      [`zones`, `columns-3`, t(`Trois zones : gauche, centre et droite`)],
-      [`left`, `align-left`, t(`Texte unique aligné à gauche`)],
-      [`center`, `align-center`, t(`Texte unique centré`)],
-      [`right`, `align-right`, t(`Texte unique aligné à droite`)],
-      [`justify`, `align-justify`, t(`Texte unique justifié : les espaces sont étirés sur toute la largeur`)],
+    new Setting(parent)
+      .setName(t(`Une seule case`))
+      .setDesc(t(`Remplace les trois zones par une seule case sur toute la largeur. Le texte de la zone du milieu y est placé ; les textes des autres zones sont gardés pour un retour aux trois zones.`))
+      .addToggle((x) =>
+        x.setValue(band.single).onChange((v) => {
+          band.single = v;
+          this.save();
+          this.render();
+        })
+      );
+  }
+
+  // Four buttons that align the text inside the box of a zone: left, centre, right, justified.
+  private alignButtons(parent: HTMLElement, band: Band, key: `left` | `center` | `right`): HTMLElement {
+    const choices: [ZoneAlign, string, string][] = [
+      [`left`, `align-left`, t(`Aligner le texte à gauche dans la case`)],
+      [`center`, `align-center`, t(`Centrer le texte dans la case`)],
+      [`right`, `align-right`, t(`Aligner le texte à droite dans la case`)],
+      [`justify`, `align-justify`, t(`Justifier le texte : les espaces sont étirés sur toute la largeur de la case`)],
     ];
-    const setting = new Setting(parent)
-      .setName(t(`Disposition du texte`))
-      .setDesc(t(`Trois zones, ou un seul texte sur toute la largeur : le texte unique est celui de la zone du milieu, aligné ou justifié.`));
-    const row = setting.controlEl.createDiv({ cls: `mmw-palign` });
+    const row = parent.createDiv({ cls: `mmw-palign` });
     for (const [value, icon, label] of choices) {
       const b = row.createEl(`button`, { cls: `mmw-palign-button clickable-icon`, attr: { "aria-label": label, type: `button` } });
       setIcon(b, icon);
-      if (band.align === value) b.addClass(`is-active`);
+      if (band.aligns[key] === value) b.addClass(`is-active`);
       b.addEventListener(`click`, () => {
-        band.align = value;
+        band.aligns[key] = value;
         this.save();
         this.render();
       });
     }
+    return row;
   }
 
   // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande : un chapitre a deplier.
@@ -339,14 +350,14 @@ export class PageModal extends Modal {
 
   private zones(parent: HTMLElement, title: string, zones: Zones, edge: boolean, band: Band): void {
     parent.createDiv({ cls: `mmw-pzone-title`, text: title });
-    const single = band.align !== `zones`;
+    const single = band.single;
     const keys: (`left` | `center` | `right`)[] = single ? [`center`] : [`left`, `center`, `right`];
     const grid = parent.createDiv({ cls: `mmw-pzones` + (single ? ` mmw-pzones-single` : ``) });
     const preview = parent.createDiv({ cls: `mmw-ppreview` + (single ? ` mmw-ppreview-solo` : ``) });
     const paint = (): void => {
       preview.empty();
       for (const key of keys) {
-        const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${single ? band.align : key}` });
+        const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${band.aligns[key]}` });
         // Cadre de la zone : meme rendu que l'export (forme, remplissage, contour, marge, couleur du texte).
         const frame = band.frames[key];
         const box = cell.createDiv({ cls: `mmw-ppreview-box` });
@@ -391,7 +402,9 @@ export class PageModal extends Modal {
     const labels: Record<`left` | `center` | `right`, string> = edge ? { left: t(`Haut`), center: t(`Milieu`), right: t(`Bas`) } : { left: t(`Gauche`), center: t(`Centre`), right: t(`Droite`) };
     for (const key of keys) {
       const box = grid.createDiv({ cls: `mmw-pzone` });
-      box.createDiv({ cls: `mmw-pzone-label`, text: single ? t(`Texte`) : labels[key] });
+      const head = box.createDiv({ cls: `mmw-pzone-head` });
+      head.createDiv({ cls: `mmw-pzone-label`, text: single ? t(`Texte`) : labels[key] });
+      this.alignButtons(head, band, key);
       const input = box.createEl(`textarea`, { cls: `mmw-pzone-input` });
       input.rows = 3;
       input.value = zones[key];
