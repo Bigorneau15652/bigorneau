@@ -87,6 +87,8 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
       name: { fr: `Paragraphes : retrait, espace et alignement de la note`, en: `Paragraphs: indent, spacing and alignment of the note` },
       icon: [`pilcrow`, `align-justify`, `text`],
       needsEditor: true,
+      // Same window as the button « Polices et titres » (tab « Cette note »): command of the palette only.
+      button: false,
       active: ({ editor }) => (editor ? JSON.stringify(readPageConfig(editor.getValue()).paragraphs) !== JSON.stringify(defaultParagraphSettings()) : false),
       run: ({ editor }) => {
         if (editor) new ParagraphModal(api.app, paragraphHost(editor), `document`).open();

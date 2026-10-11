@@ -23,6 +23,9 @@ export function diagnosticText(app: App, plugin: MindmapWritingPlugin): string {
     for (const e of errs) lines.push(`- ${e}`);
     lines.push(``);
   }
+  lines.push(`Tableaux de la note active :`);
+  lines.push(plugin.describeTables());
+  lines.push(``);
   lines.push(`Temps mesurés :`);
   const measures = formatSamples(samplesList());
   lines.push(measures === `` ? `(aucune mesure pour l'instant : utilisez le plugin quelques instants, puis rouvrez cette fenêtre)` : measures);

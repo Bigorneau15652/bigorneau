@@ -18,7 +18,7 @@ import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
 import { FORMULAS_SCRIPT } from "./script-formulas";
 import { ICON_FOOTNOTE, ICON_LOREM, registerCustomIcons } from "./custom-icons";
-import { drawFigure, insertNamedImage, nameAfterPaste } from "./drawing";
+import { drawFigure, excalidrawInstalled, insertNamedImage, nameAfterPaste } from "./drawing";
 import { LoremModal } from "./lorem-dialog";
 import { createPageScript } from "./script-page";
 import { ScriptManager } from "./scripts";
@@ -352,6 +352,8 @@ export default class MindmapWritingPlugin extends Plugin {
       name: () => t(`Générer du texte Lorem ipsum`),
       icons: [ICON_LOREM],
       needsEditor: true,
+      // Command of the palette only: no button in the panel.
+      button: false,
       run: ({ editor }) => this.openLoremDialog(editor as Editor),
     });
     this.addFunction({
@@ -359,6 +361,8 @@ export default class MindmapWritingPlugin extends Plugin {
       name: () => t(`Dessiner (Excalidraw)`),
       icons: [`pencil-ruler`, `pencil`, `brush`],
       needsEditor: true,
+      // Without the Excalidraw plugin, neither the button nor the command is offered.
+      available: () => excalidrawInstalled(this.app),
       run: ({ editor }) => drawFigure(this.app, editor as Editor),
     });
     this.addFunction({
@@ -424,11 +428,6 @@ export default class MindmapWritingPlugin extends Plugin {
         },
       });
     }
-    this.addCommand({
-      id: `describe-tables`,
-      name: t(`Décrire les tableaux de la note (diagnostic)`),
-      callback: () => this.describeTables(),
-    });
     this.registerEditorExtension(tableMarkerHideExtension());
     this.registerEditorExtension(paragraphMarkerHideExtension());
     this.registerEditorExtension(listMarkerWidgetExtension());
@@ -831,9 +830,9 @@ export default class MindmapWritingPlugin extends Plugin {
     menu.showAtMouseEvent(event);
   }
 
-  // Diagnostic : decrit les elements des tableaux affiches dans la note active et copie le resultat dans le presse-papiers, pour
-  // adapter le plugin si Obsidian change la facon de les dessiner.
-  private describeTables(): void {
+  // Diagnostic : decrit les elements des tableaux affiches dans la note active (pour adapter le plugin si Obsidian change la facon
+  // de les dessiner). Le texte est ajoute a la fenetre de diagnostic.
+  describeTables(): string {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const tables = view ? Array.from(view.contentEl.querySelectorAll(`table`)) : [];
     const name = (el: Element): string => `${el.tagName.toLowerCase()}${el.className && typeof el.className === `string` ? `.${el.className.trim().split(/\s+/).join(`.`)}` : ``}`;
@@ -846,11 +845,7 @@ export default class MindmapWritingPlugin extends Plugin {
       if (first) lines.push(`  premiere ligne : ${name(first)} > ${Array.from(first.children).map(name).join(`, `)}`);
       lines.push(`  freres : ${Array.from(table.parentElement?.children ?? []).map(name).join(`, `)}`);
     });
-    const out = lines.join(`\n`);
-    void navigator.clipboard.writeText(out).then(
-      () => new Notice(t(`Description copiée dans le presse-papiers : {0} tableau(x).`, tables.length)),
-      () => new Notice(out)
-    );
+    return lines.join(`\n`);
   }
 
   // Cree les dossiers du plugin dans le coffre (polices, profils). Sans `force`, seulement la premiere fois : un dossier supprime
