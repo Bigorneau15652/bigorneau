@@ -36,6 +36,8 @@ export interface ControlActions {
   toggleView: () => void;
   // Ouvre une note fixe : copie du chapitre selectionne dans son propre volet.
   addFixed: () => void;
+  // Zen mode.
+  zen: () => void;
 }
 
 type PopupKind = `menu` | `style` | `view` | `tags` | null;
@@ -70,6 +72,7 @@ const ICONS: Record<string, string> = {
   back: svg(`<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>`),
   list: svg(`<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>`),
   network: svg(`<rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="10" width="7" height="5" rx="1"/><rect x="14" y="17" width="7" height="4" rx="1"/><path d="M6 8v10a1 1 0 0 0 1 1h7M6 12h8"/>`),
+  zen: svg(`<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>`),
   eye: svg(`<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`),
   trash: svg(`<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>`, 16),
 };
@@ -161,6 +164,7 @@ export class MapControls {
   private menuBtn: HTMLButtonElement;
   private styleBtn: HTMLButtonElement;
   private viewBtn: HTMLButtonElement;
+  private zenBtn: HTMLButtonElement;
   private modeBtn: HTMLButtonElement;
   private linkBtn: HTMLButtonElement;
   private backBtn: HTMLButtonElement;
@@ -197,8 +201,9 @@ export class MapControls {
     this.backBtn = iconButton(ICONS.back, t(`Revenir à la carte précédente`), () => this.actions.back(), `mmw-btn`, t(`Retour à la note dont vous venez d'ouvrir la carte par un lien.`));
     this.backBtn.style.display = `none`;
     this.viewBtn = iconButton(ICONS.eye, t(`Affichage : éléments visibles et vue`), () => this.toggle(`view`), `mmw-btn`, t(`Étiquettes, commentaires, liens, vue noir et blanc, grisage ou masquage des chapitres inactifs de la note.`));
+    this.zenBtn = iconButton(ICONS.zen, t(`Mode Zen`), () => this.actions.zen(), `mmw-btn`, t(`Plein écran : la liste des titres en noir et blanc à gauche et la note à droite. Échap pour en sortir.`));
     this.modeBtn = iconButton(ICONS.list, t(`Passer à la vue Liste`), () => this.actions.toggleView(), `mmw-btn`, t(`Bascule entre la carte mentale et la liste condensée.`));
-    dock.append(this.menuBtn, this.styleBtn, this.viewBtn, this.linkBtn, this.modeBtn, this.backBtn);
+    dock.append(this.menuBtn, this.styleBtn, this.viewBtn, this.zenBtn, this.linkBtn, this.modeBtn, this.backBtn);
 
     const zoom = h(`div`, `mmw-dock mmw-zoom`);
     this.zoomLabel = h(`span`, `mmw-zoom-label`, `100 %`);

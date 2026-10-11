@@ -149,6 +149,7 @@ export class MindmapView extends ItemView {
       onInternalLinks: (links, event) => this.goToLinks(links, event),
       onBack: () => void this.goBack(),
       onAddFixed: () => void this.addFixedNote(),
+      onZen: () => void this.plugin.zen.toggle(),
     });
     await this.refresh();
   }

@@ -2788,3 +2788,56 @@ table.mmw-t-equal td {
     transform: none !important;
   }
 }
+
+/* Mode Zen : plein ecran, seuls la liste des titres et la note restent visibles. */
+body.mmw-zen .titlebar,
+body.mmw-zen .workspace-ribbon,
+body.mmw-zen .status-bar,
+body.mmw-zen .workspace-tab-header-container,
+body.mmw-zen .workspace-split.mod-left-split,
+body.mmw-zen .workspace-split.mod-right-split,
+body.mmw-zen .view-header,
+body.mmw-zen .mmw-controls,
+body.mmw-zen .mmw-help,
+body.mmw-zen .mmw-status,
+body.mmw-zen .mmw-panel {
+  display: none !important;
+}
+
+/* Liste des titres masquee : la note prend toute la largeur. */
+body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
+  display: none !important;
+}
+
+/* Coin en haut a gauche : le bouton n'apparait que quand la souris s'en approche. */
+.mmw-zen-corner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  width: 64px;
+  height: 64px;
+  pointer-events: none;
+}
+
+.mmw-zen-corner-button {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.3));
+}
+
+.mmw-zen-corner-show .mmw-zen-corner-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mmw-zen-hint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}

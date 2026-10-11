@@ -16,10 +16,10 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `map-keys`,
     title: { fr: `Raccourcis de la carte`, en: `Map shortcuts` },
     text: {
-      fr: `Tab crée un sous-titre, Entrée un titre de même niveau, Suppr supprime un titre après confirmation. Un double clic ou F2 ouvre la fenêtre du titre. Cmd ou Ctrl avec Maj et les flèches déplacent un titre avec sa branche, Cmd ou Ctrl avec C, X et V copient, coupent et collent des titres. Cmd ou Ctrl avec Maj et Entrée fait l'aller-retour entre la carte et la note.`,
-      en: `Tab creates a sub-heading, Enter a heading of the same level, Delete removes a heading after a confirmation. A double click or F2 opens the window of the heading. Cmd or Ctrl with Shift and the arrow keys move a heading with its branch, Cmd or Ctrl with C, X and V copy, cut and paste headings. Cmd or Ctrl with Shift and Enter switches between the map and the note.`,
+      fr: `Tab crée un sous-titre, Entrée un titre de même niveau, Suppr supprime un titre après confirmation. Un double clic ou F2 ouvre la fenêtre du titre. Cmd ou Ctrl avec Maj et les flèches déplacent un titre avec sa branche, Cmd ou Ctrl avec C, X et V copient, coupent et collent des titres. Cmd ou Ctrl avec Maj et Entrée fait l'aller-retour entre la carte et la note. Le bouton Zen, à côté de l'œil, passe en plein écran avec la liste des titres en noir et blanc à gauche et la note à droite : Échap en sort, Cmd ou Ctrl avec Maj et L ouvre ou ferme la liste.`,
+      en: `Tab creates a sub-heading, Enter a heading of the same level, Delete removes a heading after a confirmation. A double click or F2 opens the window of the heading. Cmd or Ctrl with Shift and the arrow keys move a heading with its branch, Cmd or Ctrl with C, X and V copy, cut and paste headings. Cmd or Ctrl with Shift and Enter switches between the map and the note. The Zen button, next to the eye, goes full screen with the list of headings in black and white on the left and the note on the right: Escape leaves it, Cmd or Ctrl with Shift and L opens or closes the list.`,
     },
-    keywords: { fr: `clavier touches deplacer copier coller supprimer`, en: `keyboard keys move copy paste delete` },
+    keywords: { fr: `clavier touches deplacer copier coller supprimer zen plein ecran`, en: `keyboard keys move copy paste delete zen full screen` },
   },
   {
     id: `labels`,
