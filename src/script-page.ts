@@ -3,10 +3,9 @@
 // Desactive, il ne change rien : l'export reste celui d'avant, avec ses reglages generaux.
 import type { Editor } from "obsidian";
 import { applyPageConfig, readPageConfig, replaceChanged } from "./page-apply";
-import { LayoutModal } from "./layout-modal";
 import { anyDecor } from "./page-config";
 import { defaultLayout, sameLayout } from "./page-layout";
-import { PageModal, PageModalHost } from "./page-modal";
+import { PageModal, PageModalHost, PageTab } from "./page-modal";
 import { ICON_ORIENTATION, ICON_PARAGRAPH } from "./custom-icons";
 import { IllustrationListModal } from "./illustration-list-modal";
 import { listMarkersIn, placeListMarker, removeListMarker } from "./illustration-list";
@@ -15,6 +14,7 @@ import { pageZoneAt, setPageZone } from "./page-zone";
 import { ParagraphModal, ParagraphModalHost } from "./paragraph-modal";
 import { defaultParagraphSettings, isParagraphSet, paragraphMarkerAt, setParagraphMarker } from "./paragraph-format";
 import { MarksModal } from "./marks-modal";
+import type { FunctionContext } from "./panel";
 import type { OfficialScript, ScriptFunction } from "./scripts";
 import { TypographyHost, TypographyModal } from "./typography-modal";
 
@@ -31,43 +31,43 @@ export const createPageScript = (defaultAuthor: () => string, typography: Omit<T
   requires: [],
   defaultEnabled: false,
   load(api) {
+    // One window with four tabs: the sheet (format, orientation, margins, columns), the header, the footer and the outer edge.
+    const openPage = ({ editor, view }: FunctionContext, tab: PageTab): void => {
+      if (!editor) return;
+      const file = view?.file ?? null;
+      const host: PageModalHost = { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) };
+      if (file) {
+        host.author = {
+          get: () => {
+            const value: unknown = api.app.metadataCache.getFileCache(file)?.frontmatter?.author;
+            return typeof value === `string` ? value : ``;
+          },
+          fallback: defaultAuthor(),
+          set: (value) => void api.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+            if (value === ``) delete fm.author;
+            else fm.author = value;
+          }),
+        };
+      }
+      new PageModal(api.app, host, tab).open();
+    };
     api.addFunction({
       id: `page-layout`,
-      name: { fr: `Mise en page : en-tête, pied de page et bord extérieur`, en: `Page layout: header, footer and outer edge` },
+      name: { fr: `Mise en page : feuille, en-tête, pied de page et bord extérieur`, en: `Page layout: sheet, header, footer and outer edge` },
       icon: [`panel-top`, `layout-template`, `file-text`],
       needsEditor: true,
-      active: ({ editor }) => (editor ? anyDecor(readPageConfig(editor.getValue())) : false),
-      run: ({ editor, view }) => {
-        if (!editor) return;
-        const file = view?.file ?? null;
-        const host: PageModalHost = { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) };
-        if (file) {
-          host.author = {
-            get: () => {
-              const value: unknown = api.app.metadataCache.getFileCache(file)?.frontmatter?.author;
-              return typeof value === `string` ? value : ``;
-            },
-            fallback: defaultAuthor(),
-            set: (value) => void api.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-              if (value === ``) delete fm.author;
-              else fm.author = value;
-            }),
-          };
-        }
-        new PageModal(api.app, host).open();
-      },
+      // More contrasted when the note has a header, a footer or an edge, or leaves the A4 portrait sheet.
+      active: ({ editor }) => (editor ? anyDecor(readPageConfig(editor.getValue())) || !sameLayout(readPageConfig(editor.getValue()).layout, defaultLayout()) : false),
+      run: (ctx) => openPage(ctx, `sheet`),
     });
-    // Second bouton : format de la feuille, orientation, marges et colonnes. Plus contraste quand la note s'ecarte de l'A4 portrait.
+    // The command stays in the palette (same id as before): it opens the same window on its sheet tab.
     api.addFunction({
       id: `page-format`,
       name: { fr: `Format de la page : feuille, orientation, marges et colonnes`, en: `Page format: sheet, orientation, margins and columns` },
       icon: [`columns-2`, `layout-panel-left`, `ruler`],
       needsEditor: true,
-      active: ({ editor }) => (editor ? !sameLayout(readPageConfig(editor.getValue()).layout, defaultLayout()) : false),
-      run: ({ editor }) => {
-        if (!editor) return;
-        new LayoutModal(api.app, { read: () => readPageConfig(editor.getValue()), write: (c) => applyPageConfig(editor, c) }).open();
-      },
+      button: false,
+      run: (ctx) => openPage(ctx, `sheet`),
     });
     // Troisieme bouton : style des paragraphes de toute la note (retrait ou espace, alignement).
     const paragraphHost = (editor: Editor): ParagraphModalHost => {
