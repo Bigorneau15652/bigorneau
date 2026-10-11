@@ -1244,10 +1244,20 @@
 }
 
 .mmw-menu-pair .mmw-menu-item {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: 0;
   gap: 6px;
   padding: 7px 6px;
+}
+
+/* Dependances prend la place restante : son nom n'est pas coupe. */
+.mmw-menu-pair .mmw-menu-item:last-child {
+  flex: 1 1 auto;
+}
+
+.mmw-menu-pair .mmw-menu-label {
+  flex: none;
+  overflow: visible;
 }
 
 /* Etiquettes au survol : nom du bouton puis description */
