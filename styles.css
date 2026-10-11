@@ -2841,3 +2841,11 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
 }
+
+.mmw-zen-never {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: var(--font-ui-small);
+}

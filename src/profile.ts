@@ -16,6 +16,7 @@ export const PROFILE_EXCLUDED: (keyof MmSettings)[] = [
   `fontFolder`,
   `newNoteFolder`,
   `foldersCreated`,
+  `zenIntro`,
   `fixedViews`,
   `openChapters`,
 ];
