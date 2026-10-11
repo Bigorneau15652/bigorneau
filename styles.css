@@ -2862,3 +2862,8 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   white-space: nowrap;
   border: 0;
 }
+
+/* Champ de distance de la mise en page : assez large pour le texte « auto ». */
+.mmw-distance {
+  width: 6em;
+}
