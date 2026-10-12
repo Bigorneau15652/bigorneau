@@ -50,6 +50,16 @@ test(`les versions du manifest, du paquet et de versions.json sont les memes`, (
   assert.equal(pkg.name, manifest.id);
 });
 
+test(`le journal des modifications decrit la version du manifest en anglais puis en francais`, () => {
+  const log = read(`CHANGELOG.md`);
+  const heading = `\n## ${String(manifest.version)}\n`;
+  const start = log.indexOf(heading);
+  assert.ok(start >= 0, `CHANGELOG.md n'a pas de section pour la version ${String(manifest.version)}`);
+  const body = log.slice(start + heading.length).split(`\n## `)[0];
+  const parts = body.split(/\n\s*\n/).filter((p) => p.trim() !== ``);
+  assert.ok(parts.length >= 2, `la section de la version a un texte anglais puis un texte francais`);
+});
+
 test(`le depot contient la licence et les deux README`, () => {
   assert.ok(existsSync(join(ROOT, `LICENSE`)));
   const licence = read(`LICENSE`);

@@ -35,15 +35,17 @@ jobs:
             main.js
             manifest.json
             styles.css
+      - name: Preparer les notes de version
+        run: |
+          awk -v v="${GITHUB_REF_NAME}" '$0 == "## " v {found=1; next} /^## / {found=0} found' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then git log -1 --format=%s > release-notes.md; fi
       - name: Joindre les fichiers a la release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" main.js manifest.json styles.css --clobber
-            if [ -z "$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)" ]; then
-              gh release edit "${GITHUB_REF_NAME}" --notes "$(git log -1 --format=%s)"
-            fi
+            gh release edit "${GITHUB_REF_NAME}" --notes-file release-notes.md
           else
-            gh release create "${GITHUB_REF_NAME}" main.js manifest.json styles.css --title "${GITHUB_REF_NAME}" --notes "$(git log -1 --format=%s)"
+            gh release create "${GITHUB_REF_NAME}" main.js manifest.json styles.css --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
           fi
