@@ -30,6 +30,7 @@ The PDF export is a layout engine written for the plugin, in independent stages 
 ## Versions, commits and releases
 
 - One small version at a time. Commit message: `Version 0.21.0 : short description in French`.
+- Every version has a section `## X.Y.Z` in `CHANGELOG.md`, in English then in French (a test checks it). The release workflow copies it onto the GitHub release page.
 - To change the version, edit `manifest.json`, `package.json`, `package-lock.json` (the `version` at the top and the one under `packages[""]`) and add a line to `versions.json` with the minimum Obsidian version.
 - A release is a GitHub release whose tag is the version number without `v`, with `main.js`, `manifest.json` and `styles.css` attached. The maintainer publishes it from GitHub after merging the pull request.
 - Work on the branch given by the session, push, and open a draft pull request.
