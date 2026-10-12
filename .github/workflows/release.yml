@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -26,12 +28,22 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Attester la provenance des fichiers
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
       - name: Joindre les fichiers a la release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" main.js manifest.json styles.css --clobber
+            if [ -z "$(gh release view "${GITHUB_REF_NAME}" --json body --jq .body)" ]; then
+              gh release edit "${GITHUB_REF_NAME}" --notes "$(git log -1 --format=%s)"
+            fi
           else
-            gh release create "${GITHUB_REF_NAME}" main.js manifest.json styles.css --title "${GITHUB_REF_NAME}" --notes "Version ${GITHUB_REF_NAME}"
+            gh release create "${GITHUB_REF_NAME}" main.js manifest.json styles.css --title "${GITHUB_REF_NAME}" --notes "$(git log -1 --format=%s)"
           fi
