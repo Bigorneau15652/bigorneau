@@ -6,12 +6,11 @@ Une version anglaise de ce fichier est disponible dans [README.md](README.md).
 
 ## Installation
 
-Bigorneau est en cours de soumission au répertoire des plugins communautaires d'Obsidian. En attendant qu'il y figure, on l'installe avec le plugin BRAT :
+Bigorneau s'installe depuis les plugins communautaires d'Obsidian :
 
-1. Installer le plugin communautaire BRAT dans Obsidian.
-2. Lancer la commande « BRAT: Add a beta plugin for testing ».
-3. Saisir `Bigorneau15652/bigorneau`.
-4. Activer Bigorneau dans Réglages, Plugins communautaires.
+1. Ouvrir Réglages, Plugins communautaires, et désactiver le Mode restreint s'il est actif.
+2. Cliquer sur Parcourir et chercher Bigorneau.
+3. Cliquer sur Installer, puis sur Activer.
 
 L'interface existe en français et en anglais. Elle suit la langue d'Obsidian par défaut, et la langue se choisit dans les réglages du plugin. Bigorneau est conçu pour la version ordinateur d'Obsidian (Mac, Windows et Linux) et n'est pas disponible sur tablette ni sur téléphone.
 
