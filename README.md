@@ -99,7 +99,8 @@ What it reads and writes:
 - The folders of the fonts and of the profiles in the vault. Fonts that you add from your computer (`.ttf`, `.otf` or `.zip` files that you choose yourself) are copied into the fonts folder. Refused: a font file larger than 50 MB, and an archive that holds more than 500 files or more than 150 MB once unpacked. A file with the same name and identical content is not copied again, and a file with the same name and different content is replaced and reported.
 - Its own technical folder, `.obsidian/plugins/bigorneau`, which holds `data.json`: your settings, the name of the PDF author if you enter one, the names and colours of the labels, and the titles of the fixed notes that are open.
 - For Excalidraw drawings in the export, the plugin asks the Excalidraw plugin (another plugin) for the drawing.
-- The clipboard, only when you copy, cut or paste headings, or click the copy button of the diagnostic.
+- The clipboard, only when you copy, cut or paste headings, paste an image into a figure, or click the copy button of the diagnostic.
+- The list of the files of the vault, to offer the notes of the link window, the images of the figure picker, the fonts folder and the images found in the exported note. The plugin only reads their names and paths, and opens a file only when you choose it or when the exported note uses it.
 
 Links open in your browser only when you click them. A video or an image embedded with the option "Embed" of the link window is loaded by Obsidian itself when the note is displayed, not by Bigorneau. Images from the web are not downloaded for the export. The diagnostic window shows the state of the plugin and the measured times, without your notes and without file paths: read it before sharing it.
 

@@ -190,6 +190,11 @@ function layoutBand(band: Band, zonesIn: Zones, rotated: boolean, values: PageVa
   return { lists, aligns, above, below, rows, pad };
 }
 
+// Cote ou une ligne se place : une ligne justifiee est etiree puis posee a gauche.
+function edgeAlign(align: string | undefined): `left` | `center` | `right` {
+  return align === `center` || align === `right` ? align : `left`;
+}
+
 // Une zone : ses lignes (ligne de base donnee pour chacune), puis son cadre s'il y en a un, dessine derriere le texte. Tous les cadres
 // d'une bande ont la meme hauteur (images comprises), pour que les onglets restent alignes.
 function placeZone(lines: Piece[][], frame: ZoneFrame, m: BandLayout, alignOf: (line: number) => `left` | `center` | `right`, left: number, right: number, baselineOf: (i: number) => number, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
@@ -247,7 +252,7 @@ function placeBand(m: BandLayout, band: Band, from: number, to: number, mirrored
     // Each line has its own alignment; a justified line is stretched to the width of the box, then placed at its left edge.
     const chosen = m.aligns[key].map((x) => (mirrored ? swap[x] : x));
     const lines = m.lists[key].map((l, i) => (chosen[i] === `justify` ? stretch(l, b - a) : l.filter((p, k, all) => !p.gap || (k > 0 && k < all.length - 1))));
-    placeZone(lines, band.frames[key], m, (i) => (chosen[i] === `justify` ? `left` : (chosen[i] ?? `left`) as `left` | `center` | `right`), a, b, baselineOf, out, upright);
+    placeZone(lines, band.frames[key], m, (i) => edgeAlign(chosen[i]), a, b, baselineOf, out, upright);
   }
 }
 

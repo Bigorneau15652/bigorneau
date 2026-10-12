@@ -99,7 +99,8 @@ Ce qu'il lit et écrit :
 - Les dossiers des polices et des profils dans le coffre. Les polices que vous ajoutez depuis votre ordinateur (fichiers `.ttf`, `.otf` ou `.zip` que vous choisissez vous-même) sont copiées dans le dossier des polices. Sont refusés : un fichier de police de plus de 50 Mo, une archive qui contient plus de 500 fichiers ou plus de 150 Mo une fois décompressée. Un fichier de même nom et de contenu identique n'est pas recopié, et un fichier de même nom au contenu différent est remplacé et signalé.
 - Son propre dossier technique, `.obsidian/plugins/bigorneau`, qui contient `data.json` : vos réglages, le nom de l'auteur du PDF si vous en saisissez un, les noms et les couleurs des étiquettes, et les titres des notes fixes ouvertes.
 - Pour les dessins Excalidraw de l'export, le plugin demande le dessin au plugin Excalidraw (un autre plugin).
-- Le presse-papiers, seulement quand vous copiez, coupez ou collez des titres, ou cliquez sur le bouton de copie du diagnostic.
+- Le presse-papiers, seulement quand vous copiez, coupez ou collez des titres, collez une image dans une figure, ou cliquez sur le bouton de copie du diagnostic.
+- La liste des fichiers du coffre, pour proposer les notes de la fenêtre des liens, les images du sélecteur de figures, le dossier des polices et les images de la note exportée. Le plugin lit seulement leurs noms et leurs chemins, et n'ouvre un fichier que si vous le choisissez ou si la note exportée l'utilise.
 
 Les liens ne s'ouvrent dans votre navigateur que lorsque vous cliquez dessus. Une vidéo ou une image intégrée avec l'option « Intégrer » de la fenêtre des liens est chargée par Obsidian lui-même à l'affichage de la note, pas par Bigorneau. Les images du web ne sont pas téléchargées pour l'export. La fenêtre de diagnostic affiche l'état du plugin et les temps mesurés, sans vos notes et sans chemin de fichier : relisez-la avant de la partager.
 
