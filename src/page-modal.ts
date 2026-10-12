@@ -351,8 +351,10 @@ export class PageModal extends Modal {
         const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${single ? `left` : key}` });
         // Cadre de la zone : meme rendu que l'export (forme, remplissage, contour, marge, couleur du texte).
         const frame = band.frames[key];
-        const box = cell.createDiv({ cls: `mmw-ppreview-box` });
-        if (frame.shape !== `none` && zones[key].trim() !== ``) {
+        const framed = frame.shape !== `none` && zones[key].trim() !== ``;
+        // Without a frame the box takes the whole width of its zone so that each line can reach the left or right edge.
+        const box = cell.createDiv({ cls: `mmw-ppreview-box` + (framed ? `` : ` mmw-ppreview-open`) });
+        if (framed) {
           box.style.background = frame.fill === `` ? `transparent` : frame.fill;
           box.style.border = frame.stroke === `` ? `none` : `1px solid ${frame.stroke}`;
           box.style.padding = `${frame.padding}px`;

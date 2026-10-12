@@ -2419,6 +2419,11 @@ table.mmw-t-equal td {
   text-align: inherit;
 }
 
+/* Apercu : sans cadre, la zone prend toute la largeur de sa case. */
+.mmw-ppreview-open {
+  display: block;
+}
+
 /* Figure et legende l'une sous l'autre : le dessin ne se place plus a cote de sa legende ni par-dessus. */
 .mmw-figure-host {
   display: flex;
