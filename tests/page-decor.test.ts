@@ -319,27 +319,41 @@ const textsOf = (note: string): { x: number; text: string }[] => {
   return (c.pages[0].decor ?? []).flatMap((i) => (i.kind === `text` ? [{ x: i.x, text: i.text }] : []));
 };
 
-test(`chaque zone aligne son texte dans sa case : a gauche, au centre, a droite ou justifie`, async () => {
+test(`chaque ligne a son alignement dans la case de sa zone : gauche, centre, droite ou justifie`, async () => {
   const { measureText } = await import(`../src/export/font-metrics`);
   const left = 72;
   const right = 595.28 - 72;
   const third = (right - left) / 3;
   const width = (text: string): number => measureText(text, 10, `regular`).width;
-  const note = (align: `left` | `center` | `right` | `justify`): string =>
-    noteWith((c) => {
-      c.header.zones.center = `Bonjour le monde`;
-      c.header.aligns.center = align;
-    }, `# Titre\n\nTexte.`);
   // La zone du milieu occupe le tiers central de la ligne.
   const a = left + third;
   const b = a + third;
-  assert.ok(Math.abs(textsOf(note(`left`))[0].x - a) < 0.01);
-  assert.ok(Math.abs(textsOf(note(`center`))[0].x - ((a + b) / 2 - width(`Bonjour le monde`) / 2)) < 0.01);
-  assert.ok(Math.abs(textsOf(note(`right`))[0].x - (b - width(`Bonjour le monde`))) < 0.01);
-  const j = textsOf(note(`justify`));
+  const note = (mark: string): string =>
+    noteWith((c) => {
+      c.header.zones.center = `${mark}Bonjour le monde`;
+    }, `# Titre\n\nTexte.`);
+  assert.ok(Math.abs(textsOf(note(`{<}`))[0].x - a) < 0.01);
+  assert.ok(Math.abs(textsOf(note(`{|}`))[0].x - ((a + b) / 2 - width(`Bonjour le monde`) / 2)) < 0.01);
+  assert.ok(Math.abs(textsOf(note(`{>}`))[0].x - (b - width(`Bonjour le monde`))) < 0.01);
+  // Sans repere, la zone du milieu est centree.
+  assert.ok(Math.abs(textsOf(note(``))[0].x - ((a + b) / 2 - width(`Bonjour le monde`) / 2)) < 0.01);
+  const j = textsOf(note(`{=}`));
   assert.deepEqual(j.map((w) => w.text), [`Bonjour`, `le`, `monde`]);
   assert.ok(Math.abs(j[0].x - a) < 0.01);
   assert.ok(Math.abs(j[2].x + width(`monde`) - b) < 0.01);
+});
+
+test(`dans une meme case, la premiere ligne peut etre a gauche et la seconde centree`, async () => {
+  const { measureText } = await import(`../src/export/font-metrics`);
+  const left = 72;
+  const right = 595.28 - 72;
+  const a = left + (right - left) / 3;
+  const b = a + (right - left) / 3;
+  const t = textsOf(noteWith((c) => {
+    c.header.zones.center = `{<}Un\n{|}Deux`;
+  }, `# Titre\n\nTexte.`));
+  assert.ok(Math.abs(t.find((i) => i.text === `Un`)!.x - a) < 0.01);
+  assert.ok(Math.abs(t.find((i) => i.text === `Deux`)!.x - ((a + b) / 2 - measureText(`Deux`, 10, `regular`).width / 2)) < 0.01);
 });
 
 test(`les alignements par defaut gardent la place des trois zones d'avant`, async () => {
@@ -358,33 +372,35 @@ test(`les alignements par defaut gardent la place des trois zones d'avant`, asyn
 
 test(`une seule case : le texte du milieu s'etale sur toute la largeur, justifie ou non`, async () => {
   const { measureText } = await import(`../src/export/font-metrics`);
-  const note = (align: `left` | `justify`): string =>
+  const note = (mark: string): string =>
     noteWith((c) => {
       c.header.single = true;
-      c.header.zones.center = `Bonjour le monde`;
+      c.header.zones.center = `${mark}Bonjour le monde`;
       c.header.zones.left = `ignore`;
-      c.header.aligns.center = align;
     }, `# Titre\n\nTexte.`);
   const left = 72;
   const right = 595.28 - 72;
-  assert.ok(Math.abs(textsOf(note(`left`))[0].x - left) < 0.01);
-  const j = textsOf(note(`justify`));
+  // Sans repere, une case unique est alignee a gauche.
+  assert.ok(Math.abs(textsOf(note(``))[0].x - left) < 0.01);
+  const j = textsOf(note(`{=}`));
   assert.equal(j.length, 3);
   assert.ok(Math.abs(j[0].x - left) < 0.01);
   assert.ok(Math.abs(j[2].x + measureText(`monde`, 10, `regular`).width - right) < 0.01);
 });
 
-test(`la disposition d'une bande est ecrite dans la note, relue, et l'ancien champ align est compris`, () => {
+test(`les reperes d'alignement se lisent et s'ecrivent, et une zone qui n'en contient que est vide`, async () => {
+  const { lineAlign, withLineAlign, bandUsed, defaultBand } = await import(`../src/page-config`);
+  assert.deepEqual(lineAlign(`{>}Texte`), { align: `right`, text: `Texte` });
+  assert.deepEqual(lineAlign(`Texte`), { align: null, text: `Texte` });
+  assert.equal(withLineAlign(`Texte`, `justify`), `{=}Texte`);
+  assert.equal(withLineAlign(`{<}Texte`, `center`), `{|}Texte`);
+  assert.equal(withLineAlign(`{<}Texte`, null), `Texte`);
+  const band = defaultBand();
+  band.zones.center = `{|}`;
+  assert.equal(bandUsed(band), false);
+  band.zones.center = `{|}A`;
+  assert.equal(bandUsed(band), true);
   const c = defaultConfig();
   c.footer.single = true;
-  c.footer.aligns.left = `justify`;
-  const back = parsePageMarker(formatPageMarker(c))!;
-  assert.equal(back.footer.single, true);
-  assert.equal(back.footer.aligns.left, `justify`);
-  assert.equal(sanitizeConfig({ header: { aligns: { left: `n-importe-quoi` } } }).header.aligns.left, `left`);
-  // Notes de la version 0.26.9 : un texte unique avec cet alignement.
-  const old = sanitizeConfig({ header: { align: `right` } }).header;
-  assert.equal(old.single, true);
-  assert.equal(old.aligns.center, `right`);
-  assert.equal(sanitizeConfig({ header: { align: `zones` } }).header.single, false);
+  assert.equal(parsePageMarker(formatPageMarker(c))?.footer.single, true);
 });

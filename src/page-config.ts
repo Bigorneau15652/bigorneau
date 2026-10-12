@@ -47,24 +47,35 @@ export const FRAME_MAX_PADDING = 20;
 export const DISTANCE_MAX_MM = 60;
 export const POINTS_PER_MM = 72 / 25.4;
 
-// Alignment of the text inside the box of a zone: left, centre, right, or justified (the spaces are stretched over the whole box).
+// Alignment of a line of text inside the box of its zone: left, centre, right, or justified (the spaces are stretched over the whole box).
 export type ZoneAlign = `left` | `center` | `right` | `justify`;
 export const ZONE_ALIGNS: ZoneAlign[] = [`left`, `center`, `right`, `justify`];
 
-export interface ZoneAligns {
-  left: ZoneAlign;
-  center: ZoneAlign;
-  right: ZoneAlign;
+// Mark at the start of a line of a zone: {<} left, {|} centre, {>} right, {=} justified. A line without a mark keeps the alignment of its
+// zone: the left zone to the left, the centre zone centred, the right zone to the right (a single box: to the left).
+const ALIGN_MARKS: Record<ZoneAlign, string> = { left: `{<}`, center: `{|}`, right: `{>}`, justify: `{=}` };
+const ALIGN_RE = /^[ \t]*\{([<|>=])\}/;
+
+// Alignment written at the start of the line, and the line without its mark.
+export function lineAlign(line: string): { align: ZoneAlign | null; text: string } {
+  const m = ALIGN_RE.exec(line);
+  if (!m) return { align: null, text: line };
+  const align = ZONE_ALIGNS.find((a) => ALIGN_MARKS[a] === `{${m[1]}}`) ?? null;
+  return { align, text: line.slice(m[0].length) };
 }
 
-// Alignment of each zone when the user has not chosen: the left zone to the left, the centre zone centred, the right zone to the right.
-export const defaultAligns = (): ZoneAligns => ({ left: `left`, center: `center`, right: `right` });
+// The line with this alignment (null: no mark, the alignment of the zone).
+export function withLineAlign(line: string, align: ZoneAlign | null): string {
+  const text = lineAlign(line).text;
+  return align === null ? text : `${ALIGN_MARKS[align]}${text}`;
+}
+
+// Alignment of a line of the zone `key` when it has no mark.
+export const defaultLineAlign = (key: `left` | `center` | `right`, single: boolean): ZoneAlign => (single ? `left` : key);
 
 export interface Band {
   // False: three zones, each in a third of the line. True: a single box over the whole line, which holds the text of the centre zone.
   single: boolean;
-  // How the text is aligned inside each box (with a single box, the alignment of the centre zone is used).
-  aligns: ZoneAligns;
   // Zones des pages de droite (recto), ou de toutes les pages.
   zones: Zones;
   // Pages de gauche differentes de celles de droite : `verso` donne les zones des pages de gauche.
@@ -111,7 +122,6 @@ export const defaultFrame = (): ZoneFrame => ({ shape: `none`, fill: `#fff3bf`, 
 export function defaultBand(): Band {
   return {
     single: false,
-    aligns: defaultAligns(),
     zones: emptyZones(),
     mirror: false,
     verso: emptyZones(),
@@ -166,13 +176,8 @@ function framesOf(v: unknown): Frames {
 
 function bandOf(v: unknown): Band {
   const r = isObject(v) ? v : {};
-  const aligns = isObject(r.aligns) ? r.aligns : {};
-  const d = defaultAligns();
-  // Notes written by version 0.26.9 hold `align` (a single text with this alignment): it is read as a single box with that alignment.
-  const legacy = typeof r.align === `string` && (ZONE_ALIGNS as string[]).includes(r.align) ? (r.align as ZoneAlign) : undefined;
   return {
-    single: flag(r.single, legacy !== undefined),
-    aligns: { left: pick(aligns.left, ZONE_ALIGNS, d.left), center: pick(aligns.center, ZONE_ALIGNS, legacy ?? d.center), right: pick(aligns.right, ZONE_ALIGNS, d.right) },
+    single: flag(r.single, false),
     zones: zonesOf(r.zones),
     mirror: flag(r.mirror, false),
     verso: zonesOf(r.verso),
@@ -206,7 +211,9 @@ export function sanitizeConfig(raw: unknown): PageConfig {
 
 // Une bande (en-tete ou pied de page) existe des qu'une de ses zones est remplie : il n'y a pas d'interrupteur.
 export function bandUsed(band: Band): boolean {
-  const filled = (z: Zones): boolean => (band.single ? [z.center] : [z.left, z.center, z.right]).some((s) => s.trim() !== ``);
+  // A zone that holds only alignment marks is empty.
+  const blank = (s: string): boolean => s.split(/\r?\n/).every((l) => lineAlign(l).text.trim() === ``);
+  const filled = (z: Zones): boolean => (band.single ? [z.center] : [z.left, z.center, z.right]).some((s) => !blank(s));
   return filled(band.zones) || (band.mirror && filled(band.verso));
 }
 

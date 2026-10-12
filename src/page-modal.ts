@@ -5,7 +5,7 @@ import { App, ColorComponent, Modal, setIcon, Setting, TextComponent } from "obs
 import { imageFile, ImagePicker } from "./image-picker";
 import { t } from "./i18n";
 import { renderLayoutTab } from "./layout-modal";
-import { Band, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, SIZE_CODES, SizeCode, ZONE_MAX_LINES, ZoneAlign, Zones } from "./page-config";
+import { Band, defaultBand, DISTANCE_MAX_MM, FRAME_MAX_PADDING, ZoneFrame, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, mirrorZones, normalizeHex, NumberShape, OFFERED_VARIABLES, PageShape, PageConfig, parseZone, lineAlign, defaultLineAlign, withLineAlign, SIZE_CODES, SizeCode, ZONE_MAX_LINES, ZoneAlign, Zones } from "./page-config";
 
 // Tabs of the window: the sheet (format, margins, columns) and the three bands of the page.
 export type BandTab = `header` | `footer` | `edge`;
@@ -159,28 +159,6 @@ export class PageModal extends Modal {
       );
   }
 
-  // Four buttons that align the text inside the box of a zone: left, centre, right, justified.
-  private alignButtons(parent: HTMLElement, band: Band, key: `left` | `center` | `right`): HTMLElement {
-    const choices: [ZoneAlign, string, string][] = [
-      [`left`, `align-left`, t(`Aligner le texte à gauche dans la case`)],
-      [`center`, `align-center`, t(`Centrer le texte dans la case`)],
-      [`right`, `align-right`, t(`Aligner le texte à droite dans la case`)],
-      [`justify`, `align-justify`, t(`Justifier le texte : les espaces sont étirés sur toute la largeur de la case`)],
-    ];
-    const row = parent.createDiv({ cls: `mmw-palign` });
-    for (const [value, icon, label] of choices) {
-      const b = row.createEl(`button`, { cls: `mmw-palign-button clickable-icon`, attr: { "aria-label": label, type: `button` } });
-      setIcon(b, icon);
-      if (band.aligns[key] === value) b.addClass(`is-active`);
-      b.addEventListener(`click`, () => {
-        band.aligns[key] = value;
-        this.save();
-        this.render();
-      });
-    }
-    return row;
-  }
-
   // Forme dessinee derriere chaque numero de page {page} ecrit dans la bande : un chapitre a deplier.
   private shapeSettings(parent: HTMLElement, band: Band, which: BandTab): void {
     const shape = band.pageShape;
@@ -327,6 +305,19 @@ export class PageModal extends Modal {
     button(`G`, t(`Gras`), () => this.wrap(`**`, `**`), `mmw-ptool-bold`);
     button(`I`, t(`Italique`), () => this.wrap(`*`, `*`), `mmw-ptool-italic`);
     for (const code of SIZE_CODES) button(SIZE_LABEL[code], t(`Taille`) + ` ${SIZE_LABEL[code]}`, () => this.insert(`{${code}}`));
+    // Alignment of the lines that hold the cursor or the selection: left, centre, right, justified (a second click removes it).
+    const alignChoices: [ZoneAlign, string, string][] = [
+      [`left`, `align-left`, t(`Aligner à gauche la ligne ou les lignes sélectionnées`)],
+      [`center`, `align-center`, t(`Centrer la ligne ou les lignes sélectionnées`)],
+      [`right`, `align-right`, t(`Aligner à droite la ligne ou les lignes sélectionnées`)],
+      [`justify`, `align-justify`, t(`Justifier la ligne ou les lignes sélectionnées : les espaces sont étirés sur toute la largeur de la case`)],
+    ];
+    for (const [value, icon, label] of alignChoices) {
+      const b = bar.createEl(`button`, { cls: `mmw-ptool mmw-ptool-align`, attr: { "aria-label": label, type: `button` } });
+      setIcon(b, icon);
+      b.addEventListener(`mousedown`, (e) => e.preventDefault());
+      b.addEventListener(`click`, () => this.alignLines(value));
+    }
     const select = bar.createEl(`select`, { cls: `mmw-ptool-select dropdown` });
     select.createEl(`option`, { text: t(`Insérer une valeur`), value: `` });
     const names: Record<string, string> = {
@@ -357,7 +348,7 @@ export class PageModal extends Modal {
     const paint = (): void => {
       preview.empty();
       for (const key of keys) {
-        const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${band.aligns[key]}` });
+        const cell = preview.createDiv({ cls: `mmw-ppreview-cell mmw-ppreview-${single ? `left` : key}` });
         // Cadre de la zone : meme rendu que l'export (forme, remplissage, contour, marge, couleur du texte).
         const frame = band.frames[key];
         const box = cell.createDiv({ cls: `mmw-ppreview-box` });
@@ -370,7 +361,12 @@ export class PageModal extends Modal {
         if (frame.color !== ``) box.style.color = frame.color;
         for (const line of zones[key].split(/\r?\n/).slice(0, ZONE_MAX_LINES)) {
           const row = box.createDiv({ cls: `mmw-ppreview-line` });
-          for (const tok of parseZone(line)) {
+          // Each line has its own alignment (the mark at its start), or the one of its zone.
+          const marked = lineAlign(line);
+          const align = marked.align ?? defaultLineAlign(key, single);
+          row.style.textAlign = align;
+          if (align === `justify`) row.style.textAlignLast = `justify`;
+          for (const tok of parseZone(marked.text)) {
             if (tok.kind === `image`) {
               const file = imageFile(this.app, tok.target);
               if (!file) {
@@ -402,9 +398,7 @@ export class PageModal extends Modal {
     const labels: Record<`left` | `center` | `right`, string> = edge ? { left: t(`Haut`), center: t(`Milieu`), right: t(`Bas`) } : { left: t(`Gauche`), center: t(`Centre`), right: t(`Droite`) };
     for (const key of keys) {
       const box = grid.createDiv({ cls: `mmw-pzone` });
-      const head = box.createDiv({ cls: `mmw-pzone-head` });
-      head.createDiv({ cls: `mmw-pzone-label`, text: single ? t(`Texte`) : labels[key] });
-      this.alignButtons(head, band, key);
+      box.createDiv({ cls: `mmw-pzone-label`, text: single ? t(`Texte`) : labels[key] });
       const input = box.createEl(`textarea`, { cls: `mmw-pzone-input` });
       input.rows = 3;
       input.value = zones[key];
@@ -423,6 +417,24 @@ export class PageModal extends Modal {
   private sample(name: string): string {
     const values: Record<string, string> = { document: t(`Titre du document`), chapter: t(`Titre du chapitre`), section: t(`Titre de la section`), author: t(`Auteur`), date: t(`Date du jour`), created: t(`Date de création de la note`), modified: t(`Date de dernière modification de la note`), page: `1`, pages: `12` };
     return values[name] ?? ``;
+  }
+
+  // Aligns the lines of the active zone that hold the cursor or the selection: the mark is written at the start of each line. When every
+  // line already has this alignment, the mark is removed (the line keeps the alignment of its zone).
+  private alignLines(align: ZoneAlign): void {
+    const input = this.lastInput;
+    if (!input) return;
+    const value = input.value;
+    const from = input.selectionStart ?? 0;
+    const to = input.selectionEnd ?? from;
+    const start = value.lastIndexOf(`\n`, from - 1) + 1;
+    const stop = value.indexOf(`\n`, to);
+    const end = stop === -1 ? value.length : stop;
+    const lines = value.slice(start, end).split(`\n`);
+    const already = lines.every((l) => lineAlign(l).align === align);
+    input.setRangeText(lines.map((l) => withLineAlign(l, already ? null : align)).join(`\n`), start, end, `end`);
+    input.dispatchEvent(new Event(`input`));
+    input.focus();
   }
 
   // Entoure la selection de la zone active (ou la pose au curseur).

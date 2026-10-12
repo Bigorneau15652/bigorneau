@@ -2868,24 +2868,6 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   width: 6em;
 }
 
-/* Alignement du texte dans la case d'une zone : quatre boutons a droite de son nom. */
-.mmw-pzone-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.mmw-palign {
-  display: flex;
-  gap: 2px;
-}
-
-.mmw-palign-button.is-active {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-}
-
 .mmw-pzones-single,
 .mmw-ppreview-solo {
   grid-template-columns: 1fr;
@@ -2895,7 +2877,10 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   text-align: left;
 }
 
-.mmw-ppreview-justify {
-  text-align: justify;
-  text-align-last: justify;
+
+/* Boutons d'alignement de la barre d'outils des zones. */
+.mmw-ptool-align {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
