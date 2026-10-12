@@ -18,7 +18,7 @@ export const isBulletId = (v: unknown): v is BulletId => typeof v === `string` &
 
 // Reglage lu depuis les donnees du plugin : toujours six symboles valides.
 export function sanitizeBullets(v: unknown): BulletId[] {
-  const list = Array.isArray(v) ? v : [];
+  const list: unknown[] = Array.isArray(v) ? v : [];
   return DEFAULT_BULLETS.map((fallback, i) => (isBulletId(list[i]) ? list[i] : fallback));
 }
 

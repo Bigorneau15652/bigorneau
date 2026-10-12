@@ -129,7 +129,6 @@ export class MmSettingTab extends PluginSettingTab {
         sl
           .setLimits(min, max, step)
           .setValue(s[field])
-          .setDynamicTooltip()
           .onChange(async (v) => {
             s[field] = v;
             await this.plugin.saveSettings();

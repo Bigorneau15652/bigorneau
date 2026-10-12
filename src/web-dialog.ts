@@ -46,7 +46,7 @@ export class WebDialog {
     this.urlInput = el(`input`, `mmw-dlg-input mmw-web-url`);
     this.urlInput.type = `text`;
     this.urlInput.value = opts.url;
-    this.urlInput.placeholder = `https://…`;
+    this.urlInput.placeholder = `https://www.example.org`;
     this.urlInput.spellcheck = false;
     field(t(`Adresse (page web, vidéo YouTube…)`), this.urlInput);
 
