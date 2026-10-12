@@ -5,6 +5,7 @@ import { captionWord } from "./export/insert";
 import { t } from "./i18n";
 import { addColumn, addRow, Align, deleteColumn, deleteRow, findTable, moveColumn, moveRow, replaceTable, setAlign, setCaption, setTableStyle, TableData, tableContext, TableSpan } from "./table-edit";
 import type { TableStyle } from "./table-marker";
+import { pasteIntoTable, TablePaste } from "./table-paste";
 
 export interface MenuSpec {
   title?: string;
@@ -13,6 +14,8 @@ export interface MenuSpec {
   disabled?: boolean;
   // Nouveau texte de la note, ou null quand l'action ne change rien.
   run?: (text: string) => string | null;
+  // Entree qui colle le presse-papiers : l'application lit le presse-papiers, puis ecrit le nouveau texte et affiche le message.
+  paste?: (text: string, clipboard: string) => TablePaste | null;
   submenu?: MenuSpec[];
   separator?: boolean;
 }
@@ -48,6 +51,8 @@ export function tableMenu(text: string, offset: number, target?: Partial<CellTar
   const align = (a: Align): ((current: string) => string | null) => apply((d) => setAlign(d, col, a));
   const inHeader = row === 0;
   return [
+    { title: t(`Coller depuis un tableur`), icon: `clipboard-paste`, paste: (current, clip) => pasteIntoTable(current, span.from, { row, col }, clip) },
+    { separator: true },
     { title: t(`Insérer une ligne au-dessus`), icon: `between-horizontal-start`, disabled: inHeader, run: apply((d) => addRow(d, row, `above`)) },
     { title: t(`Insérer une ligne en dessous`), icon: `between-horizontal-end`, run: apply((d) => addRow(d, row, `below`)) },
     { title: t(`Insérer une colonne à gauche`), icon: `between-vertical-start`, run: apply((d) => addColumn(d, col, `left`)) },

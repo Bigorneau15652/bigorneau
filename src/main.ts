@@ -25,6 +25,7 @@ import { ScriptManager } from "./scripts";
 import { ScriptsModal } from "./scripts-modal";
 import * as obsidianApi from "obsidian";
 import { columnAt, findTable, insertBlock, newTableBlock, tableContext } from "./table-edit";
+import { looksLikeSpreadsheet, pasteIntoTable } from "./table-paste";
 import { cellAtLine, MenuSpec, tableMenu } from "./table-menu";
 import { TableModal } from "./table-modal";
 import { figureCaptionExtension, tableNumberExtension } from "./figure-caption-widget";
@@ -180,6 +181,22 @@ export default class MindmapWritingPlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on(`rename`, (file) => {
         if (this.lastFile && file === this.lastFile) this.refreshViews();
+      })
+    );
+    // Cellules copiees dans un tableur (Ctrl + V avec le curseur dans un tableau, mode Source) : elles remplissent le tableau.
+    this.registerEvent(
+      this.app.workspace.on(`editor-paste`, (evt, editor) => {
+        if (evt.defaultPrevented) return;
+        const plain = evt.clipboardData?.getData(`text/plain`) ?? ``;
+        if (!looksLikeSpreadsheet(plain, evt.clipboardData?.getData(`text/html`) ?? ``)) return;
+        const text = editor.getValue();
+        const cursor = editor.getCursor();
+        const cell = cellAtLine(text, cursor.line, cursor.ch, columnAt);
+        const done = cell ? pasteIntoTable(text, editor.posToOffset(cursor), cell, plain) : null;
+        if (!done) return;
+        evt.preventDefault();
+        this.editorAccess(editor).apply(done.text);
+        new Notice(done.message);
       })
     );
     // Une image collee (Ctrl + V) : Obsidian ecrit son lien sans nom ; la fenetre du nom de la figure s'ouvre ensuite.
@@ -428,12 +445,22 @@ export default class MindmapWritingPlugin extends Plugin {
         },
       });
     }
+    this.addCommand({
+      id: `table-paste-spreadsheet`,
+      name: t(`Tableau : coller depuis un tableur`),
+      editorCheckCallback: (checking, editor) => {
+        const found = this.tableItem(editor, t(`Coller depuis un tableur`));
+        if (!found?.paste) return false;
+        if (!checking) void this.pasteSpreadsheet(found.paste, this.editorAccess(editor));
+        return true;
+      },
+    });
     this.registerEditorExtension(tableMarkerHideExtension());
     this.registerEditorExtension(paragraphMarkerHideExtension());
     this.registerEditorExtension(listMarkerWidgetExtension());
     this.registerEditorExtension(figureCaptionExtension());
     this.registerEditorExtension(tableNumberExtension());
-    this.registerEditorExtension(tableWidgetExtension({ showMenu: (event, items, access) => this.showTableMenu(event, items, access) }));
+    this.registerEditorExtension(tableWidgetExtension({ showMenu: (event, items, access) => this.showTableMenu(event, items, access), notify: (message) => void new Notice(message) }));
     // Mode Source : clic droit dans un tableau.
     this.registerEvent(
       this.app.workspace.on(`editor-menu`, (menu, editor) => {
@@ -816,12 +843,34 @@ export default class MindmapWritingPlugin extends Plugin {
         if (spec.checked !== undefined) item.setChecked(spec.checked);
         if (spec.disabled) item.setDisabled(true);
         item.onClick(() => {
+          if (spec.paste) {
+            void this.pasteSpreadsheet(spec.paste, access);
+            return;
+          }
           const next = spec.run?.(access.text());
           if (next !== null && next !== undefined) access.apply(next);
         });
       });
     };
     for (const spec of items) add(spec);
+  }
+
+  // Colle le contenu du presse-papiers dans le tableau (entree du menu et commande) : il est lu d'abord, puis la note est lue et ecrite.
+  private async pasteSpreadsheet(paste: NonNullable<MenuSpec[`paste`]>, access: { text(): string; apply(text: string): void }): Promise<void> {
+    let clip = ``;
+    try {
+      clip = await navigator.clipboard.readText();
+    } catch {
+      new Notice(t(`Impossible de lire le presse-papiers.`));
+      return;
+    }
+    const done = paste(access.text(), clip);
+    if (!done) {
+      new Notice(t(`Le presse-papiers ne contient pas de cellules de tableur.`));
+      return;
+    }
+    access.apply(done.text);
+    new Notice(done.message);
   }
 
   private showTableMenu(event: MouseEvent, items: MenuSpec[], access: { text(): string; apply(text: string): void }): void {

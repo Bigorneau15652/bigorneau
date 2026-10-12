@@ -7,10 +7,13 @@ import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { record } from "./diagnostics";
 import { addColumn, addRow, findTable, renderTable, tableContext } from "./table-edit";
 import { MenuSpec, tableMenu } from "./table-menu";
+import { looksLikeSpreadsheet, pasteIntoTable } from "./table-paste";
 
 export interface TableWidgetHost {
   // Affiche le menu a l'endroit du clic ; `access` donne le texte actuel de la note et en ecrit le nouveau texte d'une entree choisie.
   showMenu(event: MouseEvent, items: MenuSpec[], access: { text(): string; apply(text: string): void }): void;
+  // Affiche un court message a l'utilisateur.
+  notify(message: string): void;
 }
 
 // Plus petit changement qui transforme l'ancien texte en le nouveau (le debut et la fin communs sont gardes).
@@ -153,6 +156,28 @@ class TableWidgets {
         e.preventDefault();
         e.stopPropagation();
         this.host.showMenu(e, items, { text: () => this.view.state.doc.toString(), apply: (text) => this.applyText(text) });
+      },
+      true
+    );
+    // Ctrl + V de cellules copiees dans un tableur : elles remplissent le tableau a partir de la cellule du curseur.
+    host.addEventListener(
+      `paste`,
+      (e) => {
+        const data = e.clipboardData;
+        if (!data) return;
+        const plain = data.getData(`text/plain`);
+        if (!looksLikeSpreadsheet(plain, data.getData(`text/html`))) return;
+        const cell = (e.target as Element | null)?.closest(`td, th`) as HTMLTableCellElement | null;
+        const row = cell?.closest(`tr`) as HTMLTableRowElement | null;
+        if (!cell || !row) return;
+        const c = current();
+        if (!c) return;
+        const done = pasteIntoTable(c.text, c.span.from, { row: row.rowIndex, col: cell.cellIndex }, plain);
+        if (!done) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.applyText(done.text);
+        this.host.notify(done.message);
       },
       true
     );
