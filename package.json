@@ -1,6 +1,6 @@
 {
   "name": "bigorneau",
-  "version": "0.26.13",
+  "version": "0.27.0",
   "description": "Plugin Obsidian d'ecriture en branche (carte mentale)",
   "main": "main.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "@types/node": "^20.0.0",
     "builtin-modules": "^3.3.0",
     "esbuild": "^0.21.0",
-    "obsidian": "latest",
+    "obsidian": "1.13.1",
     "tslib": "^2.6.0",
     "typescript": "^5.4.0"
   },
