@@ -255,7 +255,6 @@ export class PageModal extends Modal {
           x
             .setLimits(0, FRAME_MAX_PADDING, 1)
             .setValue(frame.padding)
-            .setDynamicTooltip()
             .onChange((v) => {
               frame.padding = v;
               this.save();

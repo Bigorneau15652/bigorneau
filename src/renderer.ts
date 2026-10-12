@@ -1,5 +1,6 @@
 // Affichage de la carte : cases, branches, zoom, deplacement, pliage et selection.
 // N'utilise que le DOM standard, pour pouvoir etre verifie hors d'Obsidian.
+import { Platform } from "obsidian";
 import { computeStats, flattenDoc, isFloatKey, isFloatRoot, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
 import { t } from "./i18n";
 import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
@@ -19,7 +20,7 @@ import { setSvg } from "./dom";
 import { rangeBetween, toggled } from "./selection";
 
 // True on a Mac, where Cmd + click toggles a title (Ctrl + click opens the context menu there); elsewhere Ctrl + click toggles.
-const IS_MAC = typeof navigator !== `undefined` && /Mac|iPhone|iPad/.test(navigator.platform || ``);
+const IS_MAC = Platform.isMacOS;
 
 // Modification de la structure demandee depuis la carte ; la vue l'applique dans la note.
 export interface MapEdit {
