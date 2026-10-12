@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.28.2
+
+Fixed: the README and the help now match the code. Duplicated sentences are removed (the French README repeated a paragraph about font weights and the fonts folder, and both READMEs said twice that the plugin creates its folders on first launch). The Lorem ipsum generator is a command of the command palette with no button in the panel. The README describes Zen mode, the chapter navigation commands, "Duplicate the selected heading" and "Diagnostic", which it did not mention.
+
+Corrigé : le README et l'aide correspondent maintenant au code. Les phrases en double sont retirées (le README français répétait un paragraphe sur les graisses de polices et le dossier des polices, et les deux README disaient deux fois que le plugin crée ses dossiers au premier lancement). Le générateur Lorem ipsum est une commande de la palette de commandes sans bouton dans le panneau. Le README décrit le mode Zen, les commandes de navigation entre chapitres, « Dupliquer le titre sélectionné » et « Diagnostic », qu'il ne mentionnait pas.
+
 ## 0.28.1
 
 Added: this changelog. The release page of each version now shows its description from this file.
