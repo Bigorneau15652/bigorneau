@@ -7,7 +7,7 @@ import { BASE_POINTS, sizeFactor, styleOf, TextSpec } from "../text-style";
 import type { Page } from "./paginate";
 import type { PageSetup } from "./typeset";
 import { displaySize } from "./image";
-import { Band, bandUsed, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, PageConfig, PageValues, parseZone, POINTS_PER_MM, SIZE_POINTS, SizeCode, valueOf, ZONE_MAX_LINES, ZoneAlign, ZoneFrame, Zones } from "../page-config";
+import { Band, bandUsed, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX, PageConfig, PageValues, parseZone, lineAlign, defaultLineAlign, POINTS_PER_MM, SIZE_POINTS, SizeCode, valueOf, ZONE_MAX_LINES, ZoneAlign, ZoneFrame, Zones } from "../page-config";
 
 export type DecorLeaf =
   | { kind: `text`; x: number; baseline: number; size: number; style: FontStyle; text: string; color: string }
@@ -153,6 +153,8 @@ const zoneLines = (s: string): string[] => s.split(/\r?\n/).slice(0, ZONE_MAX_LI
 // de la derniere (images comprises), nombre de lignes et plus grande marge de cadre.
 interface BandLayout {
   lists: Record<`left` | `center` | `right`, Piece[][]>;
+  // Alignment of each line of each zone (the mark at the start of the line, or the alignment of the zone).
+  aligns: Record<`left` | `center` | `right`, ZoneAlign[]>;
   above: number;
   below: number;
   rows: number;
@@ -163,12 +165,15 @@ function layoutBand(band: Band, zonesIn: Zones, rotated: boolean, values: PageVa
   // A single text uses only the centre zone.
   const zones: Zones = band.single ? { left: ``, center: zonesIn.center, right: `` } : zonesIn;
   const lists = { left: [] as Piece[][], center: [] as Piece[][], right: [] as Piece[][] };
+  const aligns = { left: [] as ZoneAlign[], center: [] as ZoneAlign[], right: [] as ZoneAlign[] };
   let rows = 1;
   let pad = 0;
   for (const key of KEYS) {
     const frame = band.frames[key];
     const textColor = frame.color !== `` ? frame.color : ctx.typography?.color ? ctx.typography.color : TEXT_COLOR;
-    lists[key] = zoneLines(zones[key]).map((line) => pieces(line, band, rotated, textColor, values, ctx, missing, band.aligns[key] === `justify`));
+    const marked = zoneLines(zones[key]).map(lineAlign);
+    aligns[key] = marked.map((l) => l.align ?? defaultLineAlign(key, band.single));
+    lists[key] = marked.map((l, i) => pieces(l.text, band, rotated, textColor, values, ctx, missing, aligns[key][i] === `justify`));
     if (lists[key].some((l) => l.length > 0)) {
       rows = Math.max(rows, lists[key].length);
       if (frame.shape !== `none`) pad = Math.max(pad, frame.padding);
@@ -182,18 +187,19 @@ function layoutBand(band: Band, zonesIn: Zones, rotated: boolean, values: PageVa
     for (const p of first) above = Math.max(above, p.above);
     for (const p of last) below = Math.max(below, p.below);
   }
-  return { lists, above, below, rows, pad };
+  return { lists, aligns, above, below, rows, pad };
 }
 
 // Une zone : ses lignes (ligne de base donnee pour chacune), puis son cadre s'il y en a un, dessine derriere le texte. Tous les cadres
 // d'une bande ont la meme hauteur (images comprises), pour que les onglets restent alignes.
-function placeZone(lines: Piece[][], frame: ZoneFrame, m: BandLayout, align: `left` | `center` | `right`, left: number, right: number, baselineOf: (i: number) => number, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
+function placeZone(lines: Piece[][], frame: ZoneFrame, m: BandLayout, alignOf: (line: number) => `left` | `center` | `right`, left: number, right: number, baselineOf: (i: number) => number, out: DecorLeaf[], upright: DecorLeaf[] = out): void {
   const mine: DecorLeaf[] = [];
   let minX = Infinity;
   let maxX = -Infinity;
   lines.forEach((list, i) => {
     if (list.length === 0) return;
     const total = list.reduce((a, p) => a + p.width, 0);
+    const align = alignOf(i);
     let x = align === `left` ? left : align === `right` ? right - total : (left + right) / 2 - total / 2;
     const baseline = baselineOf(i);
     minX = Math.min(minX, x);
@@ -238,10 +244,10 @@ function placeBand(m: BandLayout, band: Band, from: number, to: number, mirrored
     const slot = mirrored ? 2 - index : index;
     const a = band.single ? from : from + slot * third;
     const b = band.single ? to : a + third;
-    const chosen = band.aligns[key];
-    const align = mirrored ? swap[chosen] : chosen;
-    const lines = align === `justify` ? m.lists[key].map((l) => stretch(l, b - a)) : m.lists[key].map((l) => l.filter((p, i, all) => !p.gap || (i > 0 && i < all.length - 1)));
-    placeZone(lines, band.frames[key], m, align === `justify` ? `left` : align, a, b, baselineOf, out, upright);
+    // Each line has its own alignment; a justified line is stretched to the width of the box, then placed at its left edge.
+    const chosen = m.aligns[key].map((x) => (mirrored ? swap[x] : x));
+    const lines = m.lists[key].map((l, i) => (chosen[i] === `justify` ? stretch(l, b - a) : l.filter((p, k, all) => !p.gap || (k > 0 && k < all.length - 1))));
+    placeZone(lines, band.frames[key], m, (i) => (chosen[i] === `justify` ? `left` : (chosen[i] ?? `left`) as `left` | `center` | `right`), a, b, baselineOf, out, upright);
   }
 }
 
