@@ -16,7 +16,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: npm install
+      - name: Verifier que l etiquette est le numero de version du manifeste
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          if [ "${GITHUB_REF_NAME}" != "${VERSION}" ]; then
+            echo "L etiquette ${GITHUB_REF_NAME} est differente de la version du manifeste ${VERSION}."
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test
       - run: npm run build
       - name: Joindre les fichiers a la release
         env:
