@@ -987,10 +987,12 @@ const PAIRS: [string, string][] = [
   [`Reliure sur le bord court`, `Bound on the short edge`],
   [`Ouvrir la boîte d'impression`, `Open the print box`],
   [`Pages à imprimer : « {0} » ne désigne aucune page de ce document (il en compte {1}).`, `Pages to print: "{0}" does not match any page of this document (it has {1}).`],
-  [`Les pages n'ont pas toutes la même taille de feuille : la boîte d'impression du système est utilisée.`, `The pages do not all have the same sheet size: the system print box is used.`],
   [`Impression envoyée à {0}.`, `Printing sent to {0}.`],
-  [`L'impression directe a échoué ({0}) : la boîte d'impression du système s'ouvre.`, `Direct printing failed ({0}): the system print box opens.`],
   [`raison inconnue`, `unknown reason`],
+  [`L'impression vers {0} a échoué : {1}. Vérifiez que l'imprimante est allumée et connectée, ou choisissez « Boîte d'impression du système ».`, `Printing to {0} failed: {1}. Check that the printer is on and connected, or choose "System print box".`],
+  [`L'impression directe n'est pas disponible sur ce système : la boîte d'impression du système s'ouvre.`, `Direct printing is not available on this system: the system print box opens.`],
+  [`Envoi à {0} en cours (travail {1} sur {2})… cela peut durer une minute.`, `Sending to {0} (job {1} of {2})… this can take a minute.`],
+  [`Impression envoyée à {0} en {1} travaux (un par format de feuille).`, `Printing sent to {0} in {1} jobs (one for each sheet size).`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

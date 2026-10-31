@@ -102,10 +102,18 @@ export function placement(page: Sheet, sheet: Sheet): { scale: number; x: number
   return { scale, x: (sheet.width - page.width * scale) / 2, y: (sheet.height - page.height * scale) / 2 };
 }
 
-// The one sheet size of the whole printing, or null when the sheets differ (the printer then needs the box of the system).
-export function commonSheet(sheets: Sheet[]): Sheet | null {
-  if (sheets.length === 0) return null;
-  return sheets.every((s) => Math.abs(s.width - sheets[0].width) < 0.5 && Math.abs(s.height - sheets[0].height) < 0.5) ? sheets[0] : null;
+// Cuts a list of pages into runs of consecutive pages that have the same sheet size. A printer takes one sheet size per job: each
+// run is one job, and the order of the pages is kept.
+export function runsOfSameSheet<T>(items: T[], sheetOf: (item: T) => Sheet): T[][] {
+  const runs: T[][] = [];
+  let last: Sheet | null = null;
+  for (const item of items) {
+    const sheet = sheetOf(item);
+    if (last && Math.abs(sheet.width - last.width) < 0.5 && Math.abs(sheet.height - last.height) < 0.5) runs[runs.length - 1].push(item);
+    else runs.push([item]);
+    last = sheet;
+  }
+  return runs;
 }
 
 // Settings sent to the printing of the window when a printer is chosen in the plugin (no box of the system). The sheet is given in
