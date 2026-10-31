@@ -42,12 +42,13 @@ export async function listPrinters(): Promise<PrinterInfo[] | null> {
   }
 }
 
-// Sends the window to a printer without the box of the system. Answers with the reason when it fails.
+// Sends the window to a printer without the box of the system. Answers with the reason when it fails (`unavailable` when the
+// application does not give access to the printing).
 export function printWithoutBox(settings: Record<string, unknown>): Promise<{ ok: boolean; reason: string }> {
   return new Promise((resolve) => {
     const contents = printContents();
     if (!contents) {
-      resolve({ ok: false, reason: `` });
+      resolve({ ok: false, reason: `unavailable` });
       return;
     }
     let done = false;
@@ -56,7 +57,7 @@ export function printWithoutBox(settings: Record<string, unknown>): Promise<{ ok
       done = true;
       resolve({ ok, reason });
     };
-    window.setTimeout(() => finish(false, `timeout`), 180000);
+    window.setTimeout(() => finish(false, `no answer from the printer after two minutes`), 120000);
     try {
       contents.print(settings, (success, reason) => finish(success === true, typeof reason === `string` ? reason : ``));
     } catch (e) {

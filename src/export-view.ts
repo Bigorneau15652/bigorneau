@@ -10,7 +10,7 @@ import { columnsOf, FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, PageSetup, Row } from "./export/typeset";
 import { loadAssets, pageStyleOf } from "./export-context";
-import { commonSheet, defaultPrintOptions, directPrintOptions, parsePageList, placement, PrintOptions, sheetFor } from "./print-options";
+import { defaultPrintOptions, directPrintOptions, parsePageList, placement, PrintOptions, runsOfSameSheet, Sheet, sheetFor } from "./print-options";
 import { printWithoutBox } from "./print-system";
 import { cssFamilyOf } from "./font-store";
 import { missingCharsLine, warningLines } from "./export-report";
@@ -68,32 +68,13 @@ export class ExportPreviewView extends ItemView {
     this.releaseImages();
   }
 
-  // Prints the pages of the preview, without any other program: a copy of the chosen pages is put at the end of the body, the rest of
-  // the window is hidden for the printing (see @media print in styles.css), then the copy is removed. Each page is put in the middle of
-  // its sheet (the paper and the orientation of the options), reduced if the sheet is smaller. Each distinct sheet size has its own
-  // named page. With a printer chosen in the options the work goes to it directly; otherwise, or when that fails, the printing box of
-  // the system opens.
-  async printNow(options: PrintOptions = defaultPrintOptions()): Promise<void> {
-    if (this.sheets.length === 0) await this.refresh();
-    if (this.sheets.length === 0) {
-      new Notice(t(`Rien à imprimer : l'aperçu n'a pas pu être composé.`));
-      return;
-    }
-    const chosen = parsePageList(options.pages, this.sheets.length);
-    if (!chosen) {
-      new Notice(t(`Pages à imprimer : « {0} » ne désigne aucune page de ce document (il en compte {1}).`, options.pages, this.sheets.length), 8000);
-      return;
-    }
-    const placed = chosen.map((n) => {
-      const own = this.sheetSetups[n - 1] ?? this.setup;
-      return { sheet: this.sheets[n - 1], own, paper: sheetFor({ width: own.width, height: own.height }, options) };
-    });
-    let direct = options.printer !== `` ? commonSheet(placed.map((p) => p.paper)) : null;
-    if (options.printer !== `` && !direct) new Notice(t(`Les pages n'ont pas toutes la même taille de feuille : la boîte d'impression du système est utilisée.`), 8000);
+  // Puts a copy of pages at the end of the body for the printing: each page in the middle of its sheet, reduced if the sheet is smaller,
+  // one named page per distinct sheet size. The rest of the window is hidden by @media print in styles.css until `remove` is called.
+  private mountPrint(items: { sheet: HTMLElement; own: PageSetup; paper: Sheet }[], filter: `` | `gray` | `bw`): { root: HTMLElement; remove: () => void } {
     const root = document.body.createDiv({ cls: `mmw-print-root` });
     const names = new Map<string, string>();
     const rules: string[] = [];
-    for (const item of placed) {
+    for (const item of items) {
       const key = `${item.paper.width}x${item.paper.height}`;
       let name = names.get(key);
       if (!name) {
@@ -115,40 +96,75 @@ export class ExportPreviewView extends ItemView {
       const page = item.sheet.firstElementChild?.cloneNode(true);
       if (page) inner.appendChild(page);
     }
-    // Grey tones: the printer does it when the work goes to it directly, otherwise a filter of the page does it.
-    if (options.color === `bw` || (options.color === `gray` && !direct)) root.addClass(options.color === `bw` ? `mmw-print-bw` : `mmw-print-gray`);
+    if (filter !== ``) root.addClass(filter === `bw` ? `mmw-print-bw` : `mmw-print-gray`);
     const pageRules = new CSSStyleSheet();
     pageRules.replaceSync(rules.join(`\n`));
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, pageRules];
     document.body.addClass(`mmw-printing`);
-    let cleaned = false;
-    const cleanup = (): void => {
-      if (cleaned) return;
-      cleaned = true;
-      window.removeEventListener(`afterprint`, cleanup);
+    let removed = false;
+    const remove = (): void => {
+      if (removed) return;
+      removed = true;
       document.body.removeClass(`mmw-printing`);
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== pageRules);
       root.remove();
     };
     // Safety net: the copy never stays in the window if the end of the printing is not announced.
-    window.setTimeout(cleanup, 240000);
-    if (direct) {
-      const result = await printWithoutBox(directPrintOptions(options.printer, direct, options));
-      if (result.ok) {
-        cleanup();
-        new Notice(t(`Impression envoyée à {0}.`, options.printer));
+    window.setTimeout(remove, 300000);
+    return { root, remove };
+  }
+
+  // Prints the pages of the preview, without any other program. With a printer chosen in the options the work goes to it directly,
+  // one job for each run of consecutive pages that have the same sheet size (a landscape page among portrait pages is another job);
+  // a failure is shown with its reason and no other window opens. Otherwise the printing box of the system opens with all the pages.
+  async printNow(options: PrintOptions = defaultPrintOptions()): Promise<void> {
+    if (this.sheets.length === 0) await this.refresh();
+    if (this.sheets.length === 0) {
+      new Notice(t(`Rien à imprimer : l'aperçu n'a pas pu être composé.`));
+      return;
+    }
+    const chosen = parsePageList(options.pages, this.sheets.length);
+    if (!chosen) {
+      new Notice(t(`Pages à imprimer : « {0} » ne désigne aucune page de ce document (il en compte {1}).`, options.pages, this.sheets.length), 8000);
+      return;
+    }
+    const placed = chosen.map((n) => {
+      const own = this.sheetSetups[n - 1] ?? this.setup;
+      return { sheet: this.sheets[n - 1], own, paper: sheetFor({ width: own.width, height: own.height }, options) };
+    });
+    if (options.printer !== ``) {
+      const jobs = runsOfSameSheet(placed, (p) => p.paper);
+      let sent = 0;
+      for (const job of jobs) {
+        // Grey tones: the printer does it, a filter of the page is needed only for black and white without grey.
+        const mounted = this.mountPrint(job, options.color === `bw` ? `bw` : ``);
+        const wait = new Notice(t(`Envoi à {0} en cours (travail {1} sur {2})… cela peut durer une minute.`, options.printer, sent + 1, jobs.length), 0);
+        const result = await printWithoutBox(directPrintOptions(options.printer, job[0].paper, options));
+        wait.hide();
+        mounted.remove();
+        if (!result.ok) {
+          noteError(`Impression directe`, new Error(result.reason));
+          if (result.reason === `unavailable` && sent === 0) {
+            new Notice(t(`L'impression directe n'est pas disponible sur ce système : la boîte d'impression du système s'ouvre.`), 8000);
+            break;
+          }
+          // The printer was chosen on purpose: the failure is shown until it is closed, without another print window.
+          new Notice(t(`L'impression vers {0} a échoué : {1}. Vérifiez que l'imprimante est allumée et connectée, ou choisissez « Boîte d'impression du système ».`, options.printer, result.reason === `` ? t(`raison inconnue`) : result.reason), 0);
+          return;
+        }
+        sent++;
+      }
+      if (sent === jobs.length) {
+        new Notice(jobs.length > 1 ? t(`Impression envoyée à {0} en {1} travaux (un par format de feuille).`, options.printer, jobs.length) : t(`Impression envoyée à {0}.`, options.printer));
         return;
       }
-      noteError(`Impression directe`, new Error(result.reason));
-      new Notice(t(`L'impression directe a échoué ({0}) : la boîte d'impression du système s'ouvre.`, result.reason === `` ? t(`raison inconnue`) : result.reason), 8000);
-      direct = null;
-      if (options.color === `gray`) root.addClass(`mmw-print-gray`);
     }
-    window.addEventListener(`afterprint`, cleanup);
+    const mounted = this.mountPrint(placed, options.color === `color` ? `` : options.color);
+    window.addEventListener(`afterprint`, mounted.remove);
     try {
       window.print();
     } catch (e) {
-      cleanup();
+      mounted.remove();
       noteError(`Impression de l'aperçu`, e);
       new Notice(t(`La boîte d'impression ne s'est pas ouverte. Exportez en PDF, puis imprimez le fichier.`), 8000);
     }

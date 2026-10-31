@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { commonSheet, defaultPrintOptions, directPrintOptions, isPageListSyntax, PAPER_SIZES, parsePageList, placement, sanitizePrintOptions, sheetFor } from "../src/print-options";
+import { defaultPrintOptions, directPrintOptions, isPageListSyntax, PAPER_SIZES, parsePageList, placement, runsOfSameSheet, sanitizePrintOptions, sheetFor } from "../src/print-options";
 
 const A4 = PAPER_SIZES.a4;
 const A4_LAND = { width: A4.height, height: A4.width };
@@ -47,10 +47,12 @@ test(`a page keeps its size on a sheet of the same size and is centred and reduc
   }
 });
 
-test(`the printing goes to a printer only when all the sheets have the same size`, () => {
-  assert.deepEqual(commonSheet([A4, { ...A4 }]), A4);
-  assert.equal(commonSheet([A4, A4_LAND]), null);
-  assert.equal(commonSheet([]), null);
+test(`the pages are cut into jobs of consecutive pages that have the same sheet`, () => {
+  const pages = [`p1`, `p2`, `l3`, `p4`, `p5`];
+  const runs = runsOfSameSheet(pages, (p) => (p.startsWith(`l`) ? A4_LAND : A4));
+  assert.deepEqual(runs, [[`p1`, `p2`], [`l3`], [`p4`, `p5`]]);
+  assert.deepEqual(runsOfSameSheet(pages, () => A4), [pages]);
+  assert.deepEqual(runsOfSameSheet([], () => A4), []);
 });
 
 test(`the settings for a printer carry the sheet in microns, the colour, the copies and the duplex`, () => {
