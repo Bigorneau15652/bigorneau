@@ -116,19 +116,31 @@ export function runsOfSameSheet<T>(items: T[], sheetOf: (item: T) => Sheet): T[]
   return runs;
 }
 
-// Settings sent to the printing of the window when a printer is chosen in the plugin (no box of the system). The sheet is given in
-// portrait with the landscape flag, in microns, as the printing of the window expects it.
+// Name that printers know for a sheet (A4, A3, A5 or Letter, within two points), or null for another size.
+export function paperName(sheet: Sheet): `A4` | `A3` | `A5` | `Letter` | null {
+  const short = Math.min(sheet.width, sheet.height);
+  const long = Math.max(sheet.width, sheet.height);
+  const names: [`A4` | `A3` | `A5` | `Letter`, Sheet][] = [[`A4`, PAPER_SIZES.a4], [`A3`, PAPER_SIZES.a3], [`A5`, PAPER_SIZES.a5], [`Letter`, PAPER_SIZES.letter]];
+  for (const [name, size] of names) if (Math.abs(short - size.width) < 2 && Math.abs(long - size.height) < 2) return name;
+  return null;
+}
+
+// Settings sent to the printing of the window when a printer is chosen in the plugin (no box of the system). The sheet goes by its
+// name when the printers know it (A4...), otherwise in microns, in portrait with the landscape flag. The double-sided mode is sent
+// only when it is wanted: a printer without double-sided unit refuses the job when it is asked for.
 export function directPrintOptions(printer: string, sheet: Sheet, options: Pick<PrintOptions, `color` | `copies` | `duplex`>): Record<string, unknown> {
   const micron = (points: number): number => Math.round((points * 25400) / 72);
-  return {
+  const name = paperName(sheet);
+  const settings: Record<string, unknown> = {
     silent: true,
     printBackground: true,
     deviceName: printer,
     color: options.color === `color`,
     copies: options.copies,
     landscape: sheet.width > sheet.height,
-    pageSize: { width: micron(Math.min(sheet.width, sheet.height)), height: micron(Math.max(sheet.width, sheet.height)) },
+    pageSize: name ?? { width: micron(Math.min(sheet.width, sheet.height)), height: micron(Math.max(sheet.width, sheet.height)) },
     margins: { marginType: `none` },
-    duplexMode: options.duplex === `long` ? `longEdge` : options.duplex === `short` ? `shortEdge` : `simplex`,
   };
+  if (options.duplex !== `none`) settings.duplexMode = options.duplex === `long` ? `longEdge` : `shortEdge`;
+  return settings;
 }

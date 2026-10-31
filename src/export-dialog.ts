@@ -137,7 +137,7 @@ export class ExportDialog extends Modal {
         x.inputEl.max = `99`;
         x.setValue(String(o.copies)).onChange((v) => (o.copies = Math.min(99, Math.max(1, Math.round(Number(v)) || 1))));
       });
-      new Setting(contentEl).setName(t(`Recto verso`)).addDropdown((d) => {
+      new Setting(contentEl).setName(t(`Recto verso`)).setDesc(t(`Laissez « Non » si votre imprimante n'a pas de recto verso automatique : elle refuserait le travail.`)).addDropdown((d) => {
         d.addOption(`none`, t(`Non`)).addOption(`long`, t(`Reliure sur le bord long`)).addOption(`short`, t(`Reliure sur le bord court`));
         d.setValue(o.duplex).onChange((v) => (o.duplex = v as PrintDuplex));
       });

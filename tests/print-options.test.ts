@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { defaultPrintOptions, directPrintOptions, isPageListSyntax, PAPER_SIZES, parsePageList, placement, runsOfSameSheet, sanitizePrintOptions, sheetFor } from "../src/print-options";
+import { defaultPrintOptions, directPrintOptions, isPageListSyntax, PAPER_SIZES, paperName, parsePageList, placement, runsOfSameSheet, sanitizePrintOptions, sheetFor } from "../src/print-options";
 
 const A4 = PAPER_SIZES.a4;
 const A4_LAND = { width: A4.height, height: A4.width };
@@ -55,7 +55,7 @@ test(`the pages are cut into jobs of consecutive pages that have the same sheet`
   assert.deepEqual(runsOfSameSheet([], () => A4), []);
 });
 
-test(`the settings for a printer carry the sheet in microns, the colour, the copies and the duplex`, () => {
+test(`the settings for a printer carry the paper name, the colour, the copies, and the duplex only when it is wanted`, () => {
   const s = directPrintOptions(`Canon G6000 series`, A4_LAND, { color: `gray`, copies: 3, duplex: `long` });
   assert.equal(s.silent, true);
   assert.equal(s.deviceName, `Canon G6000 series`);
@@ -63,9 +63,18 @@ test(`the settings for a printer carry the sheet in microns, the colour, the cop
   assert.equal(s.copies, 3);
   assert.equal(s.landscape, true);
   assert.equal(s.duplexMode, `longEdge`);
-  const size = s.pageSize as { width: number; height: number };
-  assert.ok(Math.abs(size.width - 210000) < 100 && Math.abs(size.height - 297000) < 100);
-  assert.equal(directPrintOptions(`P`, A4, { color: `color`, copies: 1, duplex: `none` }).color, true);
+  assert.equal(s.pageSize, `A4`);
+  const plain = directPrintOptions(`P`, A4, { color: `color`, copies: 1, duplex: `none` });
+  assert.equal(plain.color, true);
+  assert.equal(plain.landscape, false);
+  assert.ok(!(`duplexMode` in plain), `no duplex mode asked, none sent`);
+  assert.equal(directPrintOptions(`P`, A4, { color: `color`, copies: 1, duplex: `short` }).duplexMode, `shortEdge`);
+  // A size without a name goes in microns, in portrait.
+  const odd = directPrintOptions(`P`, { width: 700, height: 500 }, { color: `color`, copies: 1, duplex: `none` });
+  const size = odd.pageSize as { width: number; height: number };
+  assert.ok(size.width < size.height && odd.landscape === true);
+  assert.equal(paperName({ width: 612.5, height: 791 }), `Letter`);
+  assert.equal(paperName({ width: 700, height: 500 }), null);
 });
 
 test(`saved options are checked: a wrong value goes back to its default`, () => {

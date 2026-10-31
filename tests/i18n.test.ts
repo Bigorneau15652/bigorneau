@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { EN } from "../src/i18n-en";
-import { setLanguage, t } from "../src/i18n";
+import { detectLang, setLanguage, t } from "../src/i18n";
 
 // Les tests se lancent depuis la racine du projet.
 const SRC = join(process.cwd(), `src`);
@@ -54,4 +54,34 @@ test(`aucun texte francais n'est traduit deux fois (la derniere traduction ecras
     seen.add(m[1]);
   }
   assert.deepEqual(twice, []);
+});
+
+test(`la langue d'Obsidian est lue dans le stockage local, puis la date de l'application, la page et le navigateur`, () => {
+  const g = globalThis as unknown as { window?: unknown };
+  const before = g.window;
+  const win = (stored: string | null, moment?: string, lang?: string, nav?: string): unknown => ({
+    localStorage: { getItem: () => stored },
+    moment: moment === undefined ? undefined : { locale: () => moment },
+    document: { documentElement: { lang: lang ?? `` } },
+    navigator: { language: nav ?? `` },
+  });
+  try {
+    g.window = win(`fr`, `en`);
+    assert.equal(detectLang(), `fr`);
+    // The key is missing (English, or a version that does not write it): the next source tells.
+    g.window = win(null, `fr`);
+    assert.equal(detectLang(), `fr`);
+    g.window = win(null, undefined, `fr-FR`);
+    assert.equal(detectLang(), `fr`);
+    g.window = win(null, ``, ``, `fr-FR`);
+    assert.equal(detectLang(), `fr`);
+    g.window = win(null, `en`, `en`, `fr-FR`);
+    assert.equal(detectLang(), `en`);
+    g.window = win(null);
+    assert.equal(detectLang(), `en`);
+    g.window = undefined;
+    assert.equal(detectLang(), `en`);
+  } finally {
+    g.window = before;
+  }
 });

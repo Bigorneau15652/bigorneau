@@ -993,6 +993,7 @@ const PAIRS: [string, string][] = [
   [`L'impression directe n'est pas disponible sur ce système : la boîte d'impression du système s'ouvre.`, `Direct printing is not available on this system: the system print box opens.`],
   [`Envoi à {0} en cours (travail {1} sur {2})… cela peut durer une minute.`, `Sending to {0} (job {1} of {2})… this can take a minute.`],
   [`Impression envoyée à {0} en {1} travaux (un par format de feuille).`, `Printing sent to {0} in {1} jobs (one for each sheet size).`],
+  [`Laissez « Non » si votre imprimante n'a pas de recto verso automatique : elle refuserait le travail.`, `Leave "No" if your printer has no automatic double-sided unit: it would refuse the job.`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

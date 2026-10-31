@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.30.2
+
+Fixed: the language of the plugin no longer falls back to English when Obsidian is in French. The language of Obsidian is now read from several places (the local storage, the date library of the application, the page and the browser) instead of one that some versions of Obsidian do not write. Printing to a chosen printer sends the sheet by its name (A4, A3, A5, Letter) and asks for double-sided printing only when it is wanted: a printer without a double-sided unit refused the jobs and they stayed in error in the queue of Windows. A note under the setting says so.
+
+Corrigé : la langue du plugin ne repasse plus en anglais quand Obsidian est en français. La langue d'Obsidian est maintenant lue à plusieurs endroits (le stockage local, la bibliothèque de dates de l'application, la page et le navigateur) et non plus à un seul, que certaines versions d'Obsidian n'écrivent pas. L'impression vers une imprimante choisie envoie la feuille par son nom (A4, A3, A5, Letter) et ne demande le recto verso que s'il est voulu : une imprimante sans module recto verso refusait les travaux, qui restaient en erreur dans la file d'impression de Windows. Une note sous le réglage le précise.
+
 ## 0.30.1
 
 Fixed: printing to a printer chosen in the Print tab works when the pages do not all have the same sheet size (a landscape page among portrait pages): the pages are sent in several jobs, one for each run of consecutive pages that have the same sheet size, in the order of the document. When the printing to a chosen printer fails, Bigorneau no longer opens the print window of the system: it shows the reason in a message that stays until it is closed. A message tells that the work is on its way, because a printer can take a minute to answer. The print window of the system opens only when "System print box" is chosen or when direct printing does not exist on the system. With double-sided printing, each job starts on a new sheet.
