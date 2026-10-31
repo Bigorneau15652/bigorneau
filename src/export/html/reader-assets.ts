@@ -272,12 +272,21 @@ export const READER_JS = String.raw`
     if (box.getAttribute("data-pret") || !window.pannellum) return;
     box.setAttribute("data-pret", "1");
     var img = box.querySelector(".source");
+    var inline = img.getAttribute("src").indexOf("data:") === 0;
+    /* A browser refuses to read a picture file for the viewer when the page itself is a file: the flat picture stays, with a note. */
+    if (!inline && location.protocol === "file:") {
+      var note = doc.createElement("p");
+      note.className = "video-lien";
+      note.textContent = texts.flatPano;
+      if (box.parentNode) box.parentNode.insertBefore(note, box.nextSibling);
+      return;
+    }
     try {
       var holder = doc.createElement("div");
       holder.style.width = "100%";
       holder.style.height = "100%";
       box.appendChild(holder);
-      window.pannellum.viewer(holder, { type: "equirectangular", panorama: blobOf(img.src), autoLoad: true, compass: false, showFullscreenCtrl: false });
+      window.pannellum.viewer(holder, { type: "equirectangular", panorama: inline ? blobOf(img.src) : img.src, autoLoad: true, compass: false, showFullscreenCtrl: false });
       box.classList.add("actif");
     } catch (e) { /* the flat picture stays visible */ }
   }

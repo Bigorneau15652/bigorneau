@@ -40,7 +40,7 @@ The PDF export is a layout engine written for the plugin, in independent stages 
 
 ## Decisions of the maintainer
 
-- HTML export: one self-contained HTML file first (version 0.29.0), then a mode with separate folders for the media. The page is a reader: menus of the headings and of the thumbnails on the left (each opens on its own, or both), light and dark mode, full screen (Escape brings the buttons back) and wide mode on the right. A Nextcloud public link shows an HTML file as text, so the file is meant for a web host (for example GitHub Pages), a download or a local opening.
+- HTML export: one self-contained HTML file (version 0.29.0), then a mode with a folder and separate media (version 0.31.0: index.html, `medias` with the original pictures, `polices`, `lib`; a panorama turns only from a website, from a file of the computer it stays a flat picture with a note). The page is a reader: menus of the headings and of the thumbnails on the left (each opens on its own, or both), light and dark mode, full screen (Escape brings the buttons back) and wide mode on the right. A Nextcloud public link shows an HTML file as text, so the file is meant for a web host (for example GitHub Pages), a download or a local opening.
 - In the HTML export a video is a player embedded from an online link (YouTube, Vimeo), never a video file loaded into the document. The thumbnails are those of the figures and pictures, not of pages. A picture twice as wide as high is read as a 360 degree panorama with Pannellum (MIT licence, agreed by the maintainer).
 
 - The plugin is for the desktop version of Obsidian only (`isDesktopOnly: true`). The public author name in `manifest.json` is `Bigorneau`; the copyright holder in `LICENSE` is the real author.

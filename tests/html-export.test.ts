@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildExportDoc } from "../src/export/doc-tree";
-import { builtinFontCss, dataUri, isPanorama, toBase64, userFontCss } from "../src/export/html/html-assets";
+import { builtinFontCss, builtinFontFiles, dataUri, exportFileName, fromBase64, isPanorama, toBase64, userFontCss } from "../src/export/html/html-assets";
 import { embedUrl, escapeHtml, HtmlImage, readableOn, renderHtml, typographyCss } from "../src/export/html/html-doc";
 import { READER_JS } from "../src/export/html/reader-assets";
 import { defaultTypography, setPath } from "../src/text-style";
@@ -166,4 +166,36 @@ test(`a video keeps a link to its page and a wide table scrolls inside its own f
   assert.match(html, /<p class="video-lien"><a href="https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ&amp;t=42"/);
   assert.match(html, /<div class="tableau-defil"><table/);
   assert.match(html, /<\/table><\/div>/);
+});
+
+test(`the mode with separate folders links to its files instead of holding them`, () => {
+  const media: HtmlImage = { src: `medias/photo.png`, width: 400, height: 300, panorama: false };
+  const pano: HtmlImage = { src: `medias/vue%20360.jpg`, width: 4000, height: 2000, panorama: true };
+  const { html } = render(`# T\n![[photo.png|Une photo]]\n\n![[vue 360.jpg|Un panorama]]\n`, [[`photo.png`, media], [`vue 360.jpg`, pano]], {
+    separate: true,
+    fontCss: builtinFontFiles().css,
+    panorama: { js: ``, css: ``, jsUrl: `lib/pannellum.js`, cssUrl: `lib/pannellum.css` },
+  });
+  assert.match(html, /<img src="medias\/photo\.png"/);
+  assert.match(html, /<img class="source" src="medias\/vue%20360\.jpg"/);
+  assert.match(html, /<link rel="stylesheet" href="lib\/pannellum\.css">/);
+  assert.match(html, /<script src="lib\/pannellum\.js"><\/script>/);
+  assert.match(html, /img-src 'self' data:/);
+  assert.match(html, /connect-src 'self' blob: data:/);
+  assert.match(html, /src:url\(polices\/libertinus-regular\.otf\)/);
+  assert.ok(!html.includes(`base64,`), `no picture or font travels inside the page`);
+  // The single file keeps its strict policy.
+  assert.ok(!/img-src 'self'/.test(render(`# T\nTexte`).html));
+});
+
+test(`fonts as files and names of the files of the exported folder`, () => {
+  const fonts = builtinFontFiles();
+  assert.deepEqual(fonts.files.map((f) => f.name), [`libertinus-regular.otf`, `libertinus-italic.otf`, `libertinus-bold.otf`, `libertinus-bolditalic.otf`]);
+  assert.ok(fonts.files.every((f) => f.bytes.length > 10000));
+  assert.equal(fromBase64(toBase64(new Uint8Array([1, 2, 250, 255]))).join(`,`), `1,2,250,255`);
+  const taken = new Set<string>();
+  assert.equal(exportFileName(`Plan général.PNG`, taken), `Plan-général.png`);
+  assert.equal(exportFileName(`plan général.png`, taken), `plan-général-2.png`);
+  assert.equal(exportFileName(`a b?c#d.jpg`, taken), `a-b-c-d.jpg`);
+  assert.equal(exportFileName(`...`, taken), `fichier`);
 });
