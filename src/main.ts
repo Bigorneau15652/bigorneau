@@ -33,6 +33,7 @@ import { figureCaptionExtension, tableNumberExtension } from "./figure-caption-w
 import { listMarkerWidgetExtension, paragraphMarkerHideExtension, tableMarkerHideExtension } from "./table-marker-hide";
 import { diffChange, tableWidgetExtension } from "./table-widget";
 import { ExportPreviewView, VIEW_TYPE_EXPORT } from "./export-view";
+import type { PrintOptions } from "./print-options";
 import { ConfirmModal, NameModal, ProfilePicker } from "./profile-modals";
 import { AUTO_BACKUP_NAME } from "./profile";
 import { ensureFolder, ProfileStore } from "./profile-store";
@@ -1141,7 +1142,7 @@ export default class MindmapWritingPlugin extends Plugin {
   }
 
   // Imprime les pages de l'apercu avec la boite d'impression du systeme (l'apercu s'ouvre s'il ne l'est pas).
-  async printPdf() {
+  async printPdf(options?: PrintOptions) {
     if (!Platform.isDesktop) return;
     this.rememberFile(this.app.workspace.getActiveFile());
     if (!this.lastFile) {
@@ -1150,7 +1151,7 @@ export default class MindmapWritingPlugin extends Plugin {
     }
     await this.openExportPreview();
     const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_EXPORT).map((l) => l.view).find((v) => v instanceof ExportPreviewView);
-    if (view instanceof ExportPreviewView) await view.printNow();
+    if (view instanceof ExportPreviewView) await view.printNow(options ?? this.settings.printOptions);
   }
 
   // Ouvre l'apercu de l'export a cote de la note (ou le montre s'il est deja ouvert).
