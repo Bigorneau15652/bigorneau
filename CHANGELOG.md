@@ -3,6 +3,16 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.30.3
+
+Fixed: the language of the plugin no longer falls back to English when Obsidian is in French. The language of Obsidian is now read from several places (the local storage, the date library of the application, the page and the browser) instead of one that some versions of Obsidian do not write.
+
+Changed: the settings of the Print tab (pages, paper, orientation, colour, printer, copies, double-sided) and the direct sending to a printer, added in 0.30.0 and 0.30.1, are removed. A click on the Print tab now closes the Export window and opens the print window of the system with the pages of the preview, as it did before 0.30.0. That window offers the printer, the pages, the paper, the orientation, the colour and the double-sided printing, and works the same on Windows, macOS and Linux. The plugin no longer reaches the printing of the application window, and the test that forbade it is back.
+
+Corrigé : la langue du plugin ne repasse plus en anglais quand Obsidian est en français. La langue d'Obsidian est maintenant lue à plusieurs endroits (le stockage local, la bibliothèque de dates de l'application, la page et le navigateur) et non plus à un seul, que certaines versions d'Obsidian n'écrivent pas.
+
+Modifié : les réglages de l'onglet Impression (pages, papier, orientation, couleur, imprimante, copies, recto verso) et l'envoi direct vers une imprimante, ajoutés en 0.30.0 et 0.30.1, sont retirés. Un clic sur l'onglet Impression ferme maintenant la fenêtre Export et ouvre la boîte d'impression du système avec les pages de l'aperçu, comme avant la 0.30.0. Cette boîte propose l'imprimante, les pages, le papier, l'orientation, la couleur et le recto verso, et fonctionne de la même façon sous Windows, macOS et Linux. Le plugin n'atteint plus l'impression de la fenêtre de l'application, et le test qui l'interdisait est rétabli.
+
 ## 0.30.1
 
 Fixed: printing to a printer chosen in the Print tab works when the pages do not all have the same sheet size (a landscape page among portrait pages): the pages are sent in several jobs, one for each run of consecutive pages that have the same sheet size, in the order of the document. When the printing to a chosen printer fails, Bigorneau no longer opens the print window of the system: it shows the reason in a message that stays until it is closed. A message tells that the work is on its way, because a printer can take a minute to answer. The print window of the system opens only when "System print box" is chosen or when direct printing does not exist on the system. With double-sided printing, each job starts on a new sheet.

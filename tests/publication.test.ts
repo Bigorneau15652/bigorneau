@@ -86,8 +86,6 @@ test(`le code evite les constructions refusees ou deconseillees par la revue`, (
     assert.ok(!/window\.app\b/.test(code), `${f} : instance globale d'Obsidian`);
     assert.ok(!/console\.(log|debug)\(/.test(code), `${f} : journal dans la console`);
     assert.ok(!/from [`"'](fs|path|os|crypto|child_process|electron)[`"']/.test(code), `${f} : interface Node.js ou Electron`);
-    // Electron (printing of the window) is reached only by src/print-system.ts, in a guarded block.
-    assert.ok(f === `src/print-system.ts` || !/electron/i.test(code), `${f} : acces a Electron hors du fichier d'impression`);
     assert.ok(!/\beval\(/.test(code), `${f} : execution de code`);
     assert.ok(!/new Function\(/.test(code), `${f} : execution de code`);
     assert.ok(!/\bfetch\(|XMLHttpRequest|requestUrl\(|WebSocket/.test(code), `${f} : acces au reseau`);

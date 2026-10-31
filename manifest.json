@@ -1,7 +1,7 @@
 {
   "id": "bigorneau",
   "name": "Bigorneau",
-  "version": "0.30.1",
+  "version": "0.30.3",
   "minAppVersion": "1.7.2",
   "description": "Write long documents from a mind map of your outline. Export a high quality PDF typeset with TeX line breaking, with footnotes, images, tables and formulas.",
   "author": "Bigorneau",

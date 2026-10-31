@@ -2792,21 +2792,6 @@ table.mmw-t-equal td {
   .mmw-print-page .mmw-export-page {
     transform: none !important;
   }
-
-  /* Page placed in the middle of its sheet, reduced when the sheet is smaller than the page. */
-  .mmw-print-fit {
-    position: absolute;
-    transform-origin: 0 0;
-  }
-
-  /* Grey tones, or black and white without grey, for the whole printing. */
-  body.mmw-printing .mmw-print-gray .mmw-print-page {
-    filter: grayscale(1);
-  }
-
-  body.mmw-printing .mmw-print-bw .mmw-print-page {
-    filter: grayscale(1) contrast(1000%);
-  }
 }
 
 /* Mode Zen : plein ecran, seuls la liste des titres et la note restent visibles. */

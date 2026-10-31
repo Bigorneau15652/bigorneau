@@ -8,11 +8,19 @@ export type LangSetting = `auto` | Lang;
 
 let current: Lang = `fr`;
 
-// Langue d'Obsidian : memorisee par l'application dans le stockage local (cle « language ») ; absente, c'est l'anglais.
+// Langue d'Obsidian. Plusieurs sources, de la plus sure a la moins sure : la cle « language » du stockage local (absente quand
+// l'application est en anglais, et absente aussi dans certaines versions), la langue de la bibliotheque de dates de l'application
+// (moment, reglee sur la langue d'Obsidian), l'attribut lang de la page, enfin la langue du navigateur. Sans aucune de ces
+// informations, c'est l'anglais.
 export function detectLang(): Lang {
   try {
-    const stored = typeof window === `undefined` ? null : window.localStorage?.getItem(`language`);
-    return stored && stored.toLowerCase().startsWith(`fr`) ? `fr` : `en`;
+    if (typeof window === `undefined`) return `en`;
+    const host = window as unknown as { localStorage?: { getItem(key: string): string | null }; moment?: { locale?: () => string }; document?: { documentElement?: { lang?: string } }; navigator?: { language?: string } };
+    const sources = [host.localStorage?.getItem(`language`), host.moment?.locale?.(), host.document?.documentElement?.lang, host.navigator?.language];
+    for (const value of sources) {
+      if (typeof value === `string` && value.trim() !== ``) return value.trim().toLowerCase().startsWith(`fr`) ? `fr` : `en`;
+    }
+    return `en`;
   } catch {
     return `en`;
   }
