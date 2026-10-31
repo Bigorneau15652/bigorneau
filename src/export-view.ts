@@ -10,6 +10,8 @@ import { columnsOf, FOOTNOTE_RULE_HEIGHT } from "./export/paginate";
 import type { LineRun } from "./export/paragraph";
 import { A4_SETUP, PageSetup, Row } from "./export/typeset";
 import { loadAssets, pageStyleOf } from "./export-context";
+import { commonSheet, defaultPrintOptions, directPrintOptions, parsePageList, placement, PrintOptions, sheetFor } from "./print-options";
+import { printWithoutBox } from "./print-system";
 import { cssFamilyOf } from "./font-store";
 import { missingCharsLine, warningLines } from "./export-report";
 import { MATH_SERVICE, MathRenderer } from "./script-formulas";
@@ -66,34 +68,55 @@ export class ExportPreviewView extends ItemView {
     this.releaseImages();
   }
 
-  // Prints the pages of the preview with the print window of the system, without any other program: a copy of the pages is put at the
-  // end of the body, the rest of the window is hidden for the printing (see @media print in styles.css), then the copy is removed.
-  // Each distinct sheet size has its own named page, so that a landscape zone is printed on a landscape sheet.
-  async printNow(): Promise<void> {
+  // Prints the pages of the preview, without any other program: a copy of the chosen pages is put at the end of the body, the rest of
+  // the window is hidden for the printing (see @media print in styles.css), then the copy is removed. Each page is put in the middle of
+  // its sheet (the paper and the orientation of the options), reduced if the sheet is smaller. Each distinct sheet size has its own
+  // named page. With a printer chosen in the options the work goes to it directly; otherwise, or when that fails, the printing box of
+  // the system opens.
+  async printNow(options: PrintOptions = defaultPrintOptions()): Promise<void> {
     if (this.sheets.length === 0) await this.refresh();
     if (this.sheets.length === 0) {
       new Notice(t(`Rien à imprimer : l'aperçu n'a pas pu être composé.`));
       return;
     }
+    const chosen = parsePageList(options.pages, this.sheets.length);
+    if (!chosen) {
+      new Notice(t(`Pages à imprimer : « {0} » ne désigne aucune page de ce document (il en compte {1}).`, options.pages, this.sheets.length), 8000);
+      return;
+    }
+    const placed = chosen.map((n) => {
+      const own = this.sheetSetups[n - 1] ?? this.setup;
+      return { sheet: this.sheets[n - 1], own, paper: sheetFor({ width: own.width, height: own.height }, options) };
+    });
+    let direct = options.printer !== `` ? commonSheet(placed.map((p) => p.paper)) : null;
+    if (options.printer !== `` && !direct) new Notice(t(`Les pages n'ont pas toutes la même taille de feuille : la boîte d'impression du système est utilisée.`), 8000);
     const root = document.body.createDiv({ cls: `mmw-print-root` });
     const names = new Map<string, string>();
     const rules: string[] = [];
-    this.sheets.forEach((sheet, i) => {
-      const own = this.sheetSetups[i] ?? this.setup;
-      const key = `${own.width}x${own.height}`;
+    for (const item of placed) {
+      const key = `${item.paper.width}x${item.paper.height}`;
       let name = names.get(key);
       if (!name) {
         name = `mmwp${names.size}`;
         names.set(key, name);
-        rules.push(`@page ${name} { size: ${own.width}pt ${own.height}pt; margin: 0; }`);
+        rules.push(`@page ${name} { size: ${item.paper.width}pt ${item.paper.height}pt; margin: 0; }`);
       }
       const wrap = root.createDiv({ cls: `mmw-print-page` });
-      wrap.style.width = `${own.width}pt`;
-      wrap.style.height = `${own.height}pt`;
+      wrap.style.width = `${item.paper.width}pt`;
+      wrap.style.height = `${item.paper.height}pt`;
       wrap.style.setProperty(`page`, name);
-      const page = sheet.firstElementChild?.cloneNode(true);
-      if (page) wrap.appendChild(page);
-    });
+      const fit = placement({ width: item.own.width, height: item.own.height }, item.paper);
+      const inner = wrap.createDiv({ cls: `mmw-print-fit` });
+      inner.style.width = `${item.own.width}pt`;
+      inner.style.height = `${item.own.height}pt`;
+      inner.style.left = `${fit.x}pt`;
+      inner.style.top = `${fit.y}pt`;
+      inner.style.transform = `scale(${fit.scale})`;
+      const page = item.sheet.firstElementChild?.cloneNode(true);
+      if (page) inner.appendChild(page);
+    }
+    // Grey tones: the printer does it when the work goes to it directly, otherwise a filter of the page does it.
+    if (options.color === `bw` || (options.color === `gray` && !direct)) root.addClass(options.color === `bw` ? `mmw-print-bw` : `mmw-print-gray`);
     const pageRules = new CSSStyleSheet();
     pageRules.replaceSync(rules.join(`\n`));
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, pageRules];
@@ -107,9 +130,21 @@ export class ExportPreviewView extends ItemView {
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== pageRules);
       root.remove();
     };
-    window.addEventListener(`afterprint`, cleanup);
     // Safety net: the copy never stays in the window if the end of the printing is not announced.
-    window.setTimeout(cleanup, 120000);
+    window.setTimeout(cleanup, 240000);
+    if (direct) {
+      const result = await printWithoutBox(directPrintOptions(options.printer, direct, options));
+      if (result.ok) {
+        cleanup();
+        new Notice(t(`Impression envoyée à {0}.`, options.printer));
+        return;
+      }
+      noteError(`Impression directe`, new Error(result.reason));
+      new Notice(t(`L'impression directe a échoué ({0}) : la boîte d'impression du système s'ouvre.`, result.reason === `` ? t(`raison inconnue`) : result.reason), 8000);
+      direct = null;
+      if (options.color === `gray`) root.addClass(`mmw-print-gray`);
+    }
+    window.addEventListener(`afterprint`, cleanup);
     try {
       window.print();
     } catch (e) {

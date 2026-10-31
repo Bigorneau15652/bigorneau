@@ -1,6 +1,8 @@
 // Fenetre qui demande ou enregistrer le PDF : dossier et nom proposes par defaut, remplacement confirme.
 import { App, Modal, Setting, TextComponent, TFile, TFolder } from "obsidian";
 import { t } from "./i18n";
+import { isPageListSyntax, PrintColor, PrintDuplex, PrintOptions, PrintOrientation, PrintPaper, sanitizePrintOptions } from "./print-options";
+import { listPrinters, PrinterInfo } from "./print-system";
 
 export interface ExportTarget {
   folder: string;
@@ -21,10 +23,10 @@ export function targetPath(target: ExportTarget, extension: ExportExtension = `p
 export type ExportTab = `pdf` | `print` | `html`;
 
 // What the maintainer chose in the export window: a file to write (with its place) or the printing.
-export type ExportChoice = { kind: `pdf` | `html`; target: ExportTarget } | { kind: `print` };
+export type ExportChoice = { kind: `pdf` | `html`; target: ExportTarget } | { kind: `print`; options: PrintOptions };
 
 // Export window with three tabs (PDF, Print, HTML). The PDF and HTML tabs ask where to save the file: folder and name proposed by
-// default, replacement confirmed. The Print tab opens the printing box of the system.
+// default, replacement confirmed. The Print tab sets the pages, the paper, the orientation, the colour and the printer.
 export class ExportDialog extends Modal {
   private result: ExportChoice | null = null;
   private confirmed = false;
@@ -33,9 +35,20 @@ export class ExportDialog extends Modal {
   // Name of the file for each kind, extension included.
   private names: Record<`pdf` | `html`, string>;
 
-  constructor(app: App, initial: ExportTarget, private done: (choice: ExportChoice | null) => void, tab: ExportTab = `pdf`) {
+  // Choices of the Print tab, and the printers of the system (undefined while they are searched, null when the list is not available).
+  private print: PrintOptions;
+  private printers: PrinterInfo[] | null | undefined = undefined;
+  private shown = false;
+
+  constructor(app: App, initial: ExportTarget, private done: (choice: ExportChoice | null) => void, tab: ExportTab = `pdf`, printOptions?: PrintOptions) {
     super(app);
     this.tab = tab;
+    this.print = sanitizePrintOptions(printOptions);
+    void listPrinters().then((list) => {
+      this.printers = list;
+      if (list && this.print.printer !== `` && !list.some((p) => p.name === this.print.printer)) this.print.printer = ``;
+      if (this.shown && this.tab === `print`) this.onOpen();
+    });
     this.folder = this.nearestFolder(initial.folder);
     const base = initial.name.replace(/\.(pdf|html)$/i, ``);
     this.names = { pdf: `${base}.pdf`, html: `${base}.html` };
@@ -68,6 +81,7 @@ export class ExportDialog extends Modal {
 
   onOpen() {
     const { contentEl } = this;
+    this.shown = true;
     contentEl.empty();
     this.modalEl.addClass(`mmw-xmodal`);
     this.titleEl.setText(t(`Export`));
@@ -76,17 +90,69 @@ export class ExportDialog extends Modal {
     else this.renderSave(this.tab);
   }
 
-  // Print tab: one button that opens the printing box of the system with the pages of the preview.
+  // Print tab: printer (or the printing box of the system), pages, paper, orientation, colour, then copies and double-sided printing
+  // when a printer is chosen here.
   private renderPrint(): void {
     const { contentEl } = this;
-    contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Ouvre la boîte d'impression de votre système avec les pages de l'aperçu. Vous pouvez y choisir l'imprimante ou enregistrer en PDF.`) });
+    const o = this.print;
+    contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Réglez l'impression ici. Avec « Boîte d'impression du système », les réglages de l'imprimante (copies, recto verso, bac) se font dans la boîte de votre système.`) });
+    new Setting(contentEl)
+      .setName(t(`Imprimante`))
+      .addDropdown((d) => {
+        d.addOption(``, t(`Boîte d'impression du système`));
+        for (const p of this.printers ?? []) d.addOption(p.name, p.isDefault ? `${p.label} ${t(`(par défaut)`)}` : p.label);
+        d.setValue(o.printer);
+        if (this.printers === undefined) d.setDisabled(true);
+        d.onChange((v) => {
+          o.printer = v;
+          this.onOpen();
+        });
+      })
+      .setDesc(this.printers === undefined ? t(`Recherche des imprimantes…`) : this.printers === null ? t(`La liste des imprimantes n'est pas disponible sur ce système : utilisez la boîte d'impression du système.`) : ``);
+    const pages = new Setting(contentEl).setName(t(`Pages`)).setDesc(t(`Vide pour toutes les pages, ou une liste comme 2-5, 8 ou 3- (de la page 3 à la fin).`));
+    const warn = contentEl.createDiv({ cls: `mmw-pwarn` });
+    pages.addText((x) => {
+      x.setPlaceholder(t(`Toutes`)).setValue(o.pages);
+      x.onChange((v) => {
+        o.pages = v;
+        warn.setText(isPageListSyntax(v) ? `` : t(`Écrivez par exemple 2-5, 8 ou 3-.`));
+      });
+    });
+    new Setting(contentEl).setName(t(`Format du papier`)).setDesc(t(`Les pages sont réduites pour tenir sur la feuille choisie.`)).addDropdown((d) => {
+      d.addOption(`note`, t(`Celui de la note`)).addOption(`a4`, `A4`).addOption(`a3`, `A3`).addOption(`a5`, `A5`).addOption(`letter`, `Letter`);
+      d.setValue(o.paper).onChange((v) => (o.paper = v as PrintPaper));
+    });
+    new Setting(contentEl).setName(t(`Orientation`)).addDropdown((d) => {
+      d.addOption(`auto`, t(`Automatique (selon chaque page)`)).addOption(`portrait`, t(`Portrait`)).addOption(`landscape`, t(`Paysage`));
+      d.setValue(o.orientation).onChange((v) => (o.orientation = v as PrintOrientation));
+    });
+    new Setting(contentEl).setName(t(`Couleur`)).addDropdown((d) => {
+      d.addOption(`color`, t(`Couleur`)).addOption(`gray`, t(`Niveaux de gris`)).addOption(`bw`, t(`Noir et blanc (sans gris)`));
+      d.setValue(o.color).onChange((v) => (o.color = v as PrintColor));
+    });
+    if (o.printer !== ``) {
+      new Setting(contentEl).setName(t(`Copies`)).addText((x) => {
+        x.inputEl.type = `number`;
+        x.inputEl.min = `1`;
+        x.inputEl.max = `99`;
+        x.setValue(String(o.copies)).onChange((v) => (o.copies = Math.min(99, Math.max(1, Math.round(Number(v)) || 1))));
+      });
+      new Setting(contentEl).setName(t(`Recto verso`)).addDropdown((d) => {
+        d.addOption(`none`, t(`Non`)).addOption(`long`, t(`Reliure sur le bord long`)).addOption(`short`, t(`Reliure sur le bord court`));
+        d.setValue(o.duplex).onChange((v) => (o.duplex = v as PrintDuplex));
+      });
+    }
     new Setting(contentEl)
       .addButton((b) =>
         b
-          .setButtonText(t(`Imprimer`))
+          .setButtonText(o.printer === `` ? t(`Ouvrir la boîte d'impression`) : t(`Imprimer`))
           .setCta()
           .onClick(() => {
-            this.result = { kind: `print` };
+            if (!isPageListSyntax(o.pages)) {
+              warn.setText(t(`Écrivez par exemple 2-5, 8 ou 3-.`));
+              return;
+            }
+            this.result = { kind: `print`, options: { ...o, pages: o.pages.trim() } };
             this.confirmed = true;
             this.close();
           })
@@ -204,6 +270,7 @@ export class ExportDialog extends Modal {
   }
 
   onClose() {
+    this.shown = false;
     this.contentEl.empty();
     this.done(this.confirmed ? this.result : null);
   }

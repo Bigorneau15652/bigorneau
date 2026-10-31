@@ -17,11 +17,15 @@ export async function openExport(plugin: MindmapWritingPlugin, tab: ExportTab = 
   }
   const folder = file.parent && file.parent.path !== `/` ? file.parent.path : ``;
   const choice = await new Promise<ExportChoice | null>((resolve) => {
-    new ExportDialog(plugin.app, { folder, name: file.basename }, resolve, tab).open();
+    new ExportDialog(plugin.app, { folder, name: file.basename }, resolve, tab, plugin.settings.printOptions).open();
   });
   if (!choice) return;
   plugin.lastExportTab = choice.kind;
-  if (choice.kind === `print`) await plugin.printPdf();
+  if (choice.kind === `print`) {
+    plugin.settings.printOptions = choice.options;
+    await plugin.saveSettings(false);
+    await plugin.printPdf(choice.options);
+  }
   else if (choice.kind === `html`) await exportNoteToHtml(plugin, file, choice.target);
   else await exportNoteToPdf(plugin, file, choice.target);
 }

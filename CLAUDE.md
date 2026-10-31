@@ -12,6 +12,7 @@ Bigorneau is an Obsidian plugin (TypeScript, one bundled `main.js`, desktop only
 
 - All strings are written as template literals (backticks), never with single or double quotes, so that French apostrophes cause no syntax error.
 - Code identifiers are in English. Comments are written in English: one short block above every function, method, class and file, in the present tense. Messages shown to the user are not comments: they go through `t()` in `src/i18n.ts` with their English text in `src/i18n-en.ts` (French text is the key; a French text must not be translated twice).
+- Electron (printing of the application window: list of the printers, printing without the box of the system) is reached only in `src/print-system.ts`, in a guarded block that falls back on `window.print()`. A test forbids the word anywhere else. The maintainer agreed to this for printing only.
 - Never turn text into code (`new Function`, `eval`): a test forbids it. No network access in the plugin (no `fetch`, `XMLHttpRequest`, `requestUrl`, `WebSocket`): a test forbids it. The plugin loads no code other than its own `main.js`.
 - Colours and values read from notes, settings or profiles are validated before use (see `src/style.ts`, `src/settings.ts`, `src/text-style.ts`).
 - Do not rename CSS classes `mmw-`, view types, command identifiers or setting keys: shortcuts and saved layouts depend on them.
