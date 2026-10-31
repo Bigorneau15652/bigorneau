@@ -7,7 +7,8 @@ import { comboMatches, isModEnter } from "./keys";
 import { MindmapView, VIEW_TYPE_MINDMAP } from "./view";
 import { ZenMode, ZEN_LIST_COMMAND } from "./zen";
 import { captionWord, insertFootnote, toggleToc } from "./export/insert";
-import { exportNoteToPdf } from "./export-pdf";
+import { openExport } from "./export-run";
+import type { ExportTab } from "./export-dialog";
 import { DiagnosticModal } from "./diagnostic-modal";
 import { noteError, record } from "./diagnostics";
 import { FunctionRegistry, isSeparator, panelOrder, PanelFunction } from "./functions";
@@ -49,6 +50,8 @@ const FONT_LOAD_DELAY = 3000;
 export default class MindmapWritingPlugin extends Plugin {
   // Derniere note Markdown consultee : la vue Carte s'y rattache.
   lastFile: TFile | null = null;
+  // Tab last used in the export window.
+  lastExportTab: ExportTab = `pdf`;
   settings: MmSettings = { ...DEFAULT_SETTINGS };
   // Editeurs de note ouverts (tous les editeurs Markdown), pour retrouver celui qui est relie a la carte.
   editorViews = new Set<EditorView>();
@@ -392,7 +395,7 @@ export default class MindmapWritingPlugin extends Plugin {
     // L'export de haute qualite est reserve a l'ordinateur : sur tablette et telephone, ces fonctions ne sont pas proposees.
     this.addFunction({
       id: `export-preview`,
-      name: () => t(`Aperçu et export PDF de la note`),
+      name: () => t(`Aperçu et export de la note`),
       icons: [`file-search`, `eye`, `file-text`],
       needsEditor: false,
       available: () => Platform.isDesktop,
@@ -411,8 +414,18 @@ export default class MindmapWritingPlugin extends Plugin {
           new Notice(t(`Ouvrez d'abord une note.`));
           return;
         }
-        void this.exportPdf();
+        void this.openExportWindow(`pdf`);
       },
+    });
+    this.addFunction({
+      id: `export-html`,
+      name: () => t(`Exporter la note en HTML`),
+      icons: [`file-code`, `globe`, `file-output`],
+      needsEditor: false,
+      // The export window is opened from the preview: the command of the palette stays, the button of the panel does not exist.
+      button: false,
+      available: () => Platform.isDesktop,
+      run: () => void this.openExportWindow(`html`),
     });
     this.addFunction({
       id: `export-print`,
@@ -1093,7 +1106,7 @@ export default class MindmapWritingPlugin extends Plugin {
     setting.openTabById(this.manifest.id);
   }
 
-  private rememberFile(file: TFile | null): boolean {
+  rememberFile(file: TFile | null): boolean {
     if (file && file.extension === `md`) {
       this.lastFile = file;
       return true;
@@ -1122,15 +1135,9 @@ export default class MindmapWritingPlugin extends Plugin {
     }
   }
 
-  // Exporte la note ouverte en PDF (fenetre de choix du dossier et du nom).
-  async exportPdf() {
-    if (!Platform.isDesktop) return;
-    this.rememberFile(this.app.workspace.getActiveFile());
-    if (!this.lastFile) {
-      new Notice(t(`Ouvrez d'abord une note.`));
-      return;
-    }
-    await exportNoteToPdf(this, this.lastFile);
+  // Opens the export window (PDF, printing, HTML) on a tab: the last tab used, or the one asked for.
+  async openExportWindow(tab?: ExportTab) {
+    await openExport(this, tab);
   }
 
   // Imprime les pages de l'apercu avec la boite d'impression du systeme (l'apercu s'ouvre s'il ne l'est pas).

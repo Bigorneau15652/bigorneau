@@ -7,19 +7,38 @@ export interface ExportTarget {
   name: string;
 }
 
-// Chemin du fichier PDF dans le coffre.
-export function targetPath(target: ExportTarget): string {
+// Kind of file that the window saves.
+export type ExportExtension = `pdf` | `html`;
+
+// Path of the exported file in the vault, with the extension of its kind.
+export function targetPath(target: ExportTarget, extension: ExportExtension = `pdf`): string {
   const folder = target.folder.replace(/^\/+|\/+$/g, ``);
   const name = target.name.trim().replace(/[\\/:*?"<>|]/g, `-`);
-  return (folder === `` ? `` : `${folder}/`) + (/\.pdf$/i.test(name) ? name : `${name}.pdf`);
+  return (folder === `` ? `` : `${folder}/`) + (new RegExp(`\\.${extension}$`, `i`).test(name) ? name : `${name}.${extension}`);
 }
 
-export class ExportDialog extends Modal {
-  private result: ExportTarget | null = null;
-  private confirmed = false;
+// Tab of the export window: PDF file, printing, or one self-contained HTML file.
+export type ExportTab = `pdf` | `print` | `html`;
 
-  constructor(app: App, private initial: ExportTarget, private done: (target: ExportTarget | null) => void) {
+// What the maintainer chose in the export window: a file to write (with its place) or the printing.
+export type ExportChoice = { kind: `pdf` | `html`; target: ExportTarget } | { kind: `print` };
+
+// Export window with three tabs (PDF, Print, HTML). The PDF and HTML tabs ask where to save the file: folder and name proposed by
+// default, replacement confirmed. The Print tab opens the printing box of the system.
+export class ExportDialog extends Modal {
+  private result: ExportChoice | null = null;
+  private confirmed = false;
+  private tab: ExportTab;
+  private folder: string;
+  // Name of the file for each kind, extension included.
+  private names: Record<`pdf` | `html`, string>;
+
+  constructor(app: App, initial: ExportTarget, private done: (choice: ExportChoice | null) => void, tab: ExportTab = `pdf`) {
     super(app);
+    this.tab = tab;
+    this.folder = this.nearestFolder(initial.folder);
+    const base = initial.name.replace(/\.(pdf|html)$/i, ``);
+    this.names = { pdf: `${base}.pdf`, html: `${base}.html` };
   }
 
   // Dossier du coffre le plus proche de `path` qui existe (la racine, a defaut).
@@ -29,25 +48,70 @@ export class ExportDialog extends Modal {
     return p;
   }
 
+  // Row of three tabs at the top of the window.
+  private renderTabs(): void {
+    const tabs = this.contentEl.createDiv({ cls: `mmw-ptabs` });
+    const labels: [ExportTab, string][] = [
+      [`pdf`, t(`PDF`)],
+      [`print`, t(`Impression`)],
+      [`html`, t(`HTML`)],
+    ];
+    for (const [id, label] of labels) {
+      const b = tabs.createEl(`button`, { text: label, cls: `mmw-ptab${this.tab === id ? ` is-active` : ``}` });
+      b.type = `button`;
+      b.addEventListener(`click`, () => {
+        this.tab = id;
+        this.onOpen();
+      });
+    }
+  }
+
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
     this.modalEl.addClass(`mmw-xmodal`);
-    this.titleEl.setText(t(`Exporter en PDF`));
-    const target: ExportTarget = { ...this.initial, folder: this.nearestFolder(this.initial.folder) };
+    this.titleEl.setText(t(`Export`));
+    this.renderTabs();
+    if (this.tab === `print`) this.renderPrint();
+    else this.renderSave(this.tab);
+  }
+
+  // Print tab: one button that opens the printing box of the system with the pages of the preview.
+  private renderPrint(): void {
+    const { contentEl } = this;
+    contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Ouvre la boîte d'impression de votre système avec les pages de l'aperçu. Vous pouvez y choisir l'imprimante ou enregistrer en PDF.`) });
+    new Setting(contentEl)
+      .addButton((b) =>
+        b
+          .setButtonText(t(`Imprimer`))
+          .setCta()
+          .onClick(() => {
+            this.result = { kind: `print` };
+            this.confirmed = true;
+            this.close();
+          })
+      )
+      .addButton((b) => b.setButtonText(t(`Annuler`)).onClick(() => this.close()));
+  }
+
+  // PDF and HTML tabs: folder of the vault, name of the file, confirmation before replacing a file.
+  private renderSave(kind: `pdf` | `html`): void {
+    const { contentEl } = this;
+    const target: ExportTarget = { folder: this.folder, name: this.names[kind] };
     let warning: HTMLElement;
     let button: HTMLButtonElement;
     let crumbs: HTMLElement;
     let list: HTMLElement;
 
     const check = (): void => {
-      const replacing = this.app.vault.getAbstractFileByPath(targetPath(target)) instanceof TFile;
+      const replacing = this.app.vault.getAbstractFileByPath(targetPath(target, kind)) instanceof TFile;
       warning.setText(replacing ? t(`Ce fichier existe déjà : il sera remplacé si vous confirmez.`) : ``);
       button.setText(replacing ? t(`Remplacer`) : t(`Exporter`));
     };
 
     const go = (folder: string): void => {
       target.folder = folder;
+      this.folder = folder;
       paint();
       check();
     };
@@ -75,11 +139,12 @@ export class ExportDialog extends Modal {
       const here = target.folder === `` ? this.app.vault.getRoot() : this.app.vault.getAbstractFileByPath(target.folder);
       const children = here instanceof TFolder ? here.children : [];
       const folders = children.filter((c): c is TFolder => c instanceof TFolder).sort((x, y) => x.name.localeCompare(y.name));
-      const pdfs = children.filter((c): c is TFile => c instanceof TFile && c.extension.toLowerCase() === `pdf`).sort((x, y) => x.name.localeCompare(y.name));
+      const pdfs = children.filter((c): c is TFile => c instanceof TFile && c.extension.toLowerCase() === kind).sort((x, y) => x.name.localeCompare(y.name));
       for (const f of folders) row(f.name, `mmw-xfolder`, () => go(f.path));
       for (const f of pdfs) {
         row(f.name, `mmw-xpdf`, () => {
           target.name = f.name;
+          this.names[kind] = f.name;
           name.setValue(f.name);
           check();
         });
@@ -87,6 +152,9 @@ export class ExportDialog extends Modal {
       if (folders.length === 0 && pdfs.length === 0) list.createDiv({ cls: `mmw-pnote`, text: t(`Ce dossier est vide.`) });
     };
 
+    if (kind === `html`) {
+      contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Un seul fichier autonome : le texte, les images, les formules et les polices sont dans la page. Ouvrez-le dans un navigateur ou publiez-le sur un site web. Un lien public Nextcloud affiche le texte de la page, pas la page.`) });
+    }
     contentEl.createDiv({ cls: `mmw-pzone-title`, text: t(`Dossier d'enregistrement`) });
     crumbs = contentEl.createDiv({ cls: `mmw-xcrumbs` });
     list = contentEl.createDiv({ cls: `mmw-xlist` });
@@ -114,6 +182,7 @@ export class ExportDialog extends Modal {
     const name = new TextComponent(new Setting(contentEl).setName(t(`Nom du fichier`)).controlEl);
     name.setValue(target.name).onChange((v) => {
       target.name = v;
+      this.names[kind] = v;
       check();
     });
     warning = contentEl.createDiv({ cls: `mmw-export-warning` });
@@ -122,7 +191,7 @@ export class ExportDialog extends Modal {
         button = b.buttonEl;
         b.setCta().onClick(() => {
           if (target.name.trim() === ``) return;
-          this.result = { ...target };
+          this.result = { kind, target: { ...target } };
           this.confirmed = true;
           this.close();
         });
@@ -142,13 +211,13 @@ export class ExportDialog extends Modal {
 
 // Compte rendu de l'export, affiche seulement quand il y a quelque chose a signaler.
 export class ExportReportModal extends Modal {
-  constructor(app: App, private path: string, private lines: string[]) {
+  constructor(app: App, private path: string, private lines: string[], private extension: ExportExtension = `pdf`) {
     super(app);
   }
 
   onOpen() {
     this.titleEl.setText(t(`Rapport d'export`));
-    this.contentEl.createEl(`p`, { text: t(`PDF enregistré : {0}`, this.path) });
+    this.contentEl.createEl(`p`, { text: this.extension === `html` ? t(`HTML enregistré : {0}`, this.path) : t(`PDF enregistré : {0}`, this.path) });
     const list = this.contentEl.createEl(`ul`);
     for (const l of this.lines) list.createEl(`li`, { text: l });
   }

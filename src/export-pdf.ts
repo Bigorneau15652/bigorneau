@@ -2,7 +2,7 @@
 // rendu. L'export ne modifie jamais les notes.
 import { Notice, Platform, TFile } from "obsidian";
 import { composeNote, composeToPdf } from "./export/compose";
-import { ExportDialog, ExportReportModal, targetPath } from "./export-dialog";
+import { ExportReportModal, ExportTarget, targetPath } from "./export-dialog";
 import { loadAssets, pageStyleOf } from "./export-context";
 import { missingCharsLine, warningLines } from "./export-report";
 import { MATH_SERVICE, MathRenderer } from "./script-formulas";
@@ -15,13 +15,6 @@ async function deflate(data: Uint8Array): Promise<Uint8Array> {
   if (!g.CompressionStream) return data;
   const stream = new Blob([data.slice().buffer]).stream().pipeThrough(new g.CompressionStream(`deflate`));
   return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-function askTarget(plugin: MindmapWritingPlugin, file: TFile): Promise<{ folder: string; name: string } | null> {
-  return new Promise((resolve) => {
-    const folder = file.parent && file.parent.path !== `/` ? file.parent.path : ``;
-    new ExportDialog(plugin.app, { folder, name: `${file.basename}.pdf` }, resolve).open();
-  });
 }
 
 // Composes the note and writes it as a PDF (the same pages as the preview). Used by the export and by the print button.
@@ -42,11 +35,10 @@ async function makePdf(plugin: MindmapWritingPlugin, file: TFile): Promise<{ pdf
   return { pdf, composed };
 }
 
-export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile): Promise<void> {
+// Writes the PDF of the note at the place chosen in the export window.
+export async function exportNoteToPdf(plugin: MindmapWritingPlugin, file: TFile, target: ExportTarget): Promise<void> {
   if (!Platform.isDesktop) return;
-  const target = await askTarget(plugin, file);
-  if (!target) return;
-  const path = targetPath(target);
+  const path = targetPath(target, `pdf`);
   const notice = new Notice(t(`Composition du PDF…`), 0);
   try {
     const { pdf, composed } = await makePdf(plugin, file);

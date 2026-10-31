@@ -14,6 +14,8 @@ This file bundles the following works:
 - mhchemparser 4.2.1, Copyright (c) Martin Hensel, Apache License 2.0, https://github.com/mhchem/mhchemParser
 - Libertinus Serif and Libertinus Mono 7.051 (Latin subset), Copyright 2012-2024 The Libertinus Project Authors,
   SIL Open Font License 1.1, https://github.com/alerque/libertinus
+- Pannellum 2.5.6 (360 degree panorama viewer, kept as text and written into exported HTML pages), Copyright (c) 2011-2019 Matthew Petroff,
+  MIT License, https://github.com/mpetroff/pannellum
 - Hyphenation patterns for French and British English from the hyph-utf8 project, MIT License,
   https://github.com/hyphenation/tex-hyphen
 Full license texts: folder "licences" and file NOTICE of https://github.com/Bigorneau15652/bigorneau

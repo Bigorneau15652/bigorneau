@@ -16,6 +16,9 @@ Bigorneau is an Obsidian plugin (TypeScript, one bundled `main.js`, desktop only
 - Colours and values read from notes, settings or profiles are validated before use (see `src/style.ts`, `src/settings.ts`, `src/text-style.ts`).
 - Do not rename CSS classes `mmw-`, view types, command identifiers or setting keys: shortcuts and saved layouts depend on them.
 - Do not touch the parser `src/model.ts`, the checks after writing in `src/edit.ts` or the sequential edit queue without a very good reason: they were tested with tens of thousands of random operations.
+- When the interface shows an element that hides its source text (for example a picture whose link text is hidden by Obsidian), a click on it must let the maintainer edit that text.
+- Never give a maximum height to a preview, a frame or a line that can cut a border or a rule.
+- Before building a feature that depends on a host or an external service, write a small test file and ask the maintainer to try it on that host first.
 - No new dependency, font or data file without the agreement of the maintainer. Each one is recorded with its licence in `docs/DEPENDANCES.md` and `NOTICE`.
 
 ## Architecture of the export
@@ -36,6 +39,9 @@ The PDF export is a layout engine written for the plugin, in independent stages 
 - Work on the branch given by the session, push, and open a draft pull request.
 
 ## Decisions of the maintainer
+
+- HTML export: one self-contained HTML file first (version 0.29.0), then a mode with separate folders for the media. The page is a reader: menus of the headings and of the thumbnails on the left (each opens on its own, or both), light and dark mode, full screen (Escape brings the buttons back) and wide mode on the right. A Nextcloud public link shows an HTML file as text, so the file is meant for a web host (for example GitHub Pages), a download or a local opening.
+- In the HTML export a video is a player embedded from an online link (YouTube, Vimeo), never a video file loaded into the document. The thumbnails are those of the figures and pictures, not of pages. A picture twice as wide as high is read as a 360 degree panorama with Pannellum (MIT licence, agreed by the maintainer).
 
 - The plugin is for the desktop version of Obsidian only (`isDesktopOnly: true`). The public author name in `manifest.json` is `Bigorneau`; the copyright holder in `LICENSE` is the real author.
 - Modules (Formulas, Page layout) are built into the plugin. Loading scripts from files is not supported.

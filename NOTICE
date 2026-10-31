@@ -19,3 +19,7 @@ Source : https://github.com/mhchem/mhchemParser. Il est une dependance de MathJa
 Bibliotheque MathJax (mathjax-full 3.2.2), copyright The MathJax Consortium, licence Apache 2.0 (licences/Apache-2.0-MathJax.txt).
 Source : https://github.com/mathjax/MathJax-src. Elle dessine les formules de l'export ; ses polices mathematiques (MathJax TeX)
 sont sous licence SIL Open Font License 1.1. Incorporee a main.js.
+
+Visionneuse de panoramas Pannellum 2.5.6, copyright 2011-2019 Matthew Petroff, licence MIT (licences/MIT-Pannellum.txt). Source :
+https://github.com/mpetroff/pannellum. Les deux fichiers (pannellum.js, pannellum.css), non modifies, sont gardes en base 64 dans
+src/export/html/pannellum-assets.ts et recopies dans une page HTML exportee seulement quand la note contient un panorama a 360 degres.
