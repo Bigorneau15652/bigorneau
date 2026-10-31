@@ -66,8 +66,9 @@ body.plein main{margin:0;padding:24px 8px 60px}
 .feuille figure img{max-width:100%;height:auto}
 .feuille figcaption,.feuille caption{font-size:.9em;color:var(--doux);margin-top:.4em}
 .feuille caption{caption-side:top;text-align:center;margin:0 0 .4em}
-.feuille table{border-collapse:collapse;margin:1.2em auto;max-width:100%}
-.feuille td,.feuille th{border:1px solid var(--bord);padding:4px 10px;vertical-align:top}
+.tableau-defil{overflow-x:auto;max-width:100%;margin:1.2em 0}
+.feuille table{border-collapse:collapse;margin:0 auto}
+.feuille td,.feuille th{border:1px solid var(--bord);padding:4px 10px;vertical-align:top;overflow-wrap:anywhere}
 .feuille table.entete tr:first-child td{background:var(--entete);font-weight:bold}
 .feuille table.zebre tr:nth-child(even) td{background:var(--zebre)}
 .feuille table.egal{table-layout:fixed;width:100%}
@@ -80,6 +81,8 @@ body.plein main{margin:0;padding:24px 8px 60px}
 .panorama .source{width:100%;height:100%;object-fit:cover}
 .panorama.actif .source{display:none}
 .video{position:relative;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden}
+.video-lien{text-align:center;font-size:.9em;margin:.4em 0 0}
+.hors-ligne .video{display:none}
 .video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .feuille video,.feuille audio{max-width:100%}
 .carte-media{display:flex;gap:12px;align-items:center;border:1px solid var(--bord);border-radius:8px;padding:10px 14px;text-align:left;background:var(--code)}
@@ -104,6 +107,8 @@ export const READER_JS = String.raw`
   var doc = document;
   var root = doc.documentElement;
   var body = doc.body;
+  // A page opened from a file sends no address to YouTube, which then refuses the player (error 153): only the link stays.
+  if (location.protocol === "file:") root.classList.add("hors-ligne");
   var texts = JSON.parse(doc.getElementById("textes").textContent);
   var KEY = "bigorneau-lecteur";
 
