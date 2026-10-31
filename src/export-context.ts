@@ -8,7 +8,7 @@ import { excalidrawSvg } from "./excalidraw-export";
 import { isExcalidrawTarget } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
 import type { HtmlImage } from "./export/html/html-doc";
-import { dataUri, isPanorama } from "./export/html/html-assets";
+import { dataUri, ExportFile, exportFileName, isPanorama } from "./export/html/html-assets";
 import { DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
 import { columnSetupOf, defaultLayout } from "./page-layout";
 import { configImages, findPageConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX } from "./page-config";
@@ -291,9 +291,34 @@ async function htmlImageOf(bytes: Uint8Array<ArrayBuffer>, ext: string, panorama
   }
 }
 
+// A picture for the mode with separate folders: the file is kept as it is (no reduction) and goes into the media folder; the page links
+// to it. Only its size is read, to reserve its place and to recognise a panorama.
+async function htmlFileOf(bytes: Uint8Array<ArrayBuffer>, ext: string, panoramas: boolean, wanted: string, sink: HtmlMediaSink): Promise<HtmlImage | null> {
+  const mime = MIME[ext] ?? `application/octet-stream`;
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const width = img.naturalWidth > 0 ? img.naturalWidth : 300;
+    const height = img.naturalHeight > 0 ? img.naturalHeight : 150;
+    const name = exportFileName(wanted, sink.taken);
+    sink.files.push({ name, bytes });
+    return { src: `medias/${encodeURIComponent(name)}`, width, height, panorama: panoramas && ext !== `svg` && isPanorama(width, height) };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Files written beside the page in the mode with separate folders, and the names already given to them.
+export interface HtmlMediaSink {
+  files: ExportFile[];
+  taken: Set<string>;
+}
+
 // Pictures of the note for the HTML export, by the name written in the note. An Excalidraw drawing is read through its image export or,
 // failing that, asked of the Excalidraw plugin. A picture that cannot be read has no entry: the page says so and the report lists it.
-export async function loadHtmlImages(app: App, text: string, fileName: string, sourcePath: string, panoramas: boolean): Promise<Map<string, HtmlImage>> {
+export async function loadHtmlImages(app: App, text: string, fileName: string, sourcePath: string, panoramas: boolean, sink?: HtmlMediaSink): Promise<Map<string, HtmlImage>> {
   const out = new Map<string, HtmlImage>();
   const targets = new Set<string>();
   for (const { target } of imageTargets(text, fileName)) targets.add(target);
@@ -303,7 +328,8 @@ export async function loadHtmlImages(app: App, text: string, fileName: string, s
       const file = fileFor(app, name, sourcePath);
       if (!file || !isImageTarget(file.name) || /\.excalidraw(\.md)?$/i.test(file.name)) continue;
       try {
-        const image = await htmlImageOf(new Uint8Array(await app.vault.readBinary(file)), file.extension.toLowerCase(), panoramas);
+        const bytes = new Uint8Array(await app.vault.readBinary(file));
+        const image = sink ? await htmlFileOf(bytes, file.extension.toLowerCase(), panoramas, file.name, sink) : await htmlImageOf(bytes, file.extension.toLowerCase(), panoramas);
         if (image) {
           out.set(target, image);
           break;
@@ -317,7 +343,8 @@ export async function loadHtmlImages(app: App, text: string, fileName: string, s
       const svg = file ? await excalidrawSvg(app, file) : null;
       if (svg) {
         try {
-          const image = await htmlImageOf(new TextEncoder().encode(svg), `svg`, false);
+          const svgBytes = new TextEncoder().encode(svg);
+          const image = sink ? await htmlFileOf(svgBytes, `svg`, false, `${file?.basename ?? `dessin`}.svg`, sink) : await htmlImageOf(svgBytes, `svg`, false);
           if (image) out.set(target, image);
         } catch (e) {
           noteError(`Export HTML : dessin Excalidraw illisible (${target})`, e);

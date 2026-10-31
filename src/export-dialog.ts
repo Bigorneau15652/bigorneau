@@ -17,11 +17,18 @@ export function targetPath(target: ExportTarget, extension: ExportExtension = `p
   return (folder === `` ? `` : `${folder}/`) + (new RegExp(`\\.${extension}$`, `i`).test(name) ? name : `${name}.${extension}`);
 }
 
+// Path of the folder of an HTML export in the mode with separate folders: the chosen folder, then the name without extension.
+export function targetFolderPath(target: ExportTarget): string {
+  const folder = target.folder.replace(/^\/+|\/+$/g, ``);
+  const name = target.name.trim().replace(/\.html?$/i, ``).replace(/[\\/:*?"<>|]/g, `-`).replace(/^\.+/, ``);
+  return (folder === `` ? `` : `${folder}/`) + (name === `` ? `export` : name);
+}
+
 // Tab of the export window: PDF file, printing, or one self-contained HTML file.
 export type ExportTab = `pdf` | `print` | `html`;
 
 // What the maintainer chose in the export window: a file to write (with its place) or the printing.
-export type ExportChoice = { kind: `pdf` | `html`; target: ExportTarget } | { kind: `print` };
+export type ExportChoice = { kind: `pdf`; target: ExportTarget } | { kind: `html`; target: ExportTarget; folder: boolean } | { kind: `print` };
 
 // Export window with three tabs (PDF, Print, HTML). The PDF and HTML tabs ask where to save the file: folder and name proposed by
 // default, replacement confirmed. A click on the Print tab closes the window and opens the printing box of the system.
@@ -32,9 +39,12 @@ export class ExportDialog extends Modal {
   private folder: string;
   // Name of the file for each kind, extension included.
   private names: Record<`pdf` | `html`, string>;
+  // HTML tab: one file, or a folder with the pictures, the fonts and the panorama viewer in their own folders.
+  private htmlFolder: boolean;
 
-  constructor(app: App, initial: ExportTarget, private done: (choice: ExportChoice | null) => void, tab: ExportTab = `pdf`) {
+  constructor(app: App, initial: ExportTarget, private done: (choice: ExportChoice | null) => void, tab: ExportTab = `pdf`, htmlFolder = false) {
     super(app);
+    this.htmlFolder = htmlFolder;
     this.tab = tab === `print` ? `pdf` : tab;
     this.folder = this.nearestFolder(initial.folder);
     const base = initial.name.replace(/\.(pdf|html)$/i, ``);
@@ -85,15 +95,16 @@ export class ExportDialog extends Modal {
   // PDF and HTML tabs: folder of the vault, name of the file, confirmation before replacing a file.
   private renderSave(kind: `pdf` | `html`): void {
     const { contentEl } = this;
-    const target: ExportTarget = { folder: this.folder, name: this.names[kind] };
+    const folderMode = kind === `html` && this.htmlFolder;
+    const target: ExportTarget = { folder: this.folder, name: folderMode ? this.names.html.replace(/\.html?$/i, ``) : this.names[kind] };
     let warning: HTMLElement;
     let button: HTMLButtonElement;
     let crumbs: HTMLElement;
     let list: HTMLElement;
 
     const check = (): void => {
-      const replacing = this.app.vault.getAbstractFileByPath(targetPath(target, kind)) instanceof TFile;
-      warning.setText(replacing ? t(`Ce fichier existe déjà : il sera remplacé si vous confirmez.`) : ``);
+      const replacing = folderMode ? this.app.vault.getAbstractFileByPath(targetFolderPath(target)) instanceof TFolder : this.app.vault.getAbstractFileByPath(targetPath(target, kind)) instanceof TFile;
+      warning.setText(replacing ? (folderMode ? t(`Ce dossier existe déjà : index.html et les dossiers medias, polices et lib seront remplacés si vous confirmez. Le reste du dossier n'est pas touché.`) : t(`Ce fichier existe déjà : il sera remplacé si vous confirmez.`)) : ``);
       button.setText(replacing ? t(`Remplacer`) : t(`Exporter`));
     };
 
@@ -129,7 +140,7 @@ export class ExportDialog extends Modal {
       const folders = children.filter((c): c is TFolder => c instanceof TFolder).sort((x, y) => x.name.localeCompare(y.name));
       const pdfs = children.filter((c): c is TFile => c instanceof TFile && c.extension.toLowerCase() === kind).sort((x, y) => x.name.localeCompare(y.name));
       for (const f of folders) row(f.name, `mmw-xfolder`, () => go(f.path));
-      for (const f of pdfs) {
+      for (const f of folderMode ? [] : pdfs) {
         row(f.name, `mmw-xpdf`, () => {
           target.name = f.name;
           this.names[kind] = f.name;
@@ -137,11 +148,25 @@ export class ExportDialog extends Modal {
           check();
         });
       }
-      if (folders.length === 0 && pdfs.length === 0) list.createDiv({ cls: `mmw-pnote`, text: t(`Ce dossier est vide.`) });
+      if (folders.length === 0 && (folderMode || pdfs.length === 0)) list.createDiv({ cls: `mmw-pnote`, text: t(`Ce dossier est vide.`) });
     };
 
     if (kind === `html`) {
-      contentEl.createDiv({ cls: `mmw-pnote`, text: t(`Un seul fichier autonome : le texte, les images, les formules et les polices sont dans la page. Ouvrez-le dans un navigateur ou publiez-le sur un site web. Un lien public Nextcloud affiche le texte de la page, pas la page.`) });
+      new Setting(contentEl)
+        .setName(t(`Forme de l'export`))
+        .addDropdown((d) => {
+          d.addOption(`single`, t(`Fichier unique`)).addOption(`folder`, t(`Dossier avec médias séparés`));
+          d.setValue(this.htmlFolder ? `folder` : `single`).onChange((v) => {
+            this.htmlFolder = v === `folder`;
+            this.onOpen();
+          });
+        });
+      contentEl.createDiv({
+        cls: `mmw-pnote`,
+        text: folderMode
+          ? t(`Un dossier : index.html contient le texte et le lecteur. Les images d'origine sont dans le dossier medias, les polices dans polices et la visionneuse des panoramas dans lib. Publiez tout le dossier sur un site web (par exemple GitHub Pages) : les panoramas 360 degrés ne tournent que depuis un site web, pas depuis un fichier de l'ordinateur.`)
+          : t(`Un seul fichier autonome : le texte, les images, les formules et les polices sont dans la page. Ouvrez-le dans un navigateur ou publiez-le sur un site web. Un lien public Nextcloud affiche le texte de la page, pas la page.`),
+      });
     }
     contentEl.createDiv({ cls: `mmw-pzone-title`, text: t(`Dossier d'enregistrement`) });
     crumbs = contentEl.createDiv({ cls: `mmw-xcrumbs` });
@@ -167,10 +192,10 @@ export class ExportDialog extends Modal {
       })
       .addButton((b) => b.setButtonText(t(`Créer`)).onClick(addFolder));
 
-    const name = new TextComponent(new Setting(contentEl).setName(t(`Nom du fichier`)).controlEl);
+    const name = new TextComponent(new Setting(contentEl).setName(folderMode ? t(`Nom du dossier de l'export`) : t(`Nom du fichier`)).controlEl);
     name.setValue(target.name).onChange((v) => {
       target.name = v;
-      this.names[kind] = v;
+      this.names[kind] = folderMode ? `${v}.html` : v;
       check();
     });
     warning = contentEl.createDiv({ cls: `mmw-export-warning` });
@@ -179,7 +204,7 @@ export class ExportDialog extends Modal {
         button = b.buttonEl;
         b.setCta().onClick(() => {
           if (target.name.trim() === ``) return;
-          this.result = { kind, target: { ...target } };
+          this.result = kind === `html` ? { kind, target: { ...target }, folder: folderMode } : { kind, target: { ...target } };
           this.confirmed = true;
           this.close();
         });
