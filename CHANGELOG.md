@@ -5,9 +5,13 @@ Chaque version a une courte description en anglais, puis en français. Le texte 
 
 ## 0.30.2
 
-Fixed: the language of the plugin no longer falls back to English when Obsidian is in French. The language of Obsidian is now read from several places (the local storage, the date library of the application, the page and the browser) instead of one that some versions of Obsidian do not write. Printing to a chosen printer sends the sheet by its name (A4, A3, A5, Letter) and asks for double-sided printing only when it is wanted: a printer without a double-sided unit refused the jobs and they stayed in error in the queue of Windows. A note under the setting says so.
+Fixed: the language of the plugin no longer falls back to English when Obsidian is in French. The language of Obsidian is now read from several places (the local storage, the date library of the application, the page and the browser) instead of one that some versions of Obsidian do not write.
 
-Corrigé : la langue du plugin ne repasse plus en anglais quand Obsidian est en français. La langue d'Obsidian est maintenant lue à plusieurs endroits (le stockage local, la bibliothèque de dates de l'application, la page et le navigateur) et non plus à un seul, que certaines versions d'Obsidian n'écrivent pas. L'impression vers une imprimante choisie envoie la feuille par son nom (A4, A3, A5, Letter) et ne demande le recto verso que s'il est voulu : une imprimante sans module recto verso refusait les travaux, qui restaient en erreur dans la file d'impression de Windows. Une note sous le réglage le précise.
+Changed: the settings of the Print tab (pages, paper, orientation, colour, printer, copies, double-sided) and the direct sending to a printer, added in 0.30.0 and 0.30.1, are removed. A click on the Print tab now closes the Export window and opens the print window of the system with the pages of the preview, as it did before 0.30.0. That window offers the printer, the pages, the paper, the orientation, the colour and the double-sided printing, and works the same on Windows, macOS and Linux. The plugin no longer reaches the printing of the application window, and the test that forbade it is back.
+
+Corrigé : la langue du plugin ne repasse plus en anglais quand Obsidian est en français. La langue d'Obsidian est maintenant lue à plusieurs endroits (le stockage local, la bibliothèque de dates de l'application, la page et le navigateur) et non plus à un seul, que certaines versions d'Obsidian n'écrivent pas.
+
+Modifié : les réglages de l'onglet Impression (pages, papier, orientation, couleur, imprimante, copies, recto verso) et l'envoi direct vers une imprimante, ajoutés en 0.30.0 et 0.30.1, sont retirés. Un clic sur l'onglet Impression ferme maintenant la fenêtre Export et ouvre la boîte d'impression du système avec les pages de l'aperçu, comme avant la 0.30.0. Cette boîte propose l'imprimante, les pages, le papier, l'orientation, la couleur et le recto verso, et fonctionne de la même façon sous Windows, macOS et Linux. Le plugin n'atteint plus l'impression de la fenêtre de l'application, et le test qui l'interdisait est rétabli.
 
 ## 0.30.1
 
