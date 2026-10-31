@@ -484,6 +484,7 @@ export class MmSettingTab extends PluginSettingTab {
       (v) => (s.exportFootnoteNumbering = v === `perChapter` ? `perChapter` : `continuous`)
     );
     this.exportToggle(el, t(`Protrusion`), t(`La ponctuation et les tirets en bout de ligne dépassent légèrement dans la marge, ce qui rend le bord du texte plus net à l'œil.`), s.exportProtrusion, (v) => (s.exportProtrusion = v));
+    this.exportToggle(el, t(`Images à 360 degrés dans l'export HTML`), t(`Une image deux fois plus large que haute (au moins 1500 pixels de large) est lue comme un panorama que l'on fait tourner. Désactivez pour la garder comme une image ordinaire.`), s.exportHtmlPanoramas, (v) => (s.exportHtmlPanoramas = v));
 
     new Setting(el).setName(t(`Listes à puces`)).setHeading();
     el.createDiv({ cls: `setting-item-description`, text: t(`Puce de chaque niveau d'une liste à puces dans l'export (PDF et aperçu des pages). Au-delà du sixième niveau, la puce est le trait d'union. L'affichage des notes dans Obsidian ne change pas.`) });

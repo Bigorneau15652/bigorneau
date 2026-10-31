@@ -260,7 +260,7 @@ export interface TypesetOptions {
 
 // Repere des titres et des blocs, et numero des figures et tableaux, calcules avant la composition pour que les renvois
 // puissent viser un endroit situe plus loin dans la note.
-interface Anchors {
+export interface Anchors {
   sections: Map<DocSection, string>;
   headings: Map<string, string>;
   blocks: Map<string, { anchor: string; label?: string }>;
@@ -271,7 +271,7 @@ function labelWords(language: LanguageCode): { figure: string; table: string } {
   return language === `en` ? { figure: `Figure`, table: `Table` } : { figure: `Figure`, table: `Tableau` };
 }
 
-function collectAnchors(doc: ExportDoc, language: LanguageCode): Anchors {
+export function collectAnchors(doc: ExportDoc, language: LanguageCode): Anchors {
   const words = labelWords(language);
   const a: Anchors = { sections: new Map(), headings: new Map(), blocks: new Map(), labels: new Map() };
   let figures = 0;
@@ -1007,7 +1007,7 @@ class Typesetter {
 }
 
 // Le titre nomme-t-il cette liste (« Liste des figures », « Table des tableaux », « List of tables »...) ?
-function namesList(title: string, kind: `figures` | `tables`): boolean {
+export function namesList(title: string, kind: `figures` | `tables`): boolean {
   const w = normalizeHeading(title);
   return kind === `figures` ? /figure/.test(w) : /tableau|table/.test(w);
 }
@@ -1028,7 +1028,7 @@ function sectionWords(s: DocSection): number {
 }
 
 // Niveau de titre le plus haut present dans le document : c'est lui qui sert de chapitre (en-tete courant, saut de page).
-function topLevel(sections: DocSection[]): number {
+export function topLevel(sections: DocSection[]): number {
   let level = 6;
   const walk = (s: DocSection): void => {
     level = Math.min(level, s.level);
@@ -1040,7 +1040,7 @@ function topLevel(sections: DocSection[]): number {
 
 // Numero de chaque titre selon la numerotation choisie : seuls les niveaux marques « numerotes » comptent, et le numero d'un titre
 // reprend celui de ses parents numerotes.
-function numberSections(sections: DocSection[], ty: TypographyStyle, top: number): Map<DocSection, string> {
+export function numberSections(sections: DocSection[], ty: TypographyStyle, top: number): Map<DocSection, string> {
   const out = new Map<DocSection, string>();
   if (ty.numbering === `none`) return out;
   const counters = [0, 0, 0, 0, 0, 0];

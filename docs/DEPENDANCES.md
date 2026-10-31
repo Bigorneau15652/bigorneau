@@ -26,6 +26,10 @@ Depuis la version 0.15.0, l'utilisateur peut déposer ses propres polices (.ttf 
 
 MathJax dépend de mhchemparser, version 4.2.1, copyright Martin Hensel, licence Apache 2.0 (même texte que licences/Apache-2.0-MathJax.txt). Source : https://github.com/mhchem/mhchemParser. Elle lit les formules chimiques de la commande `\ce` et est incorporée au fichier main.js avec MathJax.
 
+## Visionneuse de panoramas Pannellum
+
+Depuis la version 0.29.0, l'export HTML lit les images à 360 degrés avec Pannellum 2.5.6, copyright 2011-2019 Matthew Petroff, licence MIT (licences/MIT-Pannellum.txt). Source : https://github.com/mpetroff/pannellum. Les fichiers pannellum.js et pannellum.css (paquet npm pannellum 2.5.6, dossier build, non modifiés) sont gardés en base 64 dans src/export/html/pannellum-assets.ts et recopiés dans la page exportée seulement quand la note contient un panorama. Le plugin lui-même ne charge ni n'exécute cette bibliothèque. Contrôles faits : ni eval ni new Function ; la bibliothèque lit l'image par une requête XMLHttpRequest sur une adresse blob: produite dans la page exportée, d'où connect-src blob: dans la politique de sécurité de la page. L'utilisateur a donné son accord le 31 octobre 2026.
+
 ## Mentions de licence livrées avec le plugin
 
 Le plugin s'installe avec trois fichiers seulement (main.js, manifest.json, styles.css). Un bandeau de licence est donc écrit en tête de main.js par la configuration de construction (esbuild.config.mjs) : il cite le plugin, MathJax, mhchemparser, les polices Libertinus et les motifs de césure. Les textes complets restent dans le dossier licences/ et dans NOTICE.

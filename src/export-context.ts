@@ -7,6 +7,8 @@ import { noteError } from "./diagnostics";
 import { excalidrawSvg } from "./excalidraw-export";
 import { isExcalidrawTarget } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
+import type { HtmlImage } from "./export/html/html-doc";
+import { dataUri, isPanorama } from "./export/html/html-assets";
 import { DEFAULT_PAGE_STYLE, PageStyle } from "./export/typeset";
 import { columnSetupOf, defaultLayout } from "./page-layout";
 import { configImages, findPageConfig, IMAGE_MAX_HEIGHT_PX, IMAGE_MAX_WIDTH_PX } from "./page-config";
@@ -239,11 +241,89 @@ async function loadBytes(bytes: Uint8Array<ArrayBuffer>, ext: string, requestedW
 
 // Dessin des formules de la note par le service du script Formules. Une formule que MathJax refuse n'a pas d'entree : la composition
 // garde son texte et le signale.
-async function loadFormulas(text: string, fileName: string, render: MathRenderer): Promise<Map<string, MathAsset>> {
+export async function loadFormulas(text: string, fileName: string, render: MathRenderer): Promise<Map<string, MathAsset>> {
   const out = new Map<string, MathAsset>();
   for (const { tex, display } of formulaTargets(text, fileName)) {
     const asset = await render(tex, display);
     if (asset) out.set(mathKey(tex, display), asset);
+  }
+  return out;
+}
+
+// Widest picture written into an HTML page, in pixels (a panorama may be wider), and size under which a file is kept as it is.
+const HTML_MAX_WIDTH = 1600;
+const HTML_PANORAMA_MAX_WIDTH = 4096;
+const HTML_KEEP_BYTES = 700 * 1024;
+
+// A picture ready for an HTML page: kept as it is when small (or vector, or animated), otherwise reduced and written again as JPEG, or as
+// PNG when it has transparent parts. The page needs no other file, so the picture travels inside it as a data: address.
+async function htmlImageOf(bytes: Uint8Array<ArrayBuffer>, ext: string, panoramas: boolean): Promise<HtmlImage | null> {
+  const mime = MIME[ext] ?? `application/octet-stream`;
+  const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const width = img.naturalWidth > 0 ? img.naturalWidth : 300;
+    const height = img.naturalHeight > 0 ? img.naturalHeight : 150;
+    const panorama = panoramas && ext !== `svg` && isPanorama(width, height);
+    const maxWidth = panorama ? HTML_PANORAMA_MAX_WIDTH : HTML_MAX_WIDTH;
+    if (ext === `svg` || ext === `gif` || (width <= maxWidth && bytes.length <= HTML_KEEP_BYTES)) return { src: dataUri(mime, bytes), width, height, panorama };
+    const scale = Math.min(1, maxWidth / width);
+    const canvas = document.createElement(`canvas`);
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const ctx = canvas.getContext(`2d`);
+    if (!ctx) return null;
+    ctx.imageSmoothingQuality = `high`;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let opaque = true;
+    for (let i = 3; i < pixels.length; i += 28) {
+      if (pixels[i] !== 255) {
+        opaque = false;
+        break;
+      }
+    }
+    return { src: opaque ? canvas.toDataURL(`image/jpeg`, 0.86) : canvas.toDataURL(`image/png`), width, height, panorama };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Pictures of the note for the HTML export, by the name written in the note. An Excalidraw drawing is read through its image export or,
+// failing that, asked of the Excalidraw plugin. A picture that cannot be read has no entry: the page says so and the report lists it.
+export async function loadHtmlImages(app: App, text: string, fileName: string, sourcePath: string, panoramas: boolean): Promise<Map<string, HtmlImage>> {
+  const out = new Map<string, HtmlImage>();
+  const targets = new Set<string>();
+  for (const { target } of imageTargets(text, fileName)) targets.add(target);
+  for (const target of targets) {
+    if (!isImageTarget(target) || isWebTarget(target)) continue;
+    for (const name of imageCandidates(target)) {
+      const file = fileFor(app, name, sourcePath);
+      if (!file || !isImageTarget(file.name) || /\.excalidraw(\.md)?$/i.test(file.name)) continue;
+      try {
+        const image = await htmlImageOf(new Uint8Array(await app.vault.readBinary(file)), file.extension.toLowerCase(), panoramas);
+        if (image) {
+          out.set(target, image);
+          break;
+        }
+      } catch (e) {
+        noteError(`Export HTML : image illisible (${file.path})`, e);
+      }
+    }
+    if (!out.has(target) && isExcalidrawTarget(target)) {
+      const file = fileFor(app, target, sourcePath) ?? fileFor(app, `${target.replace(/\.md$/i, ``)}.md`, sourcePath);
+      const svg = file ? await excalidrawSvg(app, file) : null;
+      if (svg) {
+        try {
+          const image = await htmlImageOf(new TextEncoder().encode(svg), `svg`, false);
+          if (image) out.set(target, image);
+        } catch (e) {
+          noteError(`Export HTML : dessin Excalidraw illisible (${target})`, e);
+        }
+      }
+    }
   }
   return out;
 }
