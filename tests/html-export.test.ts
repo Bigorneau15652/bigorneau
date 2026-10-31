@@ -146,3 +146,24 @@ test(`bytes become data addresses, panoramas are told by their shape, fonts of t
   assert.match(used, /font-family:"mmwu-lora"[^}]*data:font\/ttf;base64,AAEAAA==/);
   assert.ok(!used.includes(`mmwu-other`));
 });
+
+test(`a video embed code is found alone, indented, in a list, in a paragraph tag or after text`, () => {
+  const frame = `<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ?si=abc" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay" allowfullscreen></iframe>`;
+  const cases = [`${frame}`, `   ${frame}`, `- point\n  ${frame}`, `- ${frame}`, `<p>${frame}</p>`, `<div>\n${frame}\n</div>`, `Texte avant ${frame} texte apres`];
+  for (const body of cases) {
+    const doc = buildExportDoc(`# T\n${body}\n`, `N.md`);
+    const media = JSON.stringify(doc).match(/"type":"media"/g) ?? [];
+    assert.equal(media.length, 1, body);
+  }
+  const { html } = render(`# T\nTexte avant ${frame} texte apres\n`);
+  assert.match(html, /<iframe src="https:\/\/www\.youtube-nocookie\.com\/embed\/dQw4w9WgXcQ"/);
+  assert.match(html, /Texte avant/);
+  assert.match(html, /texte apres/);
+});
+
+test(`a video keeps a link to its page and a wide table scrolls inside its own frame`, () => {
+  const { html } = render(`# T\n![](https://youtu.be/dQw4w9WgXcQ?t=42)\n\n| a | b |\n|---|---|\n| c | d |\n`);
+  assert.match(html, /<p class="video-lien"><a href="https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ&amp;t=42"/);
+  assert.match(html, /<div class="tableau-defil"><table/);
+  assert.match(html, /<\/table><\/div>/);
+});

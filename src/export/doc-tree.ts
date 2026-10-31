@@ -338,24 +338,40 @@ export function parseBlocks(text: string): DocBlock[] {
       continue;
     }
 
-    // Contenu integre en HTML : <iframe>, <video>, <audio>.
-    const html = /^\s*<(iframe|video|audio)\b/i.exec(line);
+    // Contenu integre en HTML : <iframe>, <video>, <audio>. La balise peut etre seule sur sa ligne, decalee, dans un element de liste,
+    // entouree de <p> ou <div>, ou precedee de texte : le texte avant et apres devient un paragraphe.
+    const html = /<(iframe|video|audio)\b/i.exec(line);
     if (html) {
       flushPara();
-      let tag = line;
+      const before = line.slice(0, html.index).replace(/<\/?(?:p|div)\b[^>]*>/gi, ``).replace(/^\s*(?:[-*+]|\d+[.)])[ \t]+/, ``).trim();
+      if (before !== ``) {
+        para.push(before);
+        flushPara();
+      }
+      const kindTag = html[1].toLowerCase();
+      let tag = line.slice(html.index);
       i++;
       while (!/>/.test(tag) && i < lines.length) tag += ` ${lines[i++]}`;
       const src = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] ?? ``;
       const title = /\btitle\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1] ?? ``;
       // Le contenu et la balise fermante, s'ils sont sur les lignes suivantes, sont passes.
-      const closer = new RegExp(`</${html[1]}>`, `i`);
-      if (!closer.test(tag) && !/\/>\s*$/.test(tag)) {
+      const closer = new RegExp(`</${kindTag}>`, `i`);
+      let after = ``;
+      const closed = closer.exec(tag);
+      if (closed) {
+        after = tag.slice(closed.index + closed[0].length);
+      } else if (!/\/>\s*$/.test(tag)) {
         let j = i;
         while (j < lines.length && !closer.test(lines[j]) && lines[j].trim() !== ``) j++;
         if (j < lines.length && closer.test(lines[j])) i = j + 1;
       }
-      const kind: MediaKind = html[1].toLowerCase() === `audio` ? `audio` : mediaKindOf(src) ?? (html[1].toLowerCase() === `video` ? `video` : `embed`);
+      const kind: MediaKind = kindTag === `audio` ? `audio` : mediaKindOf(src) ?? (kindTag === `video` ? `video` : `embed`);
       if (src !== ``) blocks.push({ type: `media`, kind, target: src, caption: title });
+      const rest = after.replace(/<\/?(?:p|div)\b[^>]*>/gi, ``).trim();
+      if (rest !== ``) {
+        para.push(rest);
+        flushPara();
+      }
       continue;
     }
 
@@ -450,7 +466,7 @@ export function parseBlocks(text: string): DocBlock[] {
           // A bullet does not end the count of the numbered items of its level.
           if (ordered) started[depth] = true;
           items.push(item);
-        } else if (/^[ \t]/.test(lines[i]) && items.length > 0) {
+        } else if (/^[ \t]/.test(lines[i]) && items.length > 0 && !/<(?:iframe|video|audio)\b/i.test(lines[i])) {
           // Suite d'un element de liste sur la ligne suivante.
           items[items.length - 1].text += ` ` + lines[i].trim();
         } else {

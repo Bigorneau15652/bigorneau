@@ -48,12 +48,12 @@ const TEXTS = {
   fr: {
     plan: `Plan du document`, thumbs: `Miniatures`, dark: `Mode sombre`, light: `Mode clair`, full: `Plein écran`, wide: `Mode large`, escape: `Échap pour revenir`,
     fold: `Plier ou déplier`, noThumbs: `Aucune image dans ce document.`, notes: `Notes`, back: `Retour au texte`, listFigures: `Liste des figures`, listTables: `Liste des tableaux`,
-    video: `Vidéo`, audio: `Audio`, document: `Document PDF`, embed: `Contenu intégré`, missing: `Image introuvable`, web: `Image du web`, image: `Image`, untitled: `(sans titre)`, colon: ` : `,
+    video: `Vidéo`, watch: `Regarder la vidéo sur le site d'origine`, audio: `Audio`, document: `Document PDF`, embed: `Contenu intégré`, missing: `Image introuvable`, web: `Image du web`, image: `Image`, untitled: `(sans titre)`, colon: ` : `,
   },
   en: {
     plan: `Document outline`, thumbs: `Thumbnails`, dark: `Dark mode`, light: `Light mode`, full: `Full screen`, wide: `Wide mode`, escape: `Press Esc to go back`,
     fold: `Fold or unfold`, noThumbs: `No picture in this document.`, notes: `Notes`, back: `Back to the text`, listFigures: `List of figures`, listTables: `List of tables`,
-    video: `Video`, audio: `Audio`, document: `PDF document`, embed: `Embedded content`, missing: `Image not found`, web: `Web image`, image: `Image`, untitled: `(untitled)`, colon: `: `,
+    video: `Video`, watch: `Watch the video on the original site`, audio: `Audio`, document: `PDF document`, embed: `Embedded content`, missing: `Image not found`, web: `Web image`, image: `Image`, untitled: `(untitled)`, colon: `: `,
   },
 };
 
@@ -78,6 +78,14 @@ export function embedUrl(target: string): string | null {
   const vimeo = /^https?:\/\/(?:www\.)?vimeo\.com\/(?:video\/)?(\d{5,12})(?:[/?#]|$)/i.exec(t);
   if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
   return null;
+}
+
+// Address of the video page that matches a player address, so that a link can open it in the browser.
+export function watchUrl(player: string): string {
+  const yt = /^https:\/\/www\.youtube-nocookie\.com\/embed\/([\w-]+)(?:\?start=(\d+))?$/.exec(player);
+  if (yt) return `https://www.youtube.com/watch?v=${yt[1]}${yt[2] ? `&t=${yt[2]}` : ``}`;
+  const vimeo = /^https:\/\/player\.vimeo\.com\/video\/(\d+)$/.exec(player);
+  return vimeo ? `https://vimeo.com/${vimeo[1]}` : player;
 }
 
 // Black or white, whichever reads better on a background colour given as #rrggbb.
@@ -353,7 +361,7 @@ class Renderer {
     const id = this.figureIds.get(b);
     const classes = [`tableau`, ...(b.style?.header ? [`entete`] : []), ...(b.style?.stripes ? [`zebre`] : []), ...(b.style?.equal ? [`egal`] : [])];
     const alias = b.id ? `<a id="b-${escapeHtml(b.id)}"></a>` : ``;
-    let html = `${alias}<table${id ? ` id="${id}"` : ``} class="${classes.join(` `)}">`;
+    let html = `${alias}<div class="tableau-defil"><table${id ? ` id="${id}"` : ``} class="${classes.join(` `)}">`;
     if (label) html += `<caption><strong>${escapeHtml(label)}</strong>${this.texts.colon}${this.highlighted(this.inline(b.caption ?? ``), this.ty.caption, `legende`)}</caption>`;
     html += `<tbody>`;
     for (const row of b.rows) {
@@ -364,7 +372,7 @@ class Renderer {
       });
       html += `</tr>`;
     }
-    return `${html}</tbody></table>`;
+    return `${html}</tbody></table></div>`;
   }
 
   private figure(b: Extract<DocBlock, { type: `figure` }>): string {
@@ -403,7 +411,7 @@ class Renderer {
     const web = /^https?:\/\//i.test(b.target);
     const player = b.kind === `video` ? embedUrl(b.target) : null;
     if (player) {
-      return `<figure class="media"${id}><div class="video"><iframe src="${escapeHtml(player)}" title="${escapeHtml(plainOf(parseInline(b.caption).text) || this.texts.video)}" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" allow="encrypted-media; picture-in-picture; fullscreen"></iframe></div>${caption}</figure>`;
+      return `<figure class="media"${id}><div class="video"><iframe src="${escapeHtml(player)}" title="${escapeHtml(plainOf(parseInline(b.caption).text) || this.texts.video)}" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" allow="encrypted-media; picture-in-picture; fullscreen"></iframe></div><p class="video-lien"><a href="${escapeHtml(watchUrl(player))}" target="_blank" rel="noopener noreferrer">${this.texts.watch}</a></p>${caption}</figure>`;
     }
     if (web && b.kind === `video` && /\.(mp4|webm|ogv|mov|m4v)(?:[?#]|$)/i.test(b.target)) {
       return `<figure class="media"${id}><video controls preload="none" src="${escapeHtml(b.target)}"></video>${caption}</figure>`;
