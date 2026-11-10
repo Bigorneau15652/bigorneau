@@ -1914,6 +1914,7 @@ export class MapRenderer {
         const srcBox = src.getBoundingClientRect();
         // The current position fades while the copies move, so the new place can be judged against the old one.
         src.classList.add(`mmw-faded`);
+        this.addGhostLines(d);
         for (const [k, el] of this.els) {
           if (!k.startsWith(`${d.key}.`)) continue;
           const copy = el.cloneNode(true) as HTMLElement;
@@ -1933,6 +1934,41 @@ export class MapRenderer {
     }
     this.mapEl.setPointerCapture(d.pointerId);
     this.mapEl.classList.add(`mmw-dragging`);
+  }
+
+  // Draws the branch lines of a dragged floating topic in a small overlay that moves with the ghost copies.
+  private addGhostLines(d: NonNullable<MapRenderer[`nodeDrag`]>): void {
+    const s = this.getSettings();
+    const srcNode = this.list.find((n) => n.key === d.key);
+    if (!srcNode) return;
+    const svg = document.createElementNS(SVG_NS, `svg`);
+    svg.setAttribute(`class`, `mmw-svg mmw-ghost`);
+    const g = document.createElementNS(SVG_NS, `g`);
+    g.setAttribute(`transform`, `scale(${this.scale})`);
+    svg.appendChild(g);
+    const add = (dAttr: string, css: string): void => {
+      const p = document.createElementNS(SVG_NS, `path`);
+      p.setAttribute(`d`, dAttr);
+      p.setAttribute(`class`, `mmw-line`);
+      p.setAttribute(`style`, css);
+      g.appendChild(p);
+    };
+    for (const n of this.list) {
+      if (n.key !== d.key && !n.key.startsWith(`${d.key}.`)) continue;
+      const st = this.styleOf(n);
+      const y0 = n.y + n.h;
+      const tx = trunkX(n);
+      let trunkEnd = y0;
+      for (const c of n.children) {
+        const cs = this.styleOf(c);
+        const cy = c.y + c.h / 2;
+        if (hasTrunk(s.branchStyle)) trunkEnd = Math.max(trunkEnd, cy - trunkRadius(y0, cy, tx, c.x, cs.corners));
+        add(trunkBranch(s.branchStyle, tx, y0, c.x, cy, `${n.key}>${c.key}`, cs.corners, cs.roughness), strokeCss(cs));
+      }
+      if (trunkEnd - y0 >= 1) add(trunkLine(s.branchStyle, tx, y0, trunkEnd, `trunk${n.key}`, st.roughness) ?? `M ${tx} ${y0} L ${tx} ${trunkEnd}`, strokeCss(st));
+    }
+    this.mapEl.appendChild(svg);
+    d.followers.push({ el: svg as unknown as HTMLElement, dx: -srcNode.x * this.scale, dy: -srcNode.y * this.scale });
   }
 
   private updateNodeDrag(e: PointerEvent): void {
