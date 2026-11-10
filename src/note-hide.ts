@@ -1,6 +1,6 @@
 // Titres masques : leurs lignes (titre, texte et sous-titres) disparaissent de l'affichage de la note reliee a la carte,
 // sans etre retirees du fichier. Utilise uniquement CodeMirror, pour pouvoir etre verifie hors d'Obsidian.
-import { EditorState, Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import { EditorSelection, EditorState, Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView } from "@codemirror/view";
 import { activeRangeField, setActiveRange } from "./active-range";
 import { hiddenLineRanges, metaLineNumbers, parseNote } from "./model";
@@ -107,7 +107,30 @@ const guardDeletions = EditorState.transactionFilter.of((tr) => {
   return refuse ? [] : tr;
 });
 
-export const hideExtension: Extension = [hideField, guardDeletions];
+// Quand les chapitres inactifs sont masques, le curseur reste dans le chapitre actif : un clic dans le vide sous son texte, une
+// fleche au bord, Ctrl+Fin ou une selection par glissement ne peuvent pas l'envoyer dans une partie masquee, ce qui ferait
+// changer de chapitre sans le vouloir (la carte suit le curseur). Le curseur est ramene au bord le plus proche du chapitre. Seuls les
+// deplacements de l'utilisateur sont concernes : ceux du plugin (changement de chapitre depuis la carte) passent librement.
+const guardSelection = EditorState.transactionFilter.of((tr) => {
+  if (!tr.selection || tr.docChanged || !tr.isUserEvent(`select`)) return tr;
+  const hide = tr.startState.field(hideField, false);
+  const active = tr.startState.field(activeRangeField, false);
+  if (!hide || !hide.enabled || !hide.inactive || !active) return tr;
+  const length = tr.state.doc.length;
+  const min = Math.max(0, Math.min(active.from, length));
+  // La plage finit au debut de la premiere ligne masquee : la derniere position utile est la fin de la ligne qui la precede.
+  const max = active.to < length ? Math.max(min, active.to - 1) : length;
+  let moved = false;
+  const ranges = tr.selection.ranges.map((r) => {
+    const anchor = Math.min(max, Math.max(min, r.anchor));
+    const head = Math.min(max, Math.max(min, r.head));
+    if (anchor !== r.anchor || head !== r.head) moved = true;
+    return EditorSelection.range(anchor, head);
+  });
+  return moved ? [tr, { selection: EditorSelection.create(ranges, tr.selection.mainIndex) }] : tr;
+});
+
+export const hideExtension: Extension = [hideField, guardDeletions, guardSelection];
 
 // Si le curseur se trouve dans une partie masquee, le ramene juste avant elle (ou juste apres si elle ouvre la note).
 export function moveCursorOutOfHidden(view: EditorView): void {
