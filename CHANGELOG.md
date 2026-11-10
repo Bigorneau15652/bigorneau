@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.34.1
+
+Fixed: when the note is shown in live preview or in reading mode, a click on the title of the map now brings the note back to its very top, with its properties, as it already did in the mode that shows only the active chapter. Before, the note stayed where it was (for example on the first title).
+
+Corrigé : quand la note est affichée en aperçu en direct ou en mode lecture, un clic sur le titre de la carte ramène maintenant la note tout en haut, avec ses propriétés, comme c'était déjà le cas dans le mode qui n'affiche que le chapitre actif. Avant, la note restait là où elle était (par exemple sur le premier titre).
+
 ## 0.34.0
 
 Added: floating topics can now be reorganised with the mouse. A sub-title of a floating topic is dragged out of its topic to become a floating topic of its own, placed where it is dropped, with its sub-titles and at the same level as the other floating topics. A floating topic dragged onto a title of another floating topic (the title gets a dotted outline) becomes its last sub-title, and its levels adapt. While a sub-title or a topic is dragged, its sub-titles and the lines that join them follow the pointer.

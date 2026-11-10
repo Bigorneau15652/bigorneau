@@ -1256,6 +1256,8 @@ export class MindmapView extends ItemView {
       if (focus) await view.setState({ ...view.getState(), mode: `source` }, { history: false });
       else {
         leaf.setEphemeralState({ line: topLine });
+        // A line number of 0 is not always taken into account by the preview: for the title of the map, the note goes back to its top.
+        if (node === live.root) editor.scrollTo(0, 0);
         return;
       }
     }
