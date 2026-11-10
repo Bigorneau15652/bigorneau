@@ -113,6 +113,9 @@ const SVG_NS = `http://www.w3.org/2000/svg`;
 const NODE_DRAG_THRESHOLD = 10;
 // Space between two boxes of linked notes, at the left of the map.
 const EXT_GAP = 6;
+// Distance, around the main map, beyond which a dragged title is dropped as a floating topic (the window is often narrow).
+const DETACH_MARGIN_X = 40;
+const DETACH_MARGIN_Y = 50;
 const LIST_PAD_X = 8;
 const LIST_MIN_WIDTH = 260;
 const LIST_MAX_WIDTH = 480;
@@ -1096,6 +1099,13 @@ export class MapRenderer {
   // ---------------------------------------------------------------- creation d'un lien
 
   // `from` : titre de depart impose (clic droit) ; `replace` : lien existant a remplacer.
+  // Place where a title taken out of the main branch becomes a floating topic: at its own height, to the right of the whole map.
+  floatSpot(key: string): { x: number; y: number } | null {
+    const node = this.list.find((n) => n.key === key);
+    if (!node || !this.mainBounds || this.isList()) return null;
+    return { x: this.mainBounds.maxX + 90, y: node.y };
+  }
+
   startLinking(from?: string, replace?: MapLink): void {
     if (!this.doc || this.linking) return;
     this.commitRename(true, false);
@@ -2006,7 +2016,7 @@ export class MapRenderer {
     // Hors de la structure : depot libre. Pres d'elle : la case s'y integre a l'endroit montre.
     const wx = (e.clientX - rect.left - this.tx) / this.scale;
     const wy = (e.clientY - rect.top - this.ty) / this.scale;
-    const outside = this.isList() ? wy > this.floatZoneY : this.mainBounds ? !(wx >= this.mainBounds.minX - 70 && wx <= this.mainBounds.maxX + 70 && wy >= this.mainBounds.minY - 50 && wy <= this.mainBounds.maxY + 50) : false;
+    const outside = this.isList() ? wy > this.floatZoneY : this.mainBounds ? !(wx >= this.mainBounds.minX - DETACH_MARGIN_X && wx <= this.mainBounds.maxX + DETACH_MARGIN_X && wy >= this.mainBounds.minY - DETACH_MARGIN_Y && wy <= this.mainBounds.maxY + DETACH_MARGIN_Y) : false;
     if (outside) {
       // Dans la zone flottante de la liste, un sujet flottant ne se deplace pas : il n'y a pas d'ordre a choisir.
       d.free = this.isList() ? (isFloatKey(d.key) ? null : { x: 0, y: 0 }) : { x: (left - rect.left - this.tx) / this.scale, y: (e.clientY - d.grabY - rect.top - this.ty) / this.scale };

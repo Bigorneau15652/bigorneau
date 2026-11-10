@@ -275,6 +275,7 @@ const PAIRS: [string, string][] = [
   [`Masquer dans la note`, `Hide in the note`],
   [`Nouveau lien vers une note ou un titre…`, `New link to a note or a heading…`],
   [`Nouveau lien web…`, `New web link…`],
+  [`Détacher en sujet flottant`, `Detach as a floating topic`],
   [`Modifier un lien…`, `Edit a link…`],
   [`Apparence…`, `Appearance…`],
   [`Supprimer (Suppr)`, `Delete (Del)`],

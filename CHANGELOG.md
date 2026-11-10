@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.5
+
+Changed: the lines that link to another note or to a heading, such as [[test1]], are now also read when they are grouped at the end of the text of a title, after its last paragraph (before, only the lines right under the title were read). They give the same boxes on the left of the map and the same arrows, and they can be reordered among themselves. A link line in the middle of a paragraph is still plain text. Added: a title of the main branch can be taken out of it with a right click then "Detach as a floating topic": it becomes a floating topic placed at its own height, to the right of the whole map, with its sub-titles (dragging a title well outside the structure still does the same, and the distance needed is shorter: 40 pixels beyond the map instead of 70).
+
+Modifié : les lignes qui renvoient à une autre note ou à un titre, comme [[test1]], sont maintenant aussi lues quand elles sont groupées à la fin du texte d'un titre, après son dernier paragraphe (avant, seules les lignes placées juste sous le titre étaient lues). Elles donnent les mêmes cases à gauche de la carte et les mêmes flèches, et peuvent être réordonnées entre elles. Une ligne de lien au milieu d'un paragraphe reste du simple texte. Ajouté : un titre de la branche principale peut en être retiré par un clic droit puis « Détacher en sujet flottant » : il devient un sujet flottant placé à sa hauteur, à droite de toute la carte, avec ses sous-titres (glisser un titre bien à l'extérieur de la structure fait toujours la même chose, avec une distance plus courte : 40 pixels au-delà de la carte au lieu de 70).
+
 ## 0.32.4
 
 Fixed: in a floating topic, a click in the text of its last sub-title (when the file ends with an empty line) no longer sends the cursor to the last title of the main branch. The empty last line of the file now belongs to the last floating topic. Also fixed: a click on a mark of a title that holds several links (globe, links to other notes, arrows) now opens the list of links and keeps it open, so a link can be chosen with a second click; before, the list showed only while the mouse button was held down. A click outside the list or the Escape key closes it.
