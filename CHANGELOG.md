@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.4
+
+Fixed: in a floating topic, a click in the text of its last sub-title (when the file ends with an empty line) no longer sends the cursor to the last title of the main branch. The empty last line of the file now belongs to the last floating topic. Also fixed: a click on a mark of a title that holds several links (globe, links to other notes, arrows) now opens the list of links and keeps it open, so a link can be chosen with a second click; before, the list showed only while the mouse button was held down. A click outside the list or the Escape key closes it.
+
+Corrigé : dans un sujet flottant, un clic dans le texte de son dernier sous-titre (quand le fichier finit par une ligne vide) n'envoie plus le curseur dans le dernier titre de la branche principale. La dernière ligne vide du fichier appartient maintenant au dernier sujet flottant. Corrigé aussi : un clic sur le repère d'un titre qui porte plusieurs liens (mappemonde, liens vers d'autres notes, flèches) ouvre maintenant la liste des liens et la garde ouverte, ce qui permet de choisir un lien par un second clic ; avant, la liste ne restait affichée que tant que le bouton de la souris était maintenu. Un clic en dehors de la liste ou la touche Échap la ferme.
+
 ## 0.32.3
 
 Fixed: when a floating topic is dragged, the lines that join it to its sub-titles are now drawn and move with the copies, so the whole group looks the same as on the map while it is placed. Also fixed: clicking in the text of a sub-title of a floating topic no longer sends the cursor to the last chapter of the note. The zone of the floating topics stayed hidden in the note when the option that hides the inactive chapters was off, so the cursor was pushed out of it.

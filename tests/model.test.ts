@@ -298,3 +298,10 @@ test(`un titre qui ouvre un commentaire ou une formule est signale`, () => {
   // Comment closed on the line, or comment in the body: no warning.
   assert.equal(parseNote([`## a %% b %%`, `## c`, `texte %% x`, `## d`, `y %%`].join(`\n`), `n.md`).opening, undefined);
 });
+
+test(`derniere ligne vide du fichier apres un sujet flottant : elle reste dans ce sujet flottant`, () => {
+  const text = [`# Test`, ``, `## TT34`, `x`, ``, `%% mmw-float {"x":1,"y":2} %%`, `# Floating`, `## FN1`, `a`, `## FN2`, `b`, ``].join(`\n`);
+  const doc = parseNote(text, `n.md`);
+  assert.equal(nodeAtLine(doc, 11).key, `f0.1`);
+  assert.equal(nodeAtLine(doc, 3).key, `r.0.0`);
+});
