@@ -180,3 +180,38 @@ test(`masquer les chapitres inactifs : seul le chapitre actif reste visible`, ()
   assert.equal(st.update({ changes: { from: end, to: end + 1 }, userEvent: `delete.forward` }).state.doc.toString(), text);
   assert.equal(st.update({ changes: { from: at(2) - 1, to: at(2) }, userEvent: `delete.backward` }).state.doc.toString(), text);
 });
+
+test(`chapitres inactifs masques : le curseur ne quitte pas le chapitre actif, sauf deplacement du plugin`, () => {
+  const text = [`# A`, `texte A1`, `texte A2`, `# B`, `texte B1`, `texte B2`, `# C`, `texte C1`].join(`\n`);
+  const doc = EditorState.create({ doc: text }).doc;
+  const at = (line: number): number => doc.line(line).from;
+  // Chapitre B : lignes 4 a 6 ; la plage finit au debut de la ligne 7.
+  const range = { from: at(4), to: at(7) };
+  const visibleEnd = doc.line(6).to;
+  const make = (hide: boolean, inactive: boolean): EditorState => {
+    const st = EditorState.create({ doc: text, extensions: [activeRangeField, hideExtension] });
+    return st.update({ effects: [setHideEnabled.of(hide), setHideInactive.of(inactive), setActiveRange.of(range)] }).state;
+  };
+  const head = (st: EditorState, pos: number, userEvent: string | null): number => st.update({ selection: { anchor: pos }, ...(userEvent ? { userEvent } : {}) }).state.selection.main.head;
+  const on = make(true, true);
+  // Un clic (ou une fleche) vers la fin de la note, dans la conclusion masquee, ramene le curseur a la fin du chapitre.
+  assert.equal(head(on, doc.length, `select.pointer`), visibleEnd);
+  assert.equal(head(on, at(8), `select`), visibleEnd);
+  // Au-dessus du chapitre : au debut du chapitre.
+  assert.equal(head(on, 2, `select.pointer`), at(4));
+  // Dans le chapitre : rien ne change.
+  assert.equal(head(on, at(5) + 3, `select.pointer`), at(5) + 3);
+  assert.equal(head(on, visibleEnd, `select`), visibleEnd);
+  // Une selection par glissement est limitee des deux cotes.
+  const drag = on.update({ selection: { anchor: at(5), head: doc.length }, userEvent: `select.pointer` }).state.selection.main;
+  assert.deepEqual([drag.anchor, drag.head], [at(5), visibleEnd]);
+  // Le plugin, lui, change de chapitre sans evenement d'utilisateur : le curseur va ou il veut.
+  assert.equal(head(on, doc.length, null), doc.length);
+  // Sans le masquage des chapitres inactifs (simple grisage), le curseur circule librement.
+  assert.equal(head(make(true, false), doc.length, `select.pointer`), doc.length);
+  assert.equal(head(make(false, true), doc.length, `select.pointer`), doc.length);
+  // Dernier chapitre : rien ne le suit, la fin de la note reste atteignable.
+  const last = on.update({ effects: [setActiveRange.of({ from: at(7), to: doc.length })] }).state;
+  assert.equal(head(last, doc.length, `select.pointer`), doc.length);
+  assert.equal(head(last, 0, `select`), at(7));
+});

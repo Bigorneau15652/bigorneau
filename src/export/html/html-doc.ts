@@ -13,7 +13,7 @@ import { READER_CSS, READER_JS } from "./reader-assets";
 
 // A picture ready to be written into the page.
 export interface HtmlImage {
-  // Address of the picture: a data: address, so that the page needs no other file.
+  // Address of the picture: a data: address (one self-contained file), or the address of a file of the media folder.
   src: string;
   width: number;
   height: number;
@@ -28,8 +28,11 @@ export interface HtmlOptions {
   paragraphs?: ParagraphSettings;
   // @font-face rules of the fonts that the page uses, already written.
   fontCss?: string;
-  // Panorama viewer (script and style sheet), written into the page only when the note holds a panorama.
-  panorama?: { js: string; css: string };
+  // Panorama viewer (script and style sheet), written into the page only when the note holds a panorama. With `jsUrl` and `cssUrl` the
+  // page links to the files of the folder instead of holding the texts.
+  panorama?: { js: string; css: string; jsUrl?: string; cssUrl?: string };
+  // Mode with separate folders: the page links to its files, so its content policy allows its own address.
+  separate?: boolean;
 }
 
 export interface HtmlResult {
@@ -47,12 +50,12 @@ const NOTE_OFF = ``;
 const TEXTS = {
   fr: {
     plan: `Plan du document`, thumbs: `Miniatures`, dark: `Mode sombre`, light: `Mode clair`, full: `Plein écran`, wide: `Mode large`, escape: `Échap pour revenir`,
-    fold: `Plier ou déplier`, noThumbs: `Aucune image dans ce document.`, notes: `Notes`, back: `Retour au texte`, listFigures: `Liste des figures`, listTables: `Liste des tableaux`,
+    fold: `Plier ou déplier`, noThumbs: `Aucune image dans ce document.`, flatPano: `Panorama à 360 degrés : ouvrez cette page depuis un site web pour pouvoir le faire tourner.`, notes: `Notes`, back: `Retour au texte`, listFigures: `Liste des figures`, listTables: `Liste des tableaux`,
     video: `Vidéo`, watch: `Regarder la vidéo sur le site d'origine`, audio: `Audio`, document: `Document PDF`, embed: `Contenu intégré`, missing: `Image introuvable`, web: `Image du web`, image: `Image`, untitled: `(sans titre)`, colon: ` : `,
   },
   en: {
     plan: `Document outline`, thumbs: `Thumbnails`, dark: `Dark mode`, light: `Light mode`, full: `Full screen`, wide: `Wide mode`, escape: `Press Esc to go back`,
-    fold: `Fold or unfold`, noThumbs: `No picture in this document.`, notes: `Notes`, back: `Back to the text`, listFigures: `List of figures`, listTables: `List of tables`,
+    fold: `Fold or unfold`, noThumbs: `No picture in this document.`, flatPano: `360 degree panorama: open this page from a website to turn it.`, notes: `Notes`, back: `Back to the text`, listFigures: `List of figures`, listTables: `List of tables`,
     video: `Video`, watch: `Watch the video on the original site`, audio: `Audio`, document: `PDF document`, embed: `Embedded content`, missing: `Image not found`, web: `Web image`, image: `Image`, untitled: `(untitled)`, colon: `: `,
   },
 };
@@ -411,7 +414,7 @@ class Renderer {
     const web = /^https?:\/\//i.test(b.target);
     const player = b.kind === `video` ? embedUrl(b.target) : null;
     if (player) {
-      return `<figure class="media"${id}><div class="video"><iframe src="${escapeHtml(player)}" title="${escapeHtml(plainOf(parseInline(b.caption).text) || this.texts.video)}" loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" allow="encrypted-media; picture-in-picture; fullscreen"></iframe></div><p class="video-lien"><a href="${escapeHtml(watchUrl(player))}" target="_blank" rel="noopener noreferrer">${this.texts.watch}</a></p>${caption}</figure>`;
+      return `<figure class="media"${id}><div class="video"><iframe src="${escapeHtml(player)}" title="${escapeHtml(plainOf(parseInline(b.caption).text) || this.texts.video)}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="encrypted-media; picture-in-picture; fullscreen"></iframe></div><p class="video-lien"><a href="${escapeHtml(watchUrl(player))}" target="_blank" rel="noopener noreferrer">${this.texts.watch}</a></p>${caption}</figure>`;
     }
     if (web && b.kind === `video` && /\.(mp4|webm|ogv|mov|m4v)(?:[?#]|$)/i.test(b.target)) {
       return `<figure class="media"${id}><video controls preload="none" src="${escapeHtml(b.target)}"></video>${caption}</figure>`;
@@ -486,10 +489,11 @@ class Renderer {
     const ids = `${this.para.mode === `space` ? `mode-space` : `mode-indent`}`;
     const gap = { s: `.4em`, m: `.8em`, l: `1.4em` }[this.para.size] ?? `.8em`;
     const needsPanorama = this.panoramas > 0 && this.opts.panorama !== undefined;
-    const labels = JSON.stringify({ light: this.texts.light, dark: this.texts.dark, escape: this.texts.escape, fold: this.texts.fold, noThumbs: this.texts.noThumbs }).replace(/</g, `\\u003c`);
+    const labels = JSON.stringify({ light: this.texts.light, dark: this.texts.dark, escape: this.texts.escape, fold: this.texts.fold, noThumbs: this.texts.noThumbs, flatPano: this.texts.flatPano }).replace(/</g, `\\u003c`);
     const icon = (body: string): string => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
     const plain = escapeHtml(plainOf(parseInline(this.doc.title).text));
-    const csp = `default-src 'none'; img-src data: blob: https:; media-src https: data: blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src blob: data:`;
+    const own = this.opts.separate ? ` 'self'` : ``;
+    const csp = `default-src 'none'; img-src${own} data: blob: https:; media-src https: data: blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; style-src 'unsafe-inline'${own}; script-src 'unsafe-inline'${own}; font-src${own} data:; connect-src${own} blob: data:`;
     const html = `<!doctype html>
 <html lang="${language}" data-theme="clair">
 <head>
@@ -499,7 +503,7 @@ class Renderer {
 <meta name="generator" content="Bigorneau">
 ${this.doc.author ? `<meta name="author" content="${escapeHtml(this.doc.author)}">\n` : ``}<title>${plain}</title>
 <style>${this.opts.fontCss ?? ``}${READER_CSS}${typographyCss(this.ty)}.feuille{--ecart:${gap}}</style>
-${needsPanorama ? `<style>${this.opts.panorama?.css ?? ``}</style>\n` : ``}</head>
+${needsPanorama ? (this.opts.panorama?.cssUrl ? `<link rel="stylesheet" href="${escapeHtml(this.opts.panorama.cssUrl)}">\n` : `<style>${this.opts.panorama?.css ?? ``}</style>\n`) : ``}</head>
 <body>
 <div class="boutons boutons-gauche">
 <button type="button" class="bouton" id="b-plan" aria-expanded="false" title="${this.texts.plan}" aria-label="${this.texts.plan}">${icon(`<path d="M4 6h16M4 12h10M4 18h16M8 9l-3 3 3 3"/>`)}</button>
@@ -518,7 +522,7 @@ ${needsPanorama ? `<style>${this.opts.panorama?.css ?? ``}</style>\n` : ``}</hea
 ${content}
 </article></main>
 <script type="application/json" id="textes">${labels}</script>
-${needsPanorama ? `<script>${(this.opts.panorama?.js ?? ``).replace(/<\/script/gi, `<\\/script`)}</script>\n` : ``}<script>${READER_JS}</script>
+${needsPanorama ? (this.opts.panorama?.jsUrl ? `<script src="${escapeHtml(this.opts.panorama.jsUrl)}"></script>\n` : `<script>${(this.opts.panorama?.js ?? ``).replace(/<\/script/gi, `<\\/script`)}</script>\n`) : ``}<script>${READER_JS}</script>
 </body>
 </html>
 `;

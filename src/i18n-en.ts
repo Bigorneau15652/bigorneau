@@ -963,6 +963,14 @@ const PAIRS: [string, string][] = [
   [`Exporter la note en HTML`, `Export the note as HTML`],
   [`Images à 360 degrés dans l'export HTML`, `360 degree pictures in the HTML export`],
   [`Une image deux fois plus large que haute (au moins 1500 pixels de large) est lue comme un panorama que l'on fait tourner. Désactivez pour la garder comme une image ordinaire.`, `A picture twice as wide as high (at least 1500 pixels wide) is read as a panorama that you can turn. Turn off to keep it as an ordinary picture.`],
+  [`Ce dossier existe déjà : index.html et les dossiers medias, polices et lib seront remplacés si vous confirmez. Le reste du dossier n'est pas touché.`, `This folder already exists: index.html and the folders medias, polices and lib will be replaced if you confirm. The rest of the folder is not touched.`],
+  [`Forme de l'export`, `Form of the export`],
+  [`Fichier unique`, `One file`],
+  [`Dossier avec médias séparés`, `Folder with separate media`],
+  [`Un dossier : index.html contient le texte et le lecteur. Les images d'origine sont dans le dossier medias, les polices dans polices et la visionneuse des panoramas dans lib. Publiez tout le dossier sur un site web (par exemple GitHub Pages) : les panoramas 360 degrés ne tournent que depuis un site web, pas depuis un fichier de l'ordinateur.`, `A folder: index.html holds the text and the reader. The original pictures are in the folder medias, the fonts in polices and the panorama viewer in lib. Publish the whole folder on a website (for example GitHub Pages): 360 degree panoramas turn only from a website, not from a file of the computer.`],
+  [`Nom du dossier de l'export`, `Name of the export folder`],
+  [`Taille du dossier : {0} Mo en {1} fichiers.`, `Size of the folder: {0} MB in {1} files.`],
+  [`Dossier HTML enregistré : {0} ({1} Mo, {2} fichiers)`, `HTML folder saved: {0} ({1} MB, {2} files)`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);
