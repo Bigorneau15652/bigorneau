@@ -4,8 +4,8 @@ import { App, normalizePath, TFile } from "obsidian";
 import { clearFontFamilies, parseUserStyle, registerFontFamily, resolvedVariant, Variant } from "./export/font-metrics";
 import { buildLibrary, extensionOf, FONT_EXTENSIONS, FontFile, FontLibrary, REJECTED_EXTENSIONS } from "./font-library";
 
-// Le type FontFaceSet de la bibliotheque de types n'a pas add ni delete.
-const faceSet = (): { add(f: FontFace): void; delete(f: FontFace): void } => document.fonts as unknown as { add(f: FontFace): void; delete(f: FontFace): void };
+// L'ensemble des polices du document : on y ajoute et on en retire les polices du coffre.
+const faceSet = (): FontFaceSet => document.fonts;
 
 const KNOWN = [...FONT_EXTENSIONS, ...REJECTED_EXTENSIONS];
 

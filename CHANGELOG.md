@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.31.3
+
+Fixed: two warnings of the checks of the Obsidian community directory. The cast that gave the browser set of fonts the methods add and delete is replaced by a declaration of those methods (file `src/font-face-set.d.ts`), and the two `!important` of the padding of the map view and of the export preview are replaced by a more precise selector. The other warnings and recommendations stay: they come from functions of the plugin (pictures, fonts and folders of the vault, copy and paste of tables, shapes of the map, printing, Zen mode). Nothing changes for the user.
+
+Corrigé : deux avertissements des contrôles du répertoire communautaire d'Obsidian. Le cast qui donnait à l'ensemble des polices du navigateur les méthodes add et delete est remplacé par une déclaration de ces méthodes (fichier `src/font-face-set.d.ts`), et les deux `!important` de la marge de la vue carte et de l'aperçu d'export sont remplacés par un sélecteur plus précis. Les autres avertissements et recommandations restent : ils viennent de fonctions du plugin (images, polices et dossiers du coffre, copier et coller de tableaux, formes de la carte, impression, mode Zen). Rien ne change pour l'utilisateur.
+
 ## 0.31.2
 
 Fixed: three points that the checks of the Obsidian community directory (the ESLint plugin of Obsidian) report in the code added since version 0.28.2. A non-breaking space written as a character in two lines of the HTML export is now written as an escape, an untyped empty list of formulas in the HTML export is typed, and the canvas that reduces a picture is created with `createEl`. Nothing changes for the user.
