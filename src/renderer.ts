@@ -4,7 +4,7 @@ import { Platform } from "obsidian";
 import { computeStats, flattenDoc, isFloatKey, isFloatRoot, MmDoc, MmNode, nodeByKey, pathTitles } from "./model";
 import { t } from "./i18n";
 import { dropToParentIndex, MoveDir, MoveTarget, previewMove } from "./edit";
-import { buildLayoutTree, Bounds, childIndent, computeLayout, computeListLayout, flatten, listIndent, LNode, sequential, trunkX } from "./layout";
+import { buildLayoutTree, Bounds, childIndent, computeLayout, computeListLayout, flatten, listIndent, LNode, sequential, stackBoxes, trunkX } from "./layout";
 import { framePath, hasTrunk, polygonFrame, trunkBranch, trunkLine, trunkRadius, underlinePath } from "./sketch";
 import { MapControls } from "./controls";
 import { DialogValues, NodeDialog } from "./node-dialog";
@@ -111,6 +111,8 @@ const SVG_NS = `http://www.w3.org/2000/svg`;
 // maximale d'une ligne (un titre plus long est coupe par des points de suspension), et place reservee a la glissiere.
 // Distance (en pixels) a partir de laquelle un appui suivi d'un mouvement devient un glisser : en dessous, c'est un simple clic.
 const NODE_DRAG_THRESHOLD = 10;
+// Space between two boxes of linked notes, at the left of the map.
+const EXT_GAP = 6;
 const LIST_PAD_X = 8;
 const LIST_MIN_WIDTH = 260;
 const LIST_MAX_WIDTH = 480;
@@ -960,22 +962,33 @@ export class MapRenderer {
       made.push({ link: l, el });
     }
     const right = this.bounds.minX - 44;
-    const rows = new Map<string, number>();
-    let minX = this.bounds.minX;
+    // The boxes of a title are centred on it ; the groups of two titles never lie on each other.
+    const groups = new Map<string, { src: LNode; items: { link: MapLink; el: HTMLElement; w: number; h: number }[] }>();
     for (const { link, el } of made) {
       const src = this.list.find((n) => n.key === link.from);
       if (!src) continue;
-      const w = el.offsetWidth;
-      const h = el.offsetHeight;
-      const i = rows.get(link.from) ?? 0;
-      rows.set(link.from, i + 1);
-      const x = right - w;
-      const y = src.y + src.h / 2 - h / 2 + i * (h + 8);
-      el.style.left = `${x}px`;
-      el.style.top = `${y}px`;
-      this.extBoxes.push({ link, el, x, y, w, h });
-      minX = Math.min(minX, x - 8);
+      const group = groups.get(link.from) ?? { src, items: [] };
+      group.items.push({ link, el, w: el.offsetWidth, h: el.offsetHeight });
+      groups.set(link.from, group);
     }
+    const ordered = [...groups.values()];
+    const tops = stackBoxes(
+      ordered.map((g) => ({ middle: g.src.y + g.src.h / 2, heights: g.items.map((i) => i.h) })),
+      EXT_GAP
+    );
+    let minX = this.bounds.minX;
+    ordered.forEach((group, g) => {
+      group.items.forEach(({ link, el, w, h }, i) => {
+        const x = right - w;
+        const y = tops[g][i];
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        this.extBoxes.push({ link, el, x, y, w, h });
+        minX = Math.min(minX, x - 8);
+        this.bounds!.minY = Math.min(this.bounds!.minY, y);
+        this.bounds!.maxY = Math.max(this.bounds!.maxY, y + h);
+      });
+    });
     this.bounds.minX = minX;
   }
 

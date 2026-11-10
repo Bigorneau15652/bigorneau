@@ -139,3 +139,24 @@ export function sequential(list: LNode[], cur: LNode, dir: `up` | `down`): LNode
   const i = list.indexOf(cur) + (dir === `up` ? -1 : 1);
   return i >= 0 && i < list.length ? list[i] : null;
 }
+
+// Vertical places of the boxes of the linked notes, drawn at the left of the map. `groups` holds, for each title of the map, the height
+// of its middle and the heights of its boxes. The boxes of a title are centred on it; a group that would overlap the one above it is
+// pushed down, so that two boxes never lie on each other. Returns the top of each box, group by group, in the order of `groups`.
+export function stackBoxes(groups: { middle: number; heights: number[] }[], gap: number): number[][] {
+  const tops: number[][] = groups.map(() => []);
+  const order = groups.map((_g, i) => i).sort((a, b) => groups[a].middle - groups[b].middle || a - b);
+  let floor = -Infinity;
+  for (const i of order) {
+    const { middle, heights } = groups[i];
+    if (heights.length === 0) continue;
+    const total = heights.reduce((sum, h) => sum + h, 0) + gap * (heights.length - 1);
+    let top = Math.max(middle - total / 2, floor);
+    for (const h of heights) {
+      tops[i].push(top);
+      top += h + gap;
+    }
+    floor = top;
+  }
+  return tops;
+}
