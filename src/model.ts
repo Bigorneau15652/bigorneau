@@ -477,7 +477,9 @@ export function nodeAtLine(doc: MmDoc, line: number): { key: string; node: MmNod
     if (inside.length > 0) return inside[inside.length - 1];
     const owner = doc.floats.findIndex((f) => f.float && line >= f.float.markerLine && line < f.float.end);
     if (owner >= 0) return { key: `f${owner}`, node: doc.floats[owner] };
-    return flat[flat.length - 1];
+    // A line after the end of the last floating topic (the empty last line of the file) still belongs to that topic.
+    const lastFloat = all.filter((e) => isFloatKey(e.key));
+    return lastFloat.length > 0 ? lastFloat[lastFloat.length - 1] : flat[flat.length - 1];
   }
   for (const entry of flat) {
     const n = entry.node;

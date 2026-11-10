@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.4
+
+Fixed: in a floating topic, a click in the text of its last sub-title (when the file ends with an empty line) no longer sends the cursor to the last title of the main branch. The empty last line of the file now belongs to the last floating topic.
+
+Corrigé : dans un sujet flottant, un clic dans le texte de son dernier sous-titre (quand le fichier finit par une ligne vide) n'envoie plus le curseur dans le dernier titre de la branche principale. La dernière ligne vide du fichier appartient maintenant au dernier sujet flottant.
+
 ## 0.32.3
 
 Fixed: when a floating topic is dragged, the lines that join it to its sub-titles are now drawn and move with the copies, so the whole group looks the same as on the map while it is placed. Also fixed: clicking in the text of a sub-title of a floating topic no longer sends the cursor to the last chapter of the note. The zone of the floating topics stayed hidden in the note when the option that hides the inactive chapters was off, so the cursor was pushed out of it.
