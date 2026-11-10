@@ -1464,6 +1464,19 @@ export class MapRenderer {
     }
   }
 
+  // Runs the action once the mouse button is released, so that a menu opened by it stays open instead of closing with the release.
+  private afterRelease(action: () => void): void {
+    const done = (run: boolean): void => {
+      window.removeEventListener(`pointerup`, onUp, true);
+      window.removeEventListener(`pointercancel`, onCancel, true);
+      if (run) window.setTimeout(action, 0);
+    };
+    const onUp = (): void => done(true);
+    const onCancel = (): void => done(false);
+    window.addEventListener(`pointerup`, onUp, true);
+    window.addEventListener(`pointercancel`, onCancel, true);
+  }
+
   private onPointerDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
@@ -1479,15 +1492,14 @@ export class MapRenderer {
       const key = (linkMark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
       const inner = linkMark.classList.contains(`mmw-int-mark`);
       const mine = this.links.filter((l) => l.from === key && (inner ? !l.external && !!l.to : l.external));
-      if (inner) this.callbacks.onInternalLinks?.(mine, e);
-      else this.callbacks.onLinkOpen?.(mine, e);
+      this.afterRelease(() => (inner ? this.callbacks.onInternalLinks?.(mine, e) : this.callbacks.onLinkOpen?.(mine, e)));
       return;
     }
     const webMark = target.closest<HTMLElement>(`.mmw-web-mark`);
     if (webMark && !this.linking) {
       e.preventDefault();
       const key = (webMark.closest(`.mmw-node`) as HTMLElement).dataset.key!;
-      this.callbacks.onWebOpen?.(this.webByKey.get(key) ?? [], e);
+      this.afterRelease(() => this.callbacks.onWebOpen?.(this.webByKey.get(key) ?? [], e));
       return;
     }
     const extBox = target.closest<HTMLElement>(`.mmw-ext-box`);
