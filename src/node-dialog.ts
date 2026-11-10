@@ -147,7 +147,8 @@ export class NodeDialog {
   }
 
   private addChip(def: TagDef): void {
-    const button = el(`button`, `mmw-dlg-chip`, def.name === `` ? `(sans nom)` : def.name);
+    const button = el(`button`, `mmw-dlg-chip`);
+    button.append(el(`span`, `mmw-chip-name`, def.name === `` ? `(sans nom)` : def.name), el(`span`, `mmw-chip-x`, `×`));
     button.type = `button`;
     button.style.background = def.bg;
     button.style.color = def.fg;
@@ -211,6 +212,8 @@ export class NodeDialog {
       const on = this.selected.has(c.def.id);
       c.button.classList.toggle(`mmw-on`, on);
       c.button.setAttribute(`aria-pressed`, String(on));
+      // A chosen tag shows a cross: a click on it takes the tag off the heading.
+      c.button.title = on ? t(`Retirer l'étiquette de ce titre`) : t(`Ajouter l'étiquette à ce titre`);
     }
   }
 

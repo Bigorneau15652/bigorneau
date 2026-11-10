@@ -742,6 +742,17 @@
   outline-offset: 1px;
 }
 
+/* The cross of a chosen tag: a click on the tag takes it off the heading. */
+.mmw-dlg-chip .mmw-chip-x {
+  display: none;
+  margin-left: 6px;
+  font-weight: 700;
+}
+
+.mmw-dlg-chip.mmw-on .mmw-chip-x {
+  display: inline;
+}
+
 .mmw-dlg-empty {
   margin: 0;
   color: var(--text-faint);
@@ -2888,4 +2899,20 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Button of the fonts window that opens the list of fonts to apply to every element. */
+.mmw-typo-everywhere {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mmw-typo-chevron {
+  display: inline-flex;
+}
+
+.mmw-typo-chevron svg {
+  width: 14px;
+  height: 14px;
 }

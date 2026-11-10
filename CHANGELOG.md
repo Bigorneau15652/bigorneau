@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.1
+
+Changed: in the "Fonts and headings" window, the list and the button "Apply this font everywhere" are replaced by one grey button, "Apply a font everywhere", with a small arrow: a click opens the list of fonts (the original font first), and the chosen font is applied at once to the body, the title, the headings, the captions, the footnotes and the header and footer, with a single redraw. In the window of a heading, a tag that is chosen now shows a small cross, and its tooltip says that a click takes it off the heading (the tag itself is kept in the list).
+
+Modifié : dans la fenêtre « Polices et titres », la liste et le bouton « Appliquer cette police partout » sont remplacés par un seul bouton gris, « Appliquer une police partout », avec une petite flèche : un clic ouvre la liste des polices (la police d'origine en premier), et la police choisie est appliquée aussitôt au corps de texte, au titre, aux titres, aux légendes, aux notes de bas de page, à l'en-tête et au pied de page, avec un seul redessin. Dans la fenêtre d'un titre, une étiquette choisie montre maintenant une petite croix, et son infobulle indique qu'un clic la retire du titre (l'étiquette elle-même reste dans la liste).
+
 ## 0.32.0
 
 Changed: the settings screen now uses the settings interface of Obsidian 1.13. It needs Obsidian 1.13.0 or later: the minimum version of the plugin goes from 1.7.2 to 1.13.0, and users of an older Obsidian keep version 0.31.3. The 12 chapters are no longer folding sections but pages: the screen lists them as the native settings of Obsidian do, a click opens a page with a back arrow. The settings are found by the search of Obsidian (the field at the top of the settings window): switches, lists and sliders are declared with the controls of Obsidian, the others (colours, icons, keys, bullets, profiles, list of the panel buttons, fonts of the vault) keep their own drawing inside the page. In the Export PDF chapter the sections are groups, and the fonts of the vault have their own page. The Profiles chapter and the list of the panel buttons also have their page. Nothing else changes: every setting keeps its name, its place in the saved settings and its effect.

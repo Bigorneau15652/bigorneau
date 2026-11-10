@@ -937,8 +937,6 @@ const PAIRS: [string, string][] = [
   [`› Chevron`, `› Chevron`],
   [`→ Flèche`, `→ Arrow`],
   [`Aucune puce`, `No bullet`],
-  [`Police à appliquer partout`, `Font to apply everywhere`],
-  [`Appliquer cette police partout`, `Apply this font everywhere`],
   [`Premier chapitre`, `First chapter`],
   [`Un paragraphe de texte courant montre la police, la taille et la couleur du corps de texte, avec un mot en gras.`, `A paragraph of body text shows the font, size and colour of the body text, with a word in bold.`],
   [`Première partie`, `First part`],
@@ -976,6 +974,9 @@ const PAIRS: [string, string][] = [
   [`Polices du coffre`, `Fonts of the vault`],
   [`Ajouter une police, changer le dossier des polices, relire le dossier et voir les fichiers non utilisables.`, `Add a font, change the fonts folder, read the folder again and see the files that cannot be used.`],
   [`Choisir, ordonner et séparer les boutons du panneau.`, `Choose, order and separate the buttons of the panel.`],
+  [`Appliquer une police partout`, `Apply a font everywhere`],
+  [`Retirer l'étiquette de ce titre`, `Take the tag off this heading`],
+  [`Ajouter l'étiquette à ce titre`, `Add the tag to this heading`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

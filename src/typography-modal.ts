@@ -3,7 +3,7 @@
 // casse, le soulignement, la numerotation et le cadre. Chaque element est une section repliable dont la ligne d'en-tete montre un exemple
 // mis en forme ; un apercu de page reste visible en haut. Le reglage vaut pour toutes les notes (reglages du plugin) ou pour la note
 // ouverte seulement, qui garde alors ce qui differe.
-import { App, Modal, setIcon } from "obsidian";
+import { App, Menu, Modal, setIcon } from "obsidian";
 import { AddFontModal } from "./add-font-modal";
 import { EXPORT_FONT_FAMILY, loadExportFont } from "./export-font";
 import { cssFamilyOf } from "./font-store";
@@ -224,6 +224,25 @@ export class TypographyModal extends Modal {
     this.render();
   }
 
+  // Gives the same value to several settings at once, with a single redraw (a font for all the elements, for example).
+  private changeMany(paths: string[], value: string): void {
+    if (this.target === `general`) {
+      let style = this.host.general();
+      for (const path of paths) style = setPath(style, path, value);
+      this.host.setGeneral(style);
+    } else if (this.host.note) {
+      const general = this.host.general();
+      const next = { ...this.overrides() };
+      for (const path of paths) {
+        next[path] = value;
+        // Une valeur egale au style general n'est pas gardee : la note suit alors le style general.
+        if (getPath(general, path) === getPath(setPath(general, path, value), path)) delete next[path];
+      }
+      this.host.note.write(next);
+    }
+    this.render();
+  }
+
   private resetPaths(prefix: string): void {
     if (this.target !== `note` || !this.host.note) return;
     const next = { ...this.overrides() };
@@ -302,13 +321,16 @@ export class TypographyModal extends Modal {
       else this.host.note?.write({});
       this.render();
     });
-    // Une seule police pour tous les elements (corps, titres, legendes, notes, en-tete et pied de page).
-    const everywhere = foot.createEl(`select`, { attr: { "aria-label": t(`Police à appliquer partout`) } });
-    everywhere.createEl(`option`, { value: ``, text: t(`Police d'origine`) });
-    for (const f of families) everywhere.createEl(`option`, { value: f.id, text: f.name });
-    const apply = foot.createEl(`button`, { text: t(`Appliquer cette police partout`) });
-    apply.addEventListener(`click`, () => {
-      for (const el of elements()) this.change(`${el.group}.family`, everywhere.value);
+    // Une seule police pour tous les elements (corps, titres, legendes, notes, en-tete et pied de page) : un bouton qui ouvre la liste.
+    const everywhere = foot.createEl(`button`, { cls: `mmw-typo-everywhere`, attr: { "aria-haspopup": `menu` } });
+    everywhere.createSpan({ text: t(`Appliquer une police partout`) });
+    setIcon(everywhere.createSpan({ cls: `mmw-typo-chevron` }), `chevron-down`);
+    everywhere.addEventListener(`click`, (e) => {
+      const menu = new Menu();
+      const apply = (family: string): void => this.changeMany(elements().map((el) => `${el.group}.family`), family);
+      menu.addItem((item) => item.setTitle(t(`Police d'origine`)).onClick(() => apply(``)));
+      for (const f of families) menu.addItem((item) => item.setTitle(f.name).onClick(() => apply(f.id)));
+      menu.showAtMouseEvent(e);
     });
     contentEl.scrollTop = scroll;
   }
