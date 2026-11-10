@@ -2927,3 +2927,9 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   pointer-events: none;
   z-index: 5;
 }
+
+/* Floating title under the pointer while a floating topic is dragged on it: the topic will become its child. */
+.mmw-node.mmw-float-hover {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: 3px;
+}
