@@ -5,9 +5,9 @@ Chaque version a une courte description en anglais, puis en français. Le texte 
 
 ## 0.32.3
 
-Fixed: when a floating topic is dragged, the lines that join it to its sub-titles are now drawn and move with the copies, so the whole group looks the same as on the map while it is placed.
+Fixed: when a floating topic is dragged, the lines that join it to its sub-titles are now drawn and move with the copies, so the whole group looks the same as on the map while it is placed. Also fixed: clicking in the text of a sub-title of a floating topic no longer sends the cursor to the last chapter of the note. The zone of the floating topics stayed hidden in the note when the option that hides the inactive chapters was off, so the cursor was pushed out of it.
 
-Corrigé : quand on glisse un sujet flottant, les traits qui le relient à ses sous-titres sont maintenant dessinés et se déplacent avec les copies, de sorte que tout le groupe garde son aspect de la carte pendant qu'on le place.
+Corrigé : quand on glisse un sujet flottant, les traits qui le relient à ses sous-titres sont maintenant dessinés et se déplacent avec les copies, de sorte que tout le groupe garde son aspect de la carte pendant qu'on le place. Corrigé aussi : un clic dans le texte d'un sous-titre d'un sujet flottant n'envoie plus le curseur dans le dernier chapitre de la note. La zone des sujets flottants restait masquée dans la note quand l'option qui masque les chapitres inactifs était coupée, et le curseur en était chassé.
 
 ## 0.32.2
 

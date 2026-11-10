@@ -215,3 +215,18 @@ test(`chapitres inactifs masques : le curseur ne quitte pas le chapitre actif, s
   assert.equal(head(last, doc.length, `select.pointer`), doc.length);
   assert.equal(head(last, 0, `select`), at(7));
 });
+
+test(`zone des sujets flottants : visible quand le chapitre actif est un sujet flottant, meme sans masquer les chapitres inactifs`, () => {
+  const text = [`# Title`, ``, `## One`, `text`, ``, `%% mmw-float {"x":10,"y":10} %%`, `# Floating`, `## Youtube`, `video`].join(`\n`);
+  const base = EditorState.create({ doc: text, extensions: [hideExtension, activeRangeField] });
+  const start = text.indexOf(`## Youtube`);
+  for (const inactive of [false, true]) {
+    const st = base.update({ effects: [setHideEnabled.of(true), setHideInactive.of(inactive), setActiveRange.of({ from: start, to: text.length })] }).state;
+    // The zone is shown, so the cursor can stay in the floating sub-title.
+    let touchesFloat = false;
+    st.field(hideField).deco.between(start, text.length, () => {
+      touchesFloat = true;
+    });
+    assert.equal(touchesFloat, false, `la zone flottante reste visible (chapitres inactifs masques : ${inactive})`);
+  }
+});
