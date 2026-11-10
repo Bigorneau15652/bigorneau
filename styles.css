@@ -1,6 +1,6 @@
 /* Vue Carte */
-.mmw-view {
-  padding: 0 !important;
+.workspace-leaf-content .view-content.mmw-view {
+  padding: 0;
   overflow: hidden;
 }
 
@@ -1478,8 +1478,8 @@
 }
 
 /* Apercu de l'export */
-.mmw-export {
-  padding: 12px 16px !important;
+.workspace-leaf-content .view-content.mmw-export {
+  padding: 12px 16px;
   overflow: auto;
 }
 
