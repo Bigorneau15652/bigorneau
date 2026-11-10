@@ -43,8 +43,8 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `links`,
     title: { fr: `Liens entre titres et vers d'autres notes`, en: `Links between headings and to other notes` },
     text: {
-      fr: `Le bouton en forme de chaîne écrit un lien au début du texte du titre de départ et trace une flèche en pointillé vers la cible. La fenêtre cherche aussi dans les notes du coffre : un lien peut viser une autre note, qui apparaît dans une case à gauche de la carte. Une mappemonde apparaît sur un titre dont le paragraphe contient des liens web ou des vidéos.`,
-      en: `The chain button writes a link at the start of the text of the first heading and draws a dotted arrow to the target. The window also searches the notes of the vault: a link can point to another note, which appears as a node on the left of the map. A globe appears on a heading whose paragraph contains web links or videos.`,
+      fr: `Le bouton en forme de chaîne écrit un lien au début du texte du titre de départ et trace une flèche en pointillé vers la cible. La fenêtre cherche aussi dans les notes du coffre : un lien peut viser une autre note, qui apparaît dans une case à gauche de la carte : les cases d'un titre sont centrées sur lui, et celles de deux titres voisins sont décalées pour ne jamais se superposer. Une mappemonde apparaît sur un titre dont le paragraphe contient des liens web ou des vidéos.`,
+      en: `The chain button writes a link at the start of the text of the first heading and draws a dotted arrow to the target. The window also searches the notes of the vault: a link can point to another note, which appears as a node on the left of the map: the boxes of a heading are centred on it, and those of two neighbouring headings are shifted so that they never overlap. A globe appears on a heading whose paragraph contains web links or videos.`,
     },
     keywords: { fr: `lien chaine fleche note cible mappemonde web`, en: `link chain arrow note target globe web` },
   },

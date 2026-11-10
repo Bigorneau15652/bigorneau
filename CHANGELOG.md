@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.2
+
+Fixed: the boxes of the linked notes, at the left of the map, are now centred on the title that holds the links (before, the first one was level with the title and the others below it). When two titles that follow each other have links, the boxes of the lower one are pushed down so that two boxes never lie on each other, whatever the number of links. The boxes are also a little flatter: less space above and below their text. The arrows keep following the boxes. Also fixed: when a floating topic is dragged, its sub-titles are now shown moving with it until the button is released, so the whole group can be placed by sight (before, only the main title moved on screen). The current position of the group fades while it is dragged, so the new place can be compared with the old one.
+
+Corrigé : les cases des notes liées, à gauche de la carte, sont maintenant centrées sur le titre qui porte les liens (avant, la première était à la hauteur du titre et les autres en dessous). Quand deux titres qui se suivent ont des liens, les cases du titre du dessous sont décalées vers le bas pour que deux cases ne se superposent jamais, quel que soit le nombre de liens. Les cases sont aussi un peu plus plates : moins d'espace au-dessus et au-dessous de leur texte. Les flèches suivent toujours les cases. Corrigé aussi : quand on glisse un sujet flottant, ses sous-titres sont maintenant visibles et se déplacent avec lui jusqu'au relâchement du bouton, ce qui permet de placer tout l'ensemble à vue (avant, seul le titre principal bougeait à l'écran). La position actuelle du groupe s'estompe pendant le glisser, pour comparer la nouvelle place à l'ancienne.
+
 ## 0.32.1
 
 Changed: in the "Fonts and headings" window, the list and the button "Apply this font everywhere" are replaced by one grey button, "Apply a font everywhere", with a small arrow: a click opens the list of fonts (the original font first), and the chosen font is applied at once to the body, the title, the headings, the captions, the footnotes and the header and footer, with a single redraw. In the window of a heading, a tag that is chosen now shows a small cross, and its tooltip says that a click takes it off the heading (the tag itself is kept in the list).

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNote } from "../src/model";
-import { buildLayoutTree, computeLayout, computeListLayout, flatten, listIndent, sequential, trunkX, LNode } from "../src/layout";
+import { buildLayoutTree, computeLayout, computeListLayout, flatten, listIndent, sequential, stackBoxes, trunkX, LNode } from "../src/layout";
 import { elbowPoints, framePath, resample, rng, trunkBranch, trunkLine, trunkRadius } from "../src/sketch";
 
 const NOTE = `## A\n### A1\n### A2\n#### A2a\n## B\n## C\n### C1\n`;
@@ -149,4 +149,37 @@ test(`vue Liste : une ligne par titre visible, decalee selon le niveau`, () => {
   assert.equal(b.maxY, 152);
   assert.equal(b.maxX, 400);
   assert.ok(listIndent(0.1) >= 13);
+});
+
+test(`les cases des notes liees sont centrees sur leur titre`, () => {
+  // Quatre cases de 20 : hauteur totale 4 x 20 + 3 x 6 = 98, centrees sur 200.
+  const [tops] = stackBoxes([{ middle: 200, heights: [20, 20, 20, 20] }], 6);
+  assert.deepEqual(tops, [151, 177, 203, 229]);
+  // Une seule case : centree.
+  assert.deepEqual(stackBoxes([{ middle: 100, heights: [24] }], 6), [[88]]);
+});
+
+test(`les cases de deux titres voisins ne se superposent jamais : le groupe du dessous est decale`, () => {
+  const groups = [
+    { middle: 100, heights: [20, 20, 20, 20] },
+    { middle: 130, heights: [20] },
+    { middle: 140, heights: [20, 20] },
+  ];
+  const tops = stackBoxes(groups, 6);
+  const boxes: { top: number; bottom: number }[] = [];
+  tops.forEach((t, g) => t.forEach((top, i) => boxes.push({ top, bottom: top + groups[g].heights[i] })));
+  boxes.sort((a, b) => a.top - b.top);
+  for (let i = 1; i < boxes.length; i++) assert.ok(boxes[i].top >= boxes[i - 1].bottom + 6 - 1e-9, `les cases ${i - 1} et ${i} se touchent`);
+  // Le premier groupe garde sa place centree ; les suivants descendent.
+  assert.equal(tops[0][0], 100 - 98 / 2);
+  assert.ok(tops[1][0] > 130 - 10);
+});
+
+test(`l'ordre des groupes donnes n'a pas d'importance et des titres sans lien sont ignores`, () => {
+  const a = stackBoxes([{ middle: 300, heights: [20] }, { middle: 100, heights: [20, 20] }, { middle: 200, heights: [] }], 6);
+  assert.deepEqual(a[2], []);
+  assert.ok(a[1][1] + 20 + 6 <= a[0][0] + 1e-9 || a[0][0] + 20 + 6 <= a[1][0] + 1e-9);
+  // Sans chevauchement possible, rien ne bouge.
+  const far = stackBoxes([{ middle: 100, heights: [20] }, { middle: 400, heights: [20] }], 6);
+  assert.deepEqual(far, [[90], [390]]);
 });
