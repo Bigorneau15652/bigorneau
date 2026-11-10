@@ -15,6 +15,7 @@ test(`liens entre titres : lecture des liens en debut de paragraphe`, () => {
     `[[Autre#Risques|Lien vers Risques]]`,
     `Texte libre`,
     `[[Ma note#Planning|pas au debut]]`,
+    `Suite du texte`,
     `## Planning`,
     `[[#Budget|Lien vers Budget]]`,
     `[[Ma note#Absent|Lien vers Absent]]`,
@@ -26,7 +27,7 @@ test(`liens entre titres : lecture des liens en debut de paragraphe`, () => {
   assert.equal(links.length, 4);
   assert.deepEqual(links[0], { from: `r.0`, line: 3, note: `Ma note`, heading: `Planning`, external: false, to: `r.1` });
   assert.deepEqual(links[1], { from: `r.0`, line: 4, note: `Autre`, heading: `Risques`, external: true, to: null });
-  assert.deepEqual(links[2], { from: `r.1`, line: 8, note: ``, heading: `Budget`, external: false, to: `r.0` });
+  assert.deepEqual(links[2], { from: `r.1`, line: 9, note: ``, heading: `Budget`, external: false, to: `r.0` });
   assert.equal(links[3].to, null);
   assert.equal(links[3].external, false);
 });
@@ -166,4 +167,15 @@ test(`une video integree s'ouvre sur la page de la video`, async () => {
   assert.equal(openableUrl(`https://youtu.be/dQw4w9WgXcQ`), `https://youtu.be/dQw4w9WgXcQ`);
   assert.equal(openableUrl(`https://exemple.fr/page`), `https://exemple.fr/page`);
   assert.equal(openableUrl(`pas une adresse`), `pas une adresse`);
+});
+
+test(`liens vers des notes ecrits a la fin du texte d'un titre : lus comme ceux du debut`, () => {
+  const text = [`Intro`, `## TT2`, `Un paragraphe.`, `[[test1]]`, `[[test2|Deuxieme]]`, ``, `## TT3`, `[[test3]]`, `Texte.`, `[[test4]]`, `Suite.`, ``].join(`\n`);
+  const doc = parseNote(text, NAME);
+  const links = parseLinks(doc, NAME);
+  assert.deepEqual(links.map((l) => [l.from, l.note, l.line]), [[`r.0`, `test1`, 3], [`r.0`, `test2`, 4], [`r.1`, `test3`, 7]]);
+  // Two links at the end swap places without touching the paragraph.
+  const moved = moveLinkTo(text, doc, links[0], links[1].line);
+  assert.ok(moved);
+  assert.equal(moved!.split(`\n`).slice(2, 5).join(`|`), `Un paragraphe.|[[test2|Deuxieme]]|[[test1]]`);
 });

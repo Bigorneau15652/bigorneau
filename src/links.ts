@@ -56,13 +56,34 @@ function leadingLinkLines(doc: MmDoc, key: string): { line: number; match: RegEx
   return out;
 }
 
+// Blocs de lignes de lien d'un titre : ceux du debut du texte, puis ceux qui terminent le texte (lignes de lien groupees apres le
+// dernier paragraphe, suivies au plus de lignes vides). Un bloc de fin ne reprend jamais une ligne du bloc de debut.
+function linkBlocks(doc: MmDoc, key: string): { line: number; match: RegExpExecArray }[][] {
+  const lead = leadingLinkLines(doc, key);
+  const node = nodeByKey(doc, key);
+  const blocks = lead.length > 0 ? [lead] : [];
+  if (!node || node.line === undefined || key === `r`) return blocks;
+  const body = node.body.split(/\r\n|\n|\r/);
+  const firstFree = (node.metaLine !== undefined ? 1 : 0) + lead.length;
+  let end = body.length - 1;
+  while (end >= firstFree && body[end].trim() === ``) end--;
+  const tail: { line: number; match: RegExpExecArray }[] = [];
+  for (let k = end; k >= firstFree; k--) {
+    const m = LINK_LINE.exec(body[k]);
+    if (!m || (m[1].trim() === `` && m[2] === undefined)) break;
+    tail.unshift({ line: node.line + 1 + k, match: m });
+  }
+  if (tail.length > 0) blocks.push(tail);
+  return blocks;
+}
+
 // Tous les liens de la carte, dans l'ordre des titres.
 export function parseLinks(doc: MmDoc, fileName: string): MapLink[] {
   const self = baseName(fileName).toLowerCase();
   const flat = flattenDoc(doc).filter((e) => e.key !== `r`);
   const out: MapLink[] = [];
   for (const { key } of flat) {
-    for (const { line, match } of leadingLinkLines(doc, key)) {
+    for (const { line, match } of linkBlocks(doc, key).flat()) {
       const note = match[1].trim();
       const heading = match[2] === undefined ? null : match[2].trim();
       const external = note !== `` && note.toLowerCase() !== self;
@@ -250,7 +271,8 @@ export function replaceLink(text: string, doc: MmDoc, link: MapLink, noteName: s
 
 // Deplace un lien a la place qu'occupe le lien de la ligne `toLine`, parmi les liens du meme titre.
 export function moveLinkTo(text: string, doc: MmDoc, link: MapLink, toLine: number): string | null {
-  const block = leadingLinkLines(doc, link.from).map((l) => l.line);
+  // Only links of the same block (start or end of the text) can swap places.
+  const block = (linkBlocks(doc, link.from).find((b) => b.some((l) => l.line === link.line)) ?? []).map((l) => l.line);
   const i = block.indexOf(link.line);
   const j = block.indexOf(toLine);
   if (i < 0 || j < 0 || i === j) return null;
