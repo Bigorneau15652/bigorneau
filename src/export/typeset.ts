@@ -313,6 +313,11 @@ const BOX_PAD_X = 5;
 const BOX_PAD_Y = 3;
 
 class Typesetter {
+  // Text shown for a heading that has no title, in the language of the document.
+  private untitled(): string {
+    return this.language === `en` ? `(untitled)` : `(sans titre)`;
+  }
+
   rows: Row[] = [];
   // Liste ou vont les lignes composees : le corps du document, ou un bloc en cours de preparation (figure, tableau).
   private sink: Row[] = this.rows;
@@ -588,9 +593,9 @@ class Typesetter {
     this.space(lead * (section.level <= 1 ? 1.6 : section.level === 2 ? 1.2 : 0.8), { breakBefore });
     const before = this.sink.length;
     const place = this.headingBox(spec);
-    this.paragraph(section.title || `(sans titre)`, `heading`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec, ...(spec.align !== `left` ? { shift: spec.align } : {}), ...(number ? { prefix: number } : {}) });
+    this.paragraph(section.title || this.untitled(), `heading`, place.x, place.width, { indent: 0, justify: false, hyphenate: false, fontSize: size, keep: true, notes: false, style: styleOf(spec), case: spec.case, underline: spec.underline, frame: spec, spec, ...(spec.align !== `left` ? { shift: spec.align } : {}), ...(number ? { prefix: number } : {}) });
     if (this.sink.length > before) {
-      this.sink[before].heading = { level: section.level, title: `${number ? `${number} ` : ``}${plainOf(parseInline(section.title).text) || `(sans titre)`}` };
+      this.sink[before].heading = { level: section.level, title: `${number ? `${number} ` : ``}${plainOf(parseInline(section.title).text) || this.untitled()}` };
       const anchor = this.anchors.sections.get(section);
       if (anchor) this.sink[before].anchor = anchor;
       if (isChapter) this.sink[before].chapterStart = true;
@@ -858,7 +863,7 @@ class Typesetter {
           text = this.language === `en` ? `[Image not found: ${b.target}]` : `[Image introuvable : ${b.target}]`;
           this.warnings.push(`image:${b.target}`);
         } else {
-          text = `[Figure : ${caption || b.target}]`;
+          text = this.language === `en` ? `[Figure: ${caption || b.target}]` : `[Figure : ${caption || b.target}]`;
           this.warnings.push(`embed:${b.target}`);
         }
         this.push({ kind: `figure`, text, x: 0, width: this.textWidth, fontSize: size, height: lead * 1.5, wordSpacing: 0, align: `center`, runs: [{ text, style: `regular` }], breakAfter: label ? INF_PENALTY : 0 });
@@ -953,7 +958,7 @@ class Typesetter {
     const entries: { level: number; title: string; anchor: string }[] = [];
     const walk = (s: DocSection): void => {
       const anchor = this.anchors.sections.get(s);
-      if (anchor && s.level <= depth) entries.push({ level: s.level, title: `${this.numbers.get(s) ? `${this.numbers.get(s)} ` : ``}${s.title || `(sans titre)`}`, anchor });
+      if (anchor && s.level <= depth) entries.push({ level: s.level, title: `${this.numbers.get(s) ? `${this.numbers.get(s)} ` : ``}${s.title || this.untitled()}`, anchor });
       s.sections.forEach(walk);
     };
     sections.forEach(walk);

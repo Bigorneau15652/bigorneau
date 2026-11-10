@@ -2,6 +2,7 @@
 // A partir du texte d'une note, produit un arbre neutre (titres, paragraphes, listes, citations, code, tableaux, figures)
 // sans aucune information de mise en page. Les commentaires du plugin (%% ... %%) n'y apparaissent jamais.
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
+import { currentLang } from "../i18n";
 import { listFromSentinel, ListKind, markListMarkers } from "../illustration-list";
 import { markPageZones, PageZone, zoneFromSentinel } from "../page-zone";
 import { markParagraphMarkers, ParagraphFormat, splitParagraphSentinel } from "../paragraph-format";
@@ -581,5 +582,5 @@ export function buildExportDoc(text: string, fileName: string, opts: ExtractOpti
   const author = /^(?:author|auteur)[ \t]*:[ \t]*[\x22\x27\x60]?([^\x22\x27\x60\r\n]+?)[\x22\x27\x60]?[ \t]*$/m.exec(doc.frontmatter);
   const toc = tocProps(doc.frontmatter, `toc`);
   const chapterToc = tocProps(doc.frontmatter, `chapter-toc`);
-  return { title: titleOf(doc.root), ...(toc ? { toc } : {}), ...(chapterToc ? { chapterToc } : {}), ...(lang ? { language: lang[1] } : {}), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
+  return { title: titleOf(doc.root), ...(toc ? { toc } : {}), ...(chapterToc ? { chapterToc } : {}), language: lang ? lang[1] : currentLang(), ...(author ? { author: author[1].trim() } : {}), blocks: parseBlocks(doc.root.body), sections, footnotes };
 }

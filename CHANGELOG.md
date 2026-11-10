@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.6
+
+Fixed: when the plugin is in English, the exported document (PDF and HTML) now speaks English too: "Contents" instead of "Table des matières", "(untitled)" for a heading without title, and "[Figure: name]" with an English colon. Before, the language of the document was French unless the note had a lang property. Now, without a lang property, the document takes the language of the plugin; a lang property (for example lang: fr) still has priority.
+
+Corrigé : quand le plugin est en anglais, le document exporté (PDF et HTML) parle aussi anglais : « Contents » au lieu de « Table des matières », « (untitled) » pour un titre sans texte, et « [Figure: nom] » avec les deux-points à l'anglaise. Avant, la langue du document était le français tant que la note n'avait pas de propriété lang. Maintenant, sans propriété lang, le document prend la langue du plugin ; une propriété lang (par exemple lang: fr) garde la priorité.
+
 ## 0.32.5
 
 Changed: the lines that link to another note or to a heading, such as [[test1]], are now also read when they are grouped at the end of the text of a title, after its last paragraph (before, only the lines right under the title were read). They give the same boxes on the left of the map and the same arrows, and they can be reordered among themselves. A link line in the middle of a paragraph is still plain text. Added: a title of the main branch can be taken out of it with a right click then "Detach as a floating topic": it becomes a floating topic placed at its own height, to the right of the whole map, with its sub-titles (dragging a title well outside the structure still does the same, and the distance needed is shorter: 40 pixels beyond the map instead of 70).
