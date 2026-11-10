@@ -25,8 +25,8 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `labels`,
     title: { fr: `Étiquettes, titre court et commentaire`, en: `Labels, short title and comment` },
     text: {
-      fr: `La fenêtre d'un titre permet d'écrire un titre court, affiché sur la carte seulement, un commentaire et des étiquettes. Les étiquettes ont un nom, une couleur de fond et une couleur de texte, en nombre illimité, et se définissent dans le menu de la carte. Tout cela est conservé dans un commentaire invisible sous le titre.`,
-      en: `The window of a heading lets you write a short title, shown on the map only, a comment and labels. Labels have a name, a background colour and a text colour, with no limit on their number, and are defined in the menu of the map. All of it is kept in an invisible comment under the heading.`,
+      fr: `La fenêtre d'un titre permet d'écrire un titre court, affiché sur la carte seulement, un commentaire et des étiquettes. Les étiquettes ont un nom, une couleur de fond et une couleur de texte, en nombre illimité, et se définissent dans le menu de la carte. Dans la fenêtre, toutes les étiquettes sont listées : un clic en choisit une, et une étiquette choisie porte une petite croix, sur laquelle on clique pour la retirer du titre. Tout cela est conservé dans un commentaire invisible sous le titre.`,
+      en: `The window of a heading lets you write a short title, shown on the map only, a comment and labels. Labels have a name, a background colour and a text colour, with no limit on their number, and are defined in the menu of the map. In the window, all the labels are listed: a click chooses one, and a chosen label shows a small cross, on which you click to take it off the heading. All of it is kept in an invisible comment under the heading.`,
     },
     keywords: { fr: `etiquette tag couleur commentaire bulle`, en: `label tag colour color comment` },
   },
@@ -106,8 +106,8 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `typography`,
     title: { fr: `Typographie de l'export`, en: `Typography of the export` },
     text: {
-      fr: `Le texte est composé avec l'algorithme de coupure de lignes de Knuth et Plass, la césure française ou anglaise britannique (propriété lang: en pour l'anglais) et les règles de la typographie française. La ponctuation en bout de ligne dépasse légèrement dans la marge (protrusion). Les pages évitent les lignes veuves et orphelines. La police est Libertinus Serif, incorporée au PDF.`,
-      en: `The text is set with the line breaking algorithm of Knuth and Plass, French or British English hyphenation (property lang: en for English) and the rules of French typography. Punctuation at the end of a line protrudes slightly into the margin. Pages avoid widows and orphans. The font is Libertinus Serif, embedded in the PDF.`,
+      fr: `Le texte est composé avec l'algorithme de coupure de lignes de Knuth et Plass, la césure française ou anglaise britannique (propriété lang: en pour l'anglais) et les règles de la typographie française. La ponctuation en bout de ligne dépasse légèrement dans la marge (protrusion). Les pages évitent les lignes veuves et orphelines. La police est Libertinus Serif, incorporée au PDF, sauf si la fenêtre Polices et titres en choisit une autre : son bouton Appliquer une police partout donne la même police à tous les éléments d'un coup.`,
+      en: `The text is set with the line breaking algorithm of Knuth and Plass, French or British English hyphenation (property lang: en for English) and the rules of French typography. Punctuation at the end of a line protrudes slightly into the margin. Pages avoid widows and orphans. The font is Libertinus Serif, embedded in the PDF, unless the Fonts and headings window chooses another: its button Apply a font everywhere gives the same font to every element at once.`,
     },
     keywords: { fr: `cesure justification protrusion police libertinus veuve orpheline langue`, en: `hyphenation justification protrusion font libertinus widow orphan language` },
   },
