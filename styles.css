@@ -2921,3 +2921,9 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   width: 14px;
   height: 14px;
 }
+
+.mmw-svg.mmw-ghost {
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 5;
+}

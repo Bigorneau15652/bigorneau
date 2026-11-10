@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.3
+
+Fixed: when a floating topic is dragged, the lines that join it to its sub-titles are now drawn and move with the copies, so the whole group looks the same as on the map while it is placed.
+
+Corrigé : quand on glisse un sujet flottant, les traits qui le relient à ses sous-titres sont maintenant dessinés et se déplacent avec les copies, de sorte que tout le groupe garde son aspect de la carte pendant qu'on le place.
+
 ## 0.32.2
 
 Fixed: the boxes of the linked notes, at the left of the map, are now centred on the title that holds the links (before, the first one was level with the title and the others below it). When two titles that follow each other have links, the boxes of the lower one are pushed down so that two boxes never lie on each other, whatever the number of links. The boxes are also a little flatter: less space above and below their text. The arrows keep following the boxes. Also fixed: when a floating topic is dragged, its sub-titles are now shown moving with it until the button is released, so the whole group can be placed by sight (before, only the main title moved on screen). The current position of the group fades while it is dragged, so the new place can be compared with the old one.
