@@ -211,6 +211,15 @@ export const PLUGIN_HELP: HelpEntry[] = [
     keywords: { fr: `propriete entete lang author toc langue auteur`, en: `property header lang author toc language` },
   },
   {
+    id: `settings-screen`,
+    title: { fr: `Écran des réglages`, en: `Settings screen` },
+    text: {
+      fr: `Les réglages de Bigorneau sont dans Paramètres, Bigorneau. Ils sont répartis en douze pages (langue, vue Mindmap, rédaction, notes fixes, mode Zen, sujets flottants, liens et icônes, nouvelles notes, export PDF, panneau de boutons, profils, navigation au clavier) : un clic ouvre une page, la flèche en haut la referme. Le champ de recherche de la fenêtre des réglages d'Obsidian trouve chaque réglage par son nom ou sa description. Cet écran demande Obsidian 1.13.0 ou plus : avec un Obsidian plus ancien, la version 0.31.3 du plugin reste installée.`,
+      en: `The settings of Bigorneau are in Settings, Bigorneau. They are split into twelve pages (language, Mindmap view, writing, pinned notes, Zen mode, floating topics, links and icons, new notes, PDF export, button panel, profiles, keyboard navigation): a click opens a page, the arrow at the top closes it. The search field of the settings window of Obsidian finds each setting by its name or description. This screen needs Obsidian 1.13.0 or later: with an older Obsidian, version 0.31.3 of the plugin stays installed.`,
+    },
+    keywords: { fr: `reglages parametres pages recherche version minimale obsidian`, en: `settings pages search minimum version obsidian` },
+  },
+  {
     id: `export-settings`,
     title: { fr: `Réglages de l'export`, en: `Export settings` },
     text: {

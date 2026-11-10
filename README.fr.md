@@ -12,6 +12,8 @@ Bigorneau s'installe depuis les plugins communautaires d'Obsidian :
 2. Cliquer sur Parcourir et chercher Bigorneau.
 3. Cliquer sur Installer, puis sur Activer.
 
+Bigorneau 0.32 et les versions suivantes demandent Obsidian 1.13.0 ou plus, car leur écran de réglages utilise l'interface de réglages d'Obsidian 1.13 : les réglages sont des pages que la recherche d'Obsidian retrouve. Avec un Obsidian plus ancien, Obsidian installe la version 0.31.3.
+
 L'interface existe en français et en anglais. Elle suit la langue d'Obsidian par défaut, et la langue se choisit dans les réglages du plugin. Bigorneau est conçu pour la version ordinateur d'Obsidian (Mac, Windows et Linux) et n'est pas disponible sur tablette ni sur téléphone.
 
 Au premier lancement, le plugin crée deux dossiers dans le coffre : `Bigorneau/Polices` pour les polices que vous ajoutez et `Bigorneau/Profils` pour les profils enregistrés. Les deux se changent dans les réglages, et le bouton « Créer les dossiers » du chapitre « Profils » les recrée.
