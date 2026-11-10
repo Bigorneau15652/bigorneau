@@ -51,7 +51,7 @@ const TEXTS = {
   fr: {
     plan: `Plan du document`, thumbs: `Miniatures`, dark: `Mode sombre`, light: `Mode clair`, full: `Plein écran`, wide: `Mode large`, escape: `Échap pour revenir`,
     fold: `Plier ou déplier`, noThumbs: `Aucune image dans ce document.`, flatPano: `Panorama à 360 degrés : ouvrez cette page depuis un site web pour pouvoir le faire tourner.`, notes: `Notes`, back: `Retour au texte`, listFigures: `Liste des figures`, listTables: `Liste des tableaux`,
-    video: `Vidéo`, watch: `Regarder la vidéo sur le site d'origine`, audio: `Audio`, document: `Document PDF`, embed: `Contenu intégré`, missing: `Image introuvable`, web: `Image du web`, image: `Image`, untitled: `(sans titre)`, colon: ` : `,
+    video: `Vidéo`, watch: `Regarder la vidéo sur le site d'origine`, audio: `Audio`, document: `Document PDF`, embed: `Contenu intégré`, missing: `Image introuvable`, web: `Image du web`, image: `Image`, untitled: `(sans titre)`, colon: `\u00a0: `,
   },
   en: {
     plan: `Document outline`, thumbs: `Thumbnails`, dark: `Dark mode`, light: `Light mode`, full: `Full screen`, wide: `Wide mode`, escape: `Press Esc to go back`,
@@ -450,7 +450,7 @@ class Renderer {
     const number = this.numbers.get(s);
     const title = s.title || this.texts.untitled;
     const spec = this.ty.headings[level - 1];
-    let html = `<section class="chapitre"><${tag} id="${id}" class="t${level}" data-plan>${number ? `<span class="num">${escapeHtml(number)}</span> ` : ``}${this.highlighted(this.inline(title, false), spec, `t${level}`)}</${tag}>`;
+    let html = `<section class="chapitre"><${tag} id="${id}" class="t${level}" data-plan>${number ? `<span class="num">${escapeHtml(number)}</span>\u00a0` : ``}${this.highlighted(this.inline(title, false), spec, `t${level}`)}</${tag}>`;
     let previous: string | undefined = s.title;
     for (const b of s.blocks) {
       html += this.block(b, previous);

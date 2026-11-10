@@ -270,7 +270,7 @@ async function htmlImageOf(bytes: Uint8Array<ArrayBuffer>, ext: string, panorama
     const maxWidth = panorama ? HTML_PANORAMA_MAX_WIDTH : HTML_MAX_WIDTH;
     if (ext === `svg` || ext === `gif` || (width <= maxWidth && bytes.length <= HTML_KEEP_BYTES)) return { src: dataUri(mime, bytes), width, height, panorama };
     const scale = Math.min(1, maxWidth / width);
-    const canvas = document.createElement(`canvas`);
+    const canvas = createEl(`canvas`);
     canvas.width = Math.max(1, Math.round(width * scale));
     canvas.height = Math.max(1, Math.round(height * scale));
     const ctx = canvas.getContext(`2d`);
