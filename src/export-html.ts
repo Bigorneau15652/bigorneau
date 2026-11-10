@@ -4,6 +4,7 @@ import { App, Notice, Platform, TFile, TFolder } from "obsidian";
 import { buildExportDoc } from "./export/doc-tree";
 import { builtinFontCss, builtinFontFiles, ExportFile, userFontCss, userFontFiles } from "./export/html/html-assets";
 import { renderHtml } from "./export/html/html-doc";
+import type { MathAsset } from "./export/math";
 import { pannellumAssets } from "./export/html/pannellum-assets";
 import { ExportReportModal, ExportTarget, targetFolderPath, targetPath } from "./export-dialog";
 import { HtmlMediaSink, loadFormulas, loadHtmlImages } from "./export-context";
@@ -55,7 +56,7 @@ export async function exportNoteToHtml(plugin: MindmapWritingPlugin, file: TFile
     const config = findPageConfig(text)?.config;
     const typography = applyOverrides(plugin.settings.typography, config?.typography);
     const math = plugin.scripts.service<MathRenderer>(MATH_SERVICE);
-    const formulas = math ? await loadFormulas(text, file.name, math) : new Map();
+    const formulas = math ? await loadFormulas(text, file.name, math) : new Map<string, MathAsset>();
     const sink: HtmlMediaSink | undefined = folderMode ? { files: [], taken: new Set() } : undefined;
     const images = await loadHtmlImages(plugin.app, text, file.name, file.path, plugin.settings.exportHtmlPanoramas, sink);
     const panorama = [...images.values()].some((i) => i.panorama) ? pannellumAssets() : undefined;

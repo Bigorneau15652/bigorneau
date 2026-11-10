@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.31.2
+
+Fixed: three points that the checks of the Obsidian community directory (the ESLint plugin of Obsidian) report in the code added since version 0.28.2. A non-breaking space written as a character in two lines of the HTML export is now written as an escape, an untyped empty list of formulas in the HTML export is typed, and the canvas that reduces a picture is created with `createEl`. Nothing changes for the user.
+
+Corrigé : trois points que signalent les contrôles du répertoire communautaire d'Obsidian (le plugin ESLint d'Obsidian) dans le code ajouté depuis la version 0.28.2. Une espace insécable écrite comme caractère dans deux lignes de l'export HTML est maintenant écrite comme séquence d'échappement, la liste vide non typée des formules de l'export HTML est typée, et le canevas qui réduit une image est créé avec `createEl`. Rien ne change pour l'utilisateur.
+
 ## 0.31.1
 
 Fixed: in the "Hide inactive chapters" mode, the cursor can no longer leave the active chapter by accident. A click in the empty space under the text of the chapter used to put the cursor at the very end of the note, in a hidden chapter (often the conclusion), and the map then switched to that chapter. Now the cursor goes to the end of the active chapter. The arrow keys, Ctrl + End, Ctrl + Home, Page Down and a drag of the mouse also stop at the edge of the active chapter. To change chapter on purpose, use the map (Ctrl + Shift + Enter, the arrow keys, then Ctrl + Shift + Enter to come back) or the keys that move between chapters. The simple grey mode, where the other chapters stay visible, is not changed. The editor of a fixed note, which shows only one chapter, follows the same rule.
