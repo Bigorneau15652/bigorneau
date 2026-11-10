@@ -1292,6 +1292,13 @@ export class MindmapView extends ItemView {
     const cm = noteCm;
     if (cm) {
       revealRange(cm, { headLine: topLine, endLine, cursorLine: cursor.line, cursorCh: cursor.ch });
+      // Title of the map: the note goes back to its very top. The preview measures its blocks (properties, pictures) late, so the
+      // scroll is set again a moment later.
+      if (node === live.root) {
+        cm.scrollDOM.scrollTop = 0;
+        window.setTimeout(() => (cm.scrollDOM.scrollTop = 0), 80);
+        window.setTimeout(() => (cm.scrollDOM.scrollTop = 0), 300);
+      }
     } else {
       editor.setCursor(cursor);
       editor.scrollIntoView({ from: { line: topLine, ch: 0 }, to: { line: endLine, ch: 0 } }, true);
