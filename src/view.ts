@@ -737,6 +737,8 @@ export class MindmapView extends ItemView {
     add(t(`Couper ({0} + X)`, mod), `scissors`, run(`cut`), { disabled: isRoot });
     add(t(`Coller dedans ({0} + V)`, mod), `clipboard-paste`, run(`paste`));
     add(t(`Coller après`), `clipboard-list`, run(`pasteAfter`), { disabled: isRoot });
+    const spot = !isRoot && !isFloatKey(key) ? renderer.floatSpot(key) : null;
+    add(t(`Détacher en sujet flottant`), `unlink`, () => spot && this.onEdit({ kind: `float`, key, keys: [key], x: spot.x, y: spot.y }), { disabled: !spot });
     menu.addSeparator();
     const hiddenNow = !!this.doc && !!nodeByKey(this.doc, key)?.meta?.hidden;
     add(hiddenNow ? t(`Afficher dans la note`) : t(`Masquer dans la note`), hiddenNow ? `eye` : `eye-off`, () => void this.toggleHidden(key), { disabled: isRoot });

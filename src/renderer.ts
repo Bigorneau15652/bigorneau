@@ -1096,6 +1096,13 @@ export class MapRenderer {
   // ---------------------------------------------------------------- creation d'un lien
 
   // `from` : titre de depart impose (clic droit) ; `replace` : lien existant a remplacer.
+  // Place where a title taken out of the main branch becomes a floating topic: at its own height, to the right of the whole map.
+  floatSpot(key: string): { x: number; y: number } | null {
+    const node = this.list.find((n) => n.key === key);
+    if (!node || !this.mainBounds || this.isList()) return null;
+    return { x: this.mainBounds.maxX + 90, y: node.y };
+  }
+
   startLinking(from?: string, replace?: MapLink): void {
     if (!this.doc || this.linking) return;
     this.commitRename(true, false);

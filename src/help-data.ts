@@ -70,8 +70,8 @@ export const PLUGIN_HELP: HelpEntry[] = [
     id: `floats`,
     title: { fr: `Sujets flottants`, en: `Floating topics` },
     text: {
-      fr: `Un double clic sur le fond de la carte crée un sujet de notes libre, rattaché à aucun chapitre. On le déplace autour de la carte, et déposé près de la structure il entre dans la carte à cet endroit. Les sujets flottants ne sont pas exportés en PDF.`,
-      en: `A double click on the background of the map creates a free topic that belongs to no chapter. It moves freely around the map, and dropped near the structure it joins the map at that place. Floating topics are not exported to PDF.`,
+      fr: `Un double clic sur le fond de la carte crée un sujet de notes libre, rattaché à aucun chapitre. On le déplace autour de la carte, et déposé près de la structure il entre dans la carte à cet endroit. Inversement, un titre de la carte devient un sujet flottant quand on le dépose bien à l'extérieur de la structure, ou par un clic droit sur lui puis « Détacher en sujet flottant » : il se place à sa hauteur, à droite de la carte. Les sujets flottants ne sont pas exportés en PDF.`,
+      en: `A double click on the background of the map creates a free topic that belongs to no chapter. It moves freely around the map, and dropped near the structure it joins the map at that place. Conversely, a title of the map becomes a floating topic when it is dropped well outside the structure, or with a right click on it then "Detach as a floating topic": it is placed at its own height, to the right of the map. Floating topics are not exported to PDF.`,
     },
     keywords: { fr: `flottant libre ovale vrac`, en: `floating free oval` },
   },
