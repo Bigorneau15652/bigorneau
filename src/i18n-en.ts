@@ -971,6 +971,11 @@ const PAIRS: [string, string][] = [
   [`Nom du dossier de l'export`, `Name of the export folder`],
   [`Taille du dossier : {0} Mo en {1} fichiers.`, `Size of the folder: {0} MB in {1} files.`],
   [`Dossier HTML enregistré : {0} ({1} Mo, {2} fichiers)`, `HTML folder saved: {0} ({1} MB, {2} files)`],
+  [`Réglages depuis la carte`, `Settings from the map`],
+  [`Puces par niveau`, `Bullets by level`],
+  [`Polices du coffre`, `Fonts of the vault`],
+  [`Ajouter une police, changer le dossier des polices, relire le dossier et voir les fichiers non utilisables.`, `Add a font, change the fonts folder, read the folder again and see the files that cannot be used.`],
+  [`Choisir, ordonner et séparer les boutons du panneau.`, `Choose, order and separate the buttons of the panel.`],
 ];
 
 export const EN: Record<string, string> = Object.fromEntries(PAIRS);

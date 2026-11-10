@@ -12,6 +12,8 @@ Install Bigorneau from the community plugins of Obsidian:
 2. Click Browse and search for Bigorneau.
 3. Click Install, then Enable.
 
+Bigorneau 0.32 and later needs Obsidian 1.13.0 or later, because its settings screen uses the settings interface of Obsidian 1.13: the settings are pages that the search of Obsidian finds. With an older Obsidian, Obsidian installs version 0.31.3.
+
 The interface exists in French and in English. It follows the language of Obsidian by default, and the language can be chosen in the plugin settings. Bigorneau is made for the desktop version of Obsidian (Mac, Windows and Linux) and is not available on tablets and phones.
 
 On its first launch, the plugin creates two folders in the vault: `Bigorneau/Polices` for the fonts that you add and `Bigorneau/Profils` for the saved profiles. Both can be changed in the settings, and the button "Create the folders" of the chapter "Profiles" creates them again.
