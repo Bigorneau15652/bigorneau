@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.32.7
+
+Fixed: a click on the title of the map (the name of the note) now shows the top of the note, with its properties, even when only the active chapter is shown. The cursor goes to the first line of the note instead of a hidden comment line, which used to push it into the first title and select it. When the note has text of its own under its title, the cursor still goes to the end of that text.
+
+Corrigé : un clic sur le titre de la carte (le nom de la note) montre maintenant le haut de la note, avec ses propriétés, même quand seul le chapitre actif est affiché. Le curseur va à la première ligne de la note au lieu d'une ligne de commentaire masquée, qui le poussait dans le premier titre et le sélectionnait. Quand la note a du texte propre sous son titre, le curseur va toujours à la fin de ce texte.
+
 ## 0.32.6
 
 Fixed: when the plugin is in English, the exported document (PDF and HTML) now speaks English too: "Contents" instead of "Table des matières", "(untitled)" for a heading without title, and "[Figure: name]" with an English colon. Before, the language of the document was French unless the note had a lang property. Now, without a lang property, the document takes the language of the plugin; a lang property (for example lang: fr) still has priority.
