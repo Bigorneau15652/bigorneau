@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { setLanguage } from "../src/i18n";
 import { buildExportDoc, parseBlocks, stripComments } from "../src/export/doc-tree";
 
 test(`les commentaires du plugin disparaissent, y compris sur plusieurs lignes`, () => {
@@ -139,7 +140,15 @@ test(`une note sans titre donne seulement une introduction`, () => {
 test(`la langue est lue dans les proprietes de la note`, () => {
   assert.equal(buildExportDoc(`---\nlang: en-GB\n---\n# A\ntexte`, `N.md`).language, `en-GB`);
   assert.equal(buildExportDoc(`---\nlangue: "fr"\n---\n# A\ntexte`, `N.md`).language, `fr`);
-  assert.equal(buildExportDoc(`# A\ntexte`, `N.md`).language, undefined);
+  // Without a lang property, the document takes the language of the plugin.
+  assert.equal(buildExportDoc(`# A\ntexte`, `N.md`).language, `fr`);
+  setLanguage(`en`);
+  try {
+    assert.equal(buildExportDoc(`# A\ntexte`, `N.md`).language, `en`);
+    assert.equal(buildExportDoc(`---\nlang: fr\n---\n# A\ntexte`, `N.md`).language, `fr`);
+  } finally {
+    setLanguage(`fr`);
+  }
 });
 
 test(`une ligne de tableau sans cellule remplie est ignoree`, () => {
