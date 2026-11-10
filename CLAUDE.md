@@ -36,6 +36,7 @@ The PDF export is a layout engine written for the plugin, in independent stages 
 - Every version has a section `## X.Y.Z` in `CHANGELOG.md`, in English then in French (a test checks it). The release workflow copies it onto the GitHub release page.
 - To change the version, edit `manifest.json`, `package.json`, `package-lock.json` (the `version` at the top and the one under `packages[""]`) and add a line to `versions.json` with the minimum Obsidian version.
 - A release is a GitHub release whose tag is the version number without `v`, with `main.js`, `manifest.json` and `styles.css` attached. The maintainer publishes it from GitHub after merging the pull request.
+- The community directory of Obsidian (community.obsidian.md) reads the `version` of `manifest.json` on `main` and needs a normal GitHub release with the same tag: a pre-release is not counted, and a version on `main` without its release is an error that takes the plugin out of the catalogue (it happened from 31 October to 10 November 2026). So never advise a pre-release, and tell the maintainer to publish the release right after merging, before anything else is merged. A change that does not touch the version (documentation only) needs no release.
 - Work on the branch given by the session, push, and open a draft pull request.
 
 ## Decisions of the maintainer
