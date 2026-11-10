@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.34.0
+
+Added: floating topics can now be reorganised with the mouse. A sub-title of a floating topic is dragged out of its topic to become a floating topic of its own, placed where it is dropped, with its sub-titles and at the same level as the other floating topics. A floating topic dragged onto a title of another floating topic (the title gets a dotted outline) becomes its last sub-title, and its levels adapt. While a sub-title or a topic is dragged, its sub-titles and the lines that join them follow the pointer.
+
+Ajouté : les sujets flottants se réorganisent maintenant à la souris. Un sous-titre d'un sujet flottant se glisse hors de son sujet pour devenir un sujet flottant à lui, placé là où on le dépose, avec ses sous-titres et au même niveau que les autres sujets flottants. Un sujet flottant glissé sur un titre d'un autre sujet flottant (le titre s'entoure de pointillés) devient son dernier sous-titre, et ses niveaux s'adaptent. Pendant le glisser d'un sous-titre ou d'un sujet, ses sous-titres et les traits qui les relient suivent le pointeur.
+
 ## 0.32.7
 
 Fixed: a click on the title of the map (the name of the note) now shows the top of the note, with its properties, even when only the active chapter is shown. The cursor goes to the first line of the note instead of a hidden comment line, which used to push it into the first title and select it. When the note has text of its own under its title, the cursor still goes to the end of that text.

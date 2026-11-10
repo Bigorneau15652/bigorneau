@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { addNode, deleteNodes, renameTitle } from "../src/edit";
-import { branchToFloat, createFloat, deleteFloat, floatToBranch, moveFloat } from "../src/float";
+import { branchToFloat, createFloat, deleteFloat, floatBranchToFloat, floatToBranch, floatToFloatChild, moveFloat } from "../src/float";
 import { activeLines, flattenDoc, isHiddenKey, nodeAtLine, nodeByKey, parseNote, serializeNote } from "../src/model";
 
 const NOTE = [`Intro`, ``, `## A`, `texte a`, `### A1`, `texte a1`, `## B`, `texte b`, ``].join(`\n`);
@@ -131,3 +131,51 @@ function applyTo(text: string, doc: ReturnType<typeof parseNote>, changes: { key
   }
   return out.join(`\n`);
 }
+
+const FLOATS = [`# Note`, ``, `## Main`, `texte`, ``, `%% mmw-float {"x":10,"y":20} %%`, `## Alpha`, `a`, `### A1`, `a1`, `### A2`, `a2`, `#### A21`, ``, `%% mmw-float {"x":300,"y":40} %%`, `## Beta`, `b`, ``].join(`\n`);
+
+test(`un sous-titre sorti d'un sujet flottant devient un sujet flottant, au meme niveau que les autres`, () => {
+  const doc = parseNote(FLOATS, `N.md`);
+  const a2 = flattenDoc(doc).find((e) => e.node.title === `A2`)!.key;
+  const done = floatBranchToFloat(FLOATS, `N.md`, a2, { x: 500, y: 60 });
+  assert.ok(done);
+  const after = parseNote(done!.text, `N.md`);
+  assert.equal(after.floats.length, 3);
+  const last = after.floats[2];
+  assert.equal(last.title, `A2`);
+  assert.equal(last.level, 2);
+  assert.deepEqual(last.children.map((c) => [c.title, c.level]), [[`A21`, 3]]);
+  assert.deepEqual({ x: last.float!.x, y: last.float!.y }, { x: 500, y: 60 });
+  // The former topic keeps its other sub-title, the main branch is untouched.
+  assert.deepEqual(after.floats[0].children.map((c) => c.title), [`A1`]);
+  assert.equal(nodeByKey(after, `r.0.0`)!.title, `Main`);
+  assert.equal(flattenDoc(after).length, flattenDoc(doc).length);
+  // A floating root or a title of the main branch is not concerned.
+  assert.equal(floatBranchToFloat(FLOATS, `N.md`, `f0`, {}), null);
+  assert.equal(floatBranchToFloat(FLOATS, `N.md`, `r.0.0`, {}), null);
+});
+
+test(`un sujet flottant depose sur un titre d'un autre sujet flottant devient son dernier enfant`, () => {
+  const doc = parseNote(FLOATS, `N.md`);
+  // Beta (f1) goes under A1 (f0.0): the block of Beta stands after the block of Alpha.
+  const a1 = flattenDoc(doc).find((e) => e.node.title === `A1`)!.key;
+  const done = floatToFloatChild(FLOATS, `N.md`, `f1`, a1);
+  assert.ok(done);
+  const after = parseNote(done!.text, `N.md`);
+  assert.equal(after.floats.length, 1);
+  const alpha = after.floats[0];
+  assert.deepEqual(alpha.children.map((c) => c.title), [`A1`, `A2`]);
+  assert.deepEqual(alpha.children[0].children.map((c) => [c.title, c.level]), [[`Beta`, 4]]);
+  assert.equal(flattenDoc(after).length, flattenDoc(doc).length);
+  // Alpha (f0) under Beta (f1): the block removed stands above the receiver.
+  const back = floatToFloatChild(FLOATS, `N.md`, `f0`, `f1`);
+  assert.ok(back);
+  const after2 = parseNote(back!.text, `N.md`);
+  assert.equal(after2.floats.length, 1);
+  assert.deepEqual(after2.floats[0].children.map((c) => c.title), [`Alpha`]);
+  assert.deepEqual(after2.floats[0].children[0].children.map((c) => c.title), [`A1`, `A2`]);
+  // Not into itself, not into its own sub-titles, not into the main branch.
+  assert.equal(floatToFloatChild(FLOATS, `N.md`, `f0`, `f0`), null);
+  assert.equal(floatToFloatChild(FLOATS, `N.md`, `f0`, `f0.1`), null);
+  assert.equal(floatToFloatChild(FLOATS, `N.md`, `f0`, `r.0.0`), null);
+});

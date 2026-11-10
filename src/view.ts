@@ -8,7 +8,7 @@ import { Editor, ItemView, MarkdownView, Menu, Modal, Notice, Platform, Setting,
 import { addNode, arrowTarget, cleanTitle, countHeadings, deleteNodes, DeletionReport, describeDeletion, duplicateNodes, EditResult, extractBranches, insertBranches, moveNodes, renameTitle } from "./edit";
 import type MindmapWritingPlugin from "./main";
 import { resolveFixed } from "./fixed";
-import { branchToFloat, createFloat, floatToBranch, moveFloat } from "./float";
+import { branchToFloat, createFloat, floatBranchToFloat, floatToBranch, floatToFloatChild, moveFloat } from "./float";
 import { activeLines, applyLineEdits, flattenDoc, isFloatKey, isFloatRoot, isHiddenKey, LineEdit, MmDoc, nodeAtLine, nodeByKey, parseNote, serializeNote } from "./model";
 import { insertLink, insertWebLink, linkHeading, MapLink, moveLinkTo, openableUrl, parseLinks, removeLink, removeWebLink, replaceLink, replaceWebLink, sameHeading, WebLink, webLinks } from "./links";
 import type { DialogValues } from "./node-dialog";
@@ -296,7 +296,7 @@ export class MindmapView extends ItemView {
     } else if (edit.kind === `float`) {
       // Un titre de la carte tire a l'exterieur devient un sujet flottant ; un sujet flottant change de place.
       const pos = { x: edit.x, y: edit.y };
-      result = isFloatRoot(edit.key) ? moveFloat(before, file.name, edit.key, pos) : branchToFloat(before, file.name, edit.key, pos);
+      result = isFloatRoot(edit.key) ? moveFloat(before, file.name, edit.key, pos) : isFloatKey(edit.key) ? floatBranchToFloat(before, file.name, edit.key, pos) : branchToFloat(before, file.name, edit.key, pos);
       if (!result) new Notice(t(`Ce titre ne peut pas devenir un sujet flottant.`));
     } else if (edit.kind === `rename`) {
       result = renameTitle(before, file.name, edit.key, edit.title ?? ``);
@@ -304,7 +304,7 @@ export class MindmapView extends ItemView {
     } else if (edit.kind === `move`) {
       if (isFloatRoot(edit.key) && !edit.dir) {
         // Un sujet flottant depose pres de la structure entre dans la carte : son niveau s'adapte a sa nouvelle place.
-        result = floatToBranch(before, file.name, edit.key, edit.parentKey ?? `r`, edit.index ?? 0);
+        result = isFloatKey(edit.parentKey ?? ``) ? floatToFloatChild(before, file.name, edit.key, edit.parentKey ?? ``) : floatToBranch(before, file.name, edit.key, edit.parentKey ?? `r`, edit.index ?? 0);
         if (!result) new Notice(t(`Déplacement impossible : le niveau de titre maximum (6) serait dépassé.`));
         if (!result) {
           renderer.resetPreview();

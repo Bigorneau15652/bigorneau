@@ -70,6 +70,66 @@ export function branchToFloat(text: string, fileName: string, key: string, pos: 
 
 const isFloatKey2 = (key: string): boolean => /^f\d/.test(key);
 
+// Gives the headings of a Markdown block (one title with its sub-titles) a new level for the title at its top. Returns null when
+// a level would leave 1 to 6.
+function relevel(markdown: string, level: number): string | null {
+  const md = markdown.replace(/\r\n?/g, `\n`);
+  const nodes = flattenDoc(parseNote(md, `x.md`, { frontmatter: false })).filter((e) => e.key !== `r`);
+  if (nodes.length === 0) return null;
+  const delta = level - nodes[0].node.level;
+  if (nodes.some((e) => e.node.level + delta < 1 || e.node.level + delta > 6)) return null;
+  const lines = splitLines(md);
+  for (const e of nodes) {
+    const i = e.node.line ?? 0;
+    lines[i] = lines[i].replace(/^#{1,6}/, `#`.repeat(e.node.level + delta));
+  }
+  return lines.join(``);
+}
+
+// Takes a sub-title out of a floating topic: it becomes a floating topic of its own, placed at (x, y), with its sub-titles. Its heading
+// takes the level of the root of the topic it leaves, so that all floating topics keep the same level.
+export function floatBranchToFloat(text: string, fileName: string, key: string, pos: FloatPos): EditResult | null {
+  const doc = parseNote(text, fileName);
+  const node = nodeByKey(doc, key);
+  const root = nodeByKey(doc, key.split(`.`)[0]);
+  if (!node || !root || !isFloatKey2(key) || isFloatRoot(key)) return null;
+  const md = extractBranches(text, fileName, [key]);
+  if (md === null) return null;
+  const removed = deleteNodes(text, fileName, [key]);
+  const body = relevel(md, root.level);
+  if (!removed || body === null) return null;
+  const next = appendBlock(removed.text, doc.eol, formatMarker(pos), body.replace(/\n/g, doc.eol));
+  const after = parseNote(next, fileName);
+  if (after.floats.length !== doc.floats.length + 1 || flattenDoc(after).length !== flattenDoc(doc).length) return null;
+  return { text: next, key: `f${after.floats.length - 1}` };
+}
+
+// Puts a whole floating topic under a title of another floating topic (last child). Its levels adapt to the new place.
+// Returns null when the target is inside the moved topic, or when level 6 would be passed.
+export function floatToFloatChild(text: string, fileName: string, key: string, parentKey: string): EditResult | null {
+  const doc = parseNote(text, fileName);
+  const node = nodeByKey(doc, key);
+  const parent = nodeByKey(doc, parentKey);
+  if (!node || !node.float || !parent || parent.line === undefined || !isFloatRoot(key) || !isFloatKey2(parentKey)) return null;
+  if (parentKey === key || parentKey.startsWith(`${key}.`)) return null;
+  const lines = splitLines(text);
+  const size = node.float.end - node.float.markerLine;
+  const md = lines.slice(node.float.markerLine + 1, node.float.end).join(``).replace(/\r\n?/g, `\n`);
+  const kept = [...lines];
+  kept.splice(node.float.markerLine, size);
+  const without = kept.join(``);
+  // The title that receives the topic is found again by its line, which moves up when the removed block stood above it.
+  const line = parent.line >= node.float.end ? parent.line - size : parent.line;
+  const receiver = flattenDoc(parseNote(without, fileName)).find((e) => isFloatKey2(e.key) && e.node.line === line);
+  if (!receiver) return null;
+  const count = nodeByKey(parseNote(without, fileName), receiver.key)?.children.length ?? 0;
+  const done = insertBranches(without, fileName, receiver.key, count, md);
+  if (!done) return null;
+  const after = parseNote(done.text, fileName);
+  if (flattenDoc(after).length !== flattenDoc(doc).length || after.floats.length !== doc.floats.length - 1) return null;
+  return done;
+}
+
 // Fait entrer un sujet flottant dans la carte, sous `parentKey` au rang `index` : son niveau de titre (et celui de ses
 // sous-titres) s'adapte a l'endroit ou il est depose. Renvoie null si le niveau 6 serait depasse.
 export function floatToBranch(text: string, fileName: string, key: string, parentKey: string, index: number): EditResult | null {

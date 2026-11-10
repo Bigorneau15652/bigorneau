@@ -1932,7 +1932,7 @@ export class MapRenderer {
       this.mapEl.appendChild(ghost);
       d.ghost = ghost;
       // A floating topic carries its sub-titles: they follow the pointer so the whole group can be placed by sight.
-      if (isFloatKey(d.key) && isFloatRoot(d.key)) {
+      if (isFloatKey(d.key) && !this.isList()) {
         const srcBox = src.getBoundingClientRect();
         // The current position fades while the copies move, so the new place can be judged against the old one.
         src.classList.add(`mmw-faded`);
@@ -1997,7 +1997,7 @@ export class MapRenderer {
     const d = this.nodeDrag!;
     if (!d.started) {
       // La racine ne se deplace pas : seul le clic (saisie du titre) lui est utile.
-      if (d.key === `r` || (isFloatKey(d.key) && !isFloatRoot(d.key)) || Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= NODE_DRAG_THRESHOLD) return;
+      if (d.key === `r` || (isFloatKey(d.key) && !isFloatRoot(d.key) && this.isList()) || Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) <= NODE_DRAG_THRESHOLD) return;
       this.startNodeDrag();
       if (!d.started) return;
     }
@@ -2016,6 +2016,10 @@ export class MapRenderer {
     // Hors de la structure : depot libre. Pres d'elle : la case s'y integre a l'endroit montre.
     const wx = (e.clientX - rect.left - this.tx) / this.scale;
     const wy = (e.clientY - rect.top - this.ty) / this.scale;
+    if (isFloatKey(d.key) && !this.isList()) {
+      this.updateFloatDrag(d, wx, wy, left, e.clientY, rect);
+      return;
+    }
     const outside = this.isList() ? wy > this.floatZoneY : this.mainBounds ? !(wx >= this.mainBounds.minX - DETACH_MARGIN_X && wx <= this.mainBounds.maxX + DETACH_MARGIN_X && wy >= this.mainBounds.minY - DETACH_MARGIN_Y && wy <= this.mainBounds.maxY + DETACH_MARGIN_Y) : false;
     if (outside) {
       // Dans la zone flottante de la liste, un sujet flottant ne se deplace pas : il n'y a pas d'ordre a choisir.
@@ -2036,6 +2040,62 @@ export class MapRenderer {
     d.targetId = id;
     this.showPreview(target);
     d.ghost?.classList.toggle(`mmw-ghost-invalid`, d.target === null);
+  }
+
+  // Floating titles dragged on the map. A floating topic dropped on a title of another floating topic becomes its last child. Near the
+  // main structure it joins the map there, elsewhere it moves. A sub-title taken out of its topic becomes a floating topic of its own,
+  // wherever it is dropped outside the topic it comes from.
+  private updateFloatDrag(d: NonNullable<MapRenderer[`nodeDrag`]>, wx: number, wy: number, left: number, clientY: number, rect: DOMRect): void {
+    const isRoot = isFloatRoot(d.key);
+    const rootKey = d.key.split(`.`)[0];
+    const free = { x: (left - rect.left - this.tx) / this.scale, y: (clientY - d.grabY - rect.top - this.ty) / this.scale };
+    const setHover = (key: string | null): void => {
+      for (const el of Array.from(this.mapEl.querySelectorAll(`.mmw-float-hover`))) el.classList.remove(`mmw-float-hover`);
+      if (key) this.els.get(key)?.classList.add(`mmw-float-hover`);
+    };
+    const setMode = (id: string, target: MoveTarget | null, spot: { x: number; y: number } | null, valid: boolean): void => {
+      d.free = spot;
+      d.ghost?.classList.toggle(`mmw-ghost-float`, spot !== null);
+      d.ghost?.classList.toggle(`mmw-ghost-invalid`, !valid);
+      if (d.targetId !== id) {
+        d.targetId = id;
+        this.showPreview(null);
+      }
+      d.target = target;
+    };
+    // Another floating topic under the pointer: the dragged topic becomes a child of the title hit.
+    if (isRoot) {
+      const hit = this.list.find((n) => isFloatKey(n.key) && !n.key.startsWith(`${d.key}.`) && n.key !== d.key && wx >= n.x && wx <= n.x + n.w && wy >= n.y && wy <= n.y + n.h);
+      if (hit) {
+        setHover(hit.key);
+        setMode(`float|${hit.key}`, { parentKey: hit.key, index: Number.MAX_SAFE_INTEGER }, null, true);
+        return;
+      }
+    }
+    setHover(null);
+    if (isRoot) {
+      const m = this.mainBounds;
+      const outside = m ? !(wx >= m.minX - DETACH_MARGIN_X && wx <= m.maxX + DETACH_MARGIN_X && wy >= m.minY - DETACH_MARGIN_Y && wy <= m.maxY + DETACH_MARGIN_Y) : false;
+      if (outside) {
+        setMode(`free`, null, free, true);
+        return;
+      }
+      // Near the main structure: same choice as for a title of the map (the topic joins the map at the place shown).
+      d.free = null;
+      d.ghost?.classList.remove(`mmw-ghost-float`);
+      const target = this.dropTarget(clientY, left, rect);
+      const id = target ? `${target.parentKey}|${target.index}` : `none`;
+      if (id === d.targetId) return;
+      d.targetId = id;
+      this.showPreview(target);
+      d.ghost?.classList.toggle(`mmw-ghost-invalid`, d.target === null);
+      return;
+    }
+    // Sub-title: still over the topic it comes from, nothing happens; away from it, it becomes a floating topic.
+    const own = this.list.filter((n) => n.key === rootKey || n.key.startsWith(`${rootKey}.`));
+    const inside = own.some((n) => wx >= n.x - DETACH_MARGIN_X && wx <= n.x + n.w + DETACH_MARGIN_X && wy >= n.y - DETACH_MARGIN_Y && wy <= n.y + n.h + DETACH_MARGIN_Y);
+    if (inside) setMode(`none`, null, null, false);
+    else setMode(`free`, null, free, true);
   }
 
   // Emplacement vise par la souris : la hauteur choisit l'intervalle entre deux cases, la position horizontale de la
@@ -2179,6 +2239,7 @@ export class MapRenderer {
     d.ghost?.remove();
     for (const f of d.followers) f.el.remove();
     for (const el of Array.from(this.mapEl.querySelectorAll(`.mmw-faded`))) el.classList.remove(`mmw-faded`);
+    for (const el of Array.from(this.mapEl.querySelectorAll(`.mmw-float-hover`))) el.classList.remove(`mmw-float-hover`);
     this.mapEl.classList.remove(`mmw-dragging`);
     this.dropLine = null;
     this.dropLineEl?.remove();
@@ -2188,6 +2249,10 @@ export class MapRenderer {
     if (!cancel && d.free) {
       this.resetPreview();
       this.callbacks.onEdit?.({ kind: `float`, key: d.key, keys: [d.key], ...(this.isList() ? {} : d.free) });
+    } else if (target && isFloatKey(target.parentKey)) {
+      // A floating topic dropped on a title of another floating topic.
+      this.resetPreview();
+      this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: [d.key], parentKey: target.parentKey, index: target.index });
     } else if (target && this.isList()) {
       this.callbacks.onEdit?.({ kind: `move`, key: d.key, keys: this.dragKeys(d.key), parentKey: target.parentKey, index: target.index });
     } else if (target && this.previewDoc) {
