@@ -1912,9 +1912,12 @@ export class MapRenderer {
       // A floating topic carries its sub-titles: they follow the pointer so the whole group can be placed by sight.
       if (isFloatKey(d.key) && isFloatRoot(d.key)) {
         const srcBox = src.getBoundingClientRect();
+        // The current position fades while the copies move, so the new place can be judged against the old one.
+        src.classList.add(`mmw-faded`);
         for (const [k, el] of this.els) {
           if (!k.startsWith(`${d.key}.`)) continue;
           const copy = el.cloneNode(true) as HTMLElement;
+          el.classList.add(`mmw-faded`);
           copy.classList.remove(`mmw-selected`);
           copy.classList.add(`mmw-ghost`);
           copy.style.left = ``;
@@ -2117,6 +2120,7 @@ export class MapRenderer {
     if (this.mapEl.hasPointerCapture(d.pointerId)) this.mapEl.releasePointerCapture(d.pointerId);
     d.ghost?.remove();
     for (const f of d.followers) f.el.remove();
+    for (const el of Array.from(this.mapEl.querySelectorAll(`.mmw-faded`))) el.classList.remove(`mmw-faded`);
     this.mapEl.classList.remove(`mmw-dragging`);
     this.dropLine = null;
     this.dropLineEl?.remove();

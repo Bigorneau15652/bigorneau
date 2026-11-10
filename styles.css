@@ -645,6 +645,11 @@
   pointer-events: none;
 }
 
+.mmw-node.mmw-faded {
+  opacity: 0.25;
+  transition: opacity 0.15s;
+}
+
 .mmw-node.mmw-ghost.mmw-ghost-invalid {
   outline-color: var(--text-error);
   opacity: 0.55;
