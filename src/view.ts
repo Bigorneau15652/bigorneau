@@ -1249,11 +1249,13 @@ export class MindmapView extends ItemView {
     const node = nodeByKey(live, key) ?? nodeByKey(this.doc, key)!;
     const last = editor.lastLine();
     const headLine = Math.min(node.line ?? 0, last);
+    // The title of the map is the note itself: its place on screen starts at the very top, so that the properties of the header are seen.
+    const topLine = node === live.root ? 0 : headLine;
 
     if (view.getMode() !== `source`) {
       if (focus) await view.setState({ ...view.getState(), mode: `source` }, { history: false });
       else {
-        leaf.setEphemeralState({ line: headLine });
+        leaf.setEphemeralState({ line: topLine });
         return;
       }
     }
@@ -1272,6 +1274,9 @@ export class MindmapView extends ItemView {
     if (mode === `start`) cursor = { line: hasText ? first : headLine, ch: 0 };
     else if (mode === `last` && remembered && remembered.line >= first && remembered.line <= endLine) cursor = remembered;
 
+    // Root without text of its own: the cursor goes to the first line of the note (inside the properties when there are some), a
+    // place that no hidden part can take, instead of a hidden comment line that would push the cursor into the first title.
+    if (node === live.root && !hasText) cursor = { line: 0, ch: 0 };
     // Paragraphe vide et passage dans la note : une ligne vierge est ouverte sous le titre pour y ecrire.
     // Elle disparait si on la quitte sans rien ecrire.
     const noteCm = (editor as unknown as { cm?: EditorView }).cm;
@@ -1284,10 +1289,10 @@ export class MindmapView extends ItemView {
 
     const cm = noteCm;
     if (cm) {
-      revealRange(cm, { headLine, endLine, cursorLine: cursor.line, cursorCh: cursor.ch });
+      revealRange(cm, { headLine: topLine, endLine, cursorLine: cursor.line, cursorCh: cursor.ch });
     } else {
       editor.setCursor(cursor);
-      editor.scrollIntoView({ from: { line: headLine, ch: 0 }, to: { line: endLine, ch: 0 } }, true);
+      editor.scrollIntoView({ from: { line: topLine, ch: 0 }, to: { line: endLine, ch: 0 } }, true);
     }
     if (focus) {
       this.app.workspace.setActiveLeaf(leaf, { focus: true });
