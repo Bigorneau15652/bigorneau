@@ -230,6 +230,8 @@ export class MapRenderer {
     grabX: number;
     grabY: number;
     ghost: HTMLElement | null;
+    // Copies of the sub-titles of a dragged floating topic, with their screen offset from the main ghost.
+    followers: { el: HTMLElement; dx: number; dy: number }[];
     keyOf: Map<MmNode, string>;
     targetId: string;
     target: MoveTarget | null;
@@ -1547,6 +1549,7 @@ export class MapRenderer {
             grabX: e.clientX - box.left,
             grabY: e.clientY - box.top,
             ghost: null,
+            followers: [],
             keyOf: new Map(),
             targetId: ``,
             target: null,
@@ -1906,6 +1909,24 @@ export class MapRenderer {
       ghost.style.transform = `scale(${this.scale})`;
       this.mapEl.appendChild(ghost);
       d.ghost = ghost;
+      // A floating topic carries its sub-titles: they follow the pointer so the whole group can be placed by sight.
+      if (isFloatKey(d.key) && isFloatRoot(d.key)) {
+        const srcBox = src.getBoundingClientRect();
+        for (const [k, el] of this.els) {
+          if (!k.startsWith(`${d.key}.`)) continue;
+          const copy = el.cloneNode(true) as HTMLElement;
+          copy.classList.remove(`mmw-selected`);
+          copy.classList.add(`mmw-ghost`);
+          copy.style.left = ``;
+          copy.style.top = ``;
+          copy.style.visibility = ``;
+          copy.style.transformOrigin = `0 0`;
+          copy.style.transform = `scale(${this.scale})`;
+          this.mapEl.appendChild(copy);
+          const box = el.getBoundingClientRect();
+          d.followers.push({ el: copy, dx: box.left - srcBox.left, dy: box.top - srcBox.top });
+        }
+      }
     }
     this.mapEl.setPointerCapture(d.pointerId);
     this.mapEl.classList.add(`mmw-dragging`);
@@ -1926,6 +1947,10 @@ export class MapRenderer {
     if (d.ghost) {
       d.ghost.style.left = `${left - host.left}px`;
       d.ghost.style.top = `${e.clientY - d.grabY - host.top}px`;
+      for (const f of d.followers) {
+        f.el.style.left = `${left - host.left + f.dx}px`;
+        f.el.style.top = `${e.clientY - d.grabY - host.top + f.dy}px`;
+      }
     }
     // Hors de la structure : depot libre. Pres d'elle : la case s'y integre a l'endroit montre.
     const wx = (e.clientX - rect.left - this.tx) / this.scale;
@@ -2091,6 +2116,7 @@ export class MapRenderer {
     this.nodeDrag = null;
     if (this.mapEl.hasPointerCapture(d.pointerId)) this.mapEl.releasePointerCapture(d.pointerId);
     d.ghost?.remove();
+    for (const f of d.followers) f.el.remove();
     this.mapEl.classList.remove(`mmw-dragging`);
     this.dropLine = null;
     this.dropLineEl?.remove();
