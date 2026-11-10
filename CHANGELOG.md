@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.34.2
+
+Fixed: a click on the title of the map now really brings the note back to its very top, with its properties, in the mode that shows all the chapters. The scroll of the editor is set to the top directly, and set again a moment later because the live preview measures its blocks late.
+
+Corrigé : un clic sur le titre de la carte ramène maintenant vraiment la note tout en haut, avec ses propriétés, dans le mode qui affiche tous les chapitres. Le défilement de l'éditeur est remis directement en haut, puis une seconde fois un instant plus tard car l'aperçu en direct mesure ses blocs avec retard.
+
 ## 0.34.1
 
 Fixed: when the note is shown in live preview or in reading mode, a click on the title of the map now brings the note back to its very top, with its properties, as it already did in the mode that shows only the active chapter. Before, the note stayed where it was (for example on the first title).
