@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.37.0
+
+Added: four new types of charts in the chart editor, which now chooses the type in a menu: areas (filled surfaces, stacked or not), donut (a pie with a hole where the total is written), scatter (the first column of the table gives the X values, each series gives the Y values, points of different shapes in the black and white style) and radar (spider web: each category is an axis, each series a polygon, three categories at least). They use the colour styles, the values shown, the legend places and the export like the other types. The editor shows only the options that mean something for the chosen type.
+
+Ajouté : quatre nouveaux types de graphiques dans l'éditeur de graphiques, dont le type se choisit maintenant dans un menu : aires (surfaces remplies, empilées ou non), anneau (un graphique en secteurs avec un trou où s'écrit le total), nuage de points (la première colonne du tableau donne les valeurs X, chaque série donne les valeurs Y, des points de formes différentes dans le style noir et blanc) et radar (toile d'araignée : chaque catégorie est un axe, chaque série un polygone, trois catégories au moins). Ils utilisent les styles de couleurs, les valeurs affichées, les places de la légende et l'export comme les autres types. L'éditeur ne montre que les options qui ont un sens pour le type choisi.
+
 ## 0.36.2
 
 Changed: in the chart editor, a box "My table has headers" (as in Excel) replaces the automatic guess of version 0.36.1, for pasted cells and for imported files. Checked (the default): the first row gives the names of the series. Unchecked: the first row is data and the series have no name. The choice is written in the block of a chart linked to a file (header: false) and used again by the Update button.

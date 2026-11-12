@@ -43,7 +43,7 @@ test(`graphique : valeurs invalides, couleurs et blocs trouves dans une note`, (
   assert.equal(cleanColor(`#12345`), null);
   // An empty block gives the default chart; unknown lines are ignored.
   assert.deepEqual(parseChart(``), defaultChart());
-  assert.equal(parseChart(`type: radar\nfoo: bar`).type, `bar`);
+  assert.equal(parseChart(`type: camembert\nfoo: bar`).type, `bar`);
   const note = [`# T`, ``, "```bigorneau-chart", `type: pie`, `data:`, `;V`, `A;1`, "```", ``, "```js", `x`, "```", "```bigorneau-chart", `type: bar`].join(`\n`);
   const found = findCharts(note);
   assert.equal(found.length, 1);
@@ -140,4 +140,38 @@ test(`graphique : styles de couleurs, legende placee, valeurs et pourcentages`, 
   // No legend: the names of the series are not drawn.
   assert.ok(!renderChart({ ...spec, legend: `none`, palette: `default`, series: spec.series.map((x, i) => ({ ...x, name: `Zorglub${i}` })) }).includes(`Zorglub`));
   assert.ok(renderChart({ ...spec, legend: `left`, palette: `default`, series: spec.series.map((x, i) => ({ ...x, name: `Zorglub${i}` })) }).includes(`Zorglub0`));
+});
+
+test(`graphique : aires, anneau, nuage de points et radar`, () => {
+  const base = parseChart([`type: area`, `stacked: true`, `values: both`, `legend: top`, `data:`, `;A;B`, `x;1;3`, `y;2;`, `z;4;2`, `w;3;1`].join(`\n`));
+  assert.equal(base.type, `area`);
+  assert.equal(base.stacked, true);
+  for (const type of [`bar`, `line`, `area`, `pie`, `donut`, `scatter`, `radar`] as const) {
+    // The type is written and read back; the grid and the stacking are written only where they mean something.
+    const spec = { ...base, type };
+    assert.deepEqual(parseChart(serializeChart(spec)).type, type);
+    assert.equal(serializeChart(spec).includes(`stacked:`), type === `bar` || type === `area`, type);
+    assert.equal(serializeChart(spec).includes(`grid:`), type !== `pie` && type !== `donut`, type);
+    for (const legend of [`top`, `bottom`, `left`, `right`, `none`] as const) {
+      for (const palette of [`default`, `gray`, `pastel`] as const) {
+        for (const stacked of [false, true]) {
+          const svg = renderChart({ ...spec, legend, palette, stacked }, { decimal: `,` });
+          assert.ok(!/NaN|undefined|Infinity/.test(svg), `${type} ${legend} ${palette}`);
+          wellFormed(svg);
+        }
+      }
+    }
+  }
+  // Areas are filled surfaces; the grey style hatches them; a donut has its total in the hole; a radar needs three axes.
+  assert.ok(renderChart({ ...base, type: `area`, stacked: false, palette: `default` }).includes(`fill-opacity="0.55"`));
+  assert.ok(renderChart({ ...base, type: `area`, palette: `gray` }).includes(`url(#mmw-hatch-0)`));
+  assert.ok(renderChart({ ...base, type: `donut`, series: [{ name: ``, values: [1, 2, 3, 4] }] }).includes(`>10</text>`));
+  assert.ok(renderChart({ ...defaultChart(), type: `donut`, series: [{ name: ``, values: [4, 0, 0] }] }).includes(`fill-rule="evenodd"`));
+  assert.ok(renderChart({ ...base, type: `radar`, categories: [`a`, `b`], series: [{ name: `s`, values: [1, 2] }] }).includes(`—`));
+  // Scatter: the first column gives X, a text that is not a number is replaced by the rank of the row, a series can have empty cells.
+  const scatter = renderChart({ ...base, type: `scatter`, categories: [`1,5`, `abc`, `4`, `10`], showGrid: true });
+  assert.ok(scatter.includes(`<circle`) && !/NaN/.test(scatter));
+  assert.ok(renderChart({ ...base, type: `scatter`, palette: `gray`, series: [0, 1, 2, 3].map((i) => ({ name: `s${i}`, values: [1, 2, 3, 4] })) }).includes(`<rect x=`));
+  // Empty data does not fail.
+  for (const type of [`area`, `donut`, `scatter`, `radar`] as const) assert.ok(renderChart({ ...defaultChart(), type, categories: [``], series: [{ name: ``, values: [null] }] }).startsWith(`<svg`));
 });
