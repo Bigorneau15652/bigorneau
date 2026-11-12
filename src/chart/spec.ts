@@ -106,7 +106,53 @@ export interface ChartSpec {
   showGrid: boolean;
   xTitle: string;
   yTitle: string;
+  // Size of the drawing in pixels (the text keeps its size: only the room around it changes).
+  width: number;
+  height: number;
+  // Text written after every number shown (for example `€`), and number of decimals (null: up to two, as needed).
+  unit: string;
+  decimals: number | null;
+  // Horizontal lines (vertical for horizontal bars) at a value or at the mean of the data, for the charts drawn on axes.
+  lines: ChartLine[];
   source?: ChartSource;
+}
+
+// A threshold line: at a fixed value, or at the mean of all the numbers of the chart. The label is optional.
+export interface ChartLine {
+  kind: `value` | `mean`;
+  value: number;
+  label: string;
+}
+
+export const DEFAULT_WIDTH = 640;
+export const DEFAULT_HEIGHT = 380;
+export const MIN_WIDTH = 320;
+export const MAX_WIDTH = 1600;
+export const MIN_HEIGHT = 200;
+export const MAX_HEIGHT = 1200;
+export const MAX_LINES = 6;
+export const MAX_DECIMALS = 6;
+
+// A size kept between the limits and rounded to a whole number of pixels.
+export function clampSize(value: number, min: number, max: number, fallback: number): number {
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
+}
+
+// One line of the block, `50 | Target` or `mean | Mean`, read as a threshold line (null when it cannot be read).
+export function parseLine(text: string): ChartLine | null {
+  const bar = text.indexOf(`|`);
+  const head = (bar < 0 ? text : text.slice(0, bar)).trim().toLowerCase();
+  const label = cleanText(bar < 0 ? `` : text.slice(bar + 1));
+  if (head === `mean` || head === `average` || head === `moyenne`) return { kind: `mean`, value: 0, label };
+  const n = parseNumber(head);
+  return n === null || Number.isNaN(n) ? null : { kind: `value`, value: n, label };
+}
+
+// The text of a threshold line, as written in the block.
+export function lineText(line: ChartLine): string {
+  const head = line.kind === `mean` ? `mean` : String(line.value);
+  const label = cleanText(line.label).replace(/\|/g, ` `);
+  return label === `` ? head : `${head} | ${label}`;
 }
 
 export function defaultChart(): ChartSpec {
@@ -124,6 +170,11 @@ export function defaultChart(): ChartSpec {
     showGrid: true,
     xTitle: ``,
     yTitle: ``,
+    width: DEFAULT_WIDTH,
+    height: DEFAULT_HEIGHT,
+    unit: ``,
+    decimals: null,
+    lines: [],
   };
 }
 
@@ -212,6 +263,16 @@ export function parseChart(source: string): ChartSpec {
     else if (key === `legend`) spec.legend = LEGEND_WORDS[value.trim().toLowerCase()] ?? spec.legend;
     else if (key === `palette`) spec.palette = (CHART_PALETTES as string[]).includes(value.trim().toLowerCase()) ? (value.trim().toLowerCase() as ChartPalette) : spec.palette;
     else if (key === `grid`) spec.showGrid = readBool(value, spec.showGrid);
+    else if (key === `width`) spec.width = clampSize(Number(value.trim()), MIN_WIDTH, MAX_WIDTH, spec.width);
+    else if (key === `height`) spec.height = clampSize(Number(value.trim()), MIN_HEIGHT, MAX_HEIGHT, spec.height);
+    else if (key === `unit`) spec.unit = cleanText(value).slice(0, 12);
+    else if (key === `decimals`) {
+      const d = /^\d+$/.test(value.trim()) ? Number(value.trim()) : NaN;
+      spec.decimals = Number.isFinite(d) ? Math.min(MAX_DECIMALS, d) : null;
+    } else if (key === `line`) {
+      const line = parseLine(value);
+      if (line && spec.lines.length < MAX_LINES) spec.lines.push(line);
+    }
     else if (key === `source`) sourceLines.path = cleanText(value);
     else if (key === `sheet`) sourceLines.sheet = cleanText(value);
     else if (key === `range`) sourceLines.range = cleanText(value);
@@ -288,6 +349,11 @@ export function serializeChart(spec: ChartSpec): string {
   out.push(`legend: ${spec.legend}`);
   out.push(`palette: ${spec.palette}`);
   if (hasAxes(spec.type) || spec.type === `radar`) out.push(`grid: ${spec.showGrid}`);
+  if (spec.width !== DEFAULT_WIDTH) out.push(`width: ${clampSize(spec.width, MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH)}`);
+  if (spec.height !== DEFAULT_HEIGHT) out.push(`height: ${clampSize(spec.height, MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT)}`);
+  if (spec.unit.trim() !== ``) out.push(`unit: ${cleanText(spec.unit).slice(0, 12)}`);
+  if (spec.decimals !== null) out.push(`decimals: ${Math.min(MAX_DECIMALS, Math.max(0, Math.round(spec.decimals)))}`);
+  if (hasAxes(spec.type) || spec.type === `scatter`) for (const line of spec.lines.slice(0, MAX_LINES)) out.push(`line: ${lineText(line)}`);
   if (spec.colors.some((c) => cleanColor(c) !== null)) out.push(`colors: ${spec.colors.map((c) => cleanColor(c) ?? ``).join(`, `)}`);
   if (spec.source) {
     out.push(`source: ${cleanText(spec.source.path)}`);

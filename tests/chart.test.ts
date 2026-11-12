@@ -175,3 +175,34 @@ test(`graphique : aires, anneau, nuage de points et radar`, () => {
   // Empty data does not fail.
   for (const type of [`area`, `donut`, `scatter`, `radar`] as const) assert.ok(renderChart({ ...defaultChart(), type, categories: [``], series: [{ name: ``, values: [null] }] }).startsWith(`<svg`));
 });
+
+test(`graphique : taille, unite, decimales et lignes de seuil dans le bloc`, () => {
+  const text = [`type: bar`, `values: value`, `width: 900`, `height: 5000`, `unit: €`, `decimals: 1`, `line: 4 | Objectif`, `line: moyenne | Moy`, `line: abc`, `data:`, `;A`, `x;2`, `y;6`].join(`\n`);
+  const spec = parseChart(text);
+  assert.equal(spec.width, 900);
+  assert.equal(spec.height, 1200);
+  assert.equal(spec.unit, `€`);
+  assert.equal(spec.decimals, 1);
+  assert.deepEqual(spec.lines.map((l) => l.kind), [`value`, `mean`]);
+  // Written and read again, the same values come back; the default size is not written.
+  const again = parseChart(serializeChart(spec));
+  assert.deepEqual([again.width, again.height, again.unit, again.decimals, again.lines.length], [900, 1200, `€`, 1, 2]);
+  assert.ok(!serializeChart(defaultChart()).includes(`width:`));
+  // An old block without these lines keeps the default values.
+  const old = parseChart([`type: bar`, `data:`, `;A`, `x;1`].join(`\n`));
+  assert.deepEqual([old.width, old.height, old.unit, old.decimals, old.lines.length], [640, 380, ``, null, 0]);
+  // The size changes the picture but not the size of the text.
+  const small = renderChart({ ...spec, width: 400, height: 300 }, { decimal: `,` });
+  const big = renderChart({ ...spec, width: 900, height: 600 }, { decimal: `,` });
+  assert.ok(small.includes(`viewBox="0 0 400 300"`) && big.includes(`viewBox="0 0 900 600"`));
+  assert.ok(small.includes(`font-size="12"`) && big.includes(`font-size="12"`));
+  // Unit, decimals and lines are drawn; the mean of 2 and 6 is 4.
+  assert.ok(big.includes(`2,0 €`) && big.includes(`6,0 €`));
+  assert.ok(big.includes(`Objectif`) && big.includes(`Moy (4,0 €)`));
+  assert.ok(big.includes(`stroke-dasharray`));
+  wellFormed(big);
+  assert.equal(valueText(`value`, 5, 20, `,`, { unit: `%`, decimals: 0 }), `5 %`);
+  assert.equal(formatNumber(2, `.`, 2), `2.00`);
+  // Lines are also drawn for horizontal bars, lines and scatter charts.
+  for (const extra of [{ horizontal: true }, { type: `line` as const }, { type: `scatter` as const }]) wellFormed(renderChart({ ...spec, ...extra }, { decimal: `.` }));
+});
