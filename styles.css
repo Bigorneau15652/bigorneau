@@ -2981,25 +2981,63 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
 .mmw-chart-handle {
   position: absolute;
   box-sizing: border-box;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--interactive-accent);
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--interactive-accent);
   background: var(--background-primary);
-  border-radius: 3px;
-  opacity: 0;
-  pointer-events: auto;
+  border-radius: 2px;
+  display: none;
   touch-action: none;
   z-index: 2;
 }
 
-.mmw-chart-block:hover .mmw-chart-handle {
-  opacity: 0.9;
+.mmw-chart-selected .mmw-chart-handle {
+  display: block;
 }
 
-.mmw-chart-handle-nw { top: 3px; left: 3px; cursor: nwse-resize; }
-.mmw-chart-handle-ne { top: 3px; right: 3px; cursor: nesw-resize; }
-.mmw-chart-handle-sw { bottom: 3px; left: 3px; cursor: nesw-resize; }
-.mmw-chart-handle-se { bottom: 3px; right: 3px; cursor: nwse-resize; }
+.mmw-chart-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.mmw-chart-handle-n { top: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+.mmw-chart-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.mmw-chart-handle-e { top: calc(50% - 5px); right: -5px; cursor: ew-resize; }
+.mmw-chart-handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.mmw-chart-handle-s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+.mmw-chart-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.mmw-chart-handle-w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
+
+.mmw-chart-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  z-index: 3;
+}
+
+.mmw-chart-selected .mmw-chart-tools {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.mmw-chart-zoom-button {
+  display: none;
+}
+
+.mmw-chart-selected .mmw-chart-zoom-button {
+  display: flex;
+}
+
+.mmw-chart-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-modal, 50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  cursor: zoom-out;
+}
 
 .mmw-chart-help {
   margin: 0 0 8px;
@@ -3146,6 +3184,7 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
 .mmw-chart-block {
   position: relative;
   margin: 8px 0;
+  padding: 8px;
 }
 
 .mmw-chart-caption {
@@ -3156,9 +3195,6 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
 }
 
 .mmw-chart-edit {
-  position: absolute;
-  top: 6px;
-  right: 6px;
   opacity: 0.6;
 }
 

@@ -97,11 +97,49 @@ export const CHARTS_SCRIPT: OfficialScript = {
       });
     };
 
+    // Shows a chart enlarged over the note, on a dark ground: a click anywhere or the Escape key closes it.
+    const zoomChart = (host: HTMLElement, svgText: string, width: number, height: number): void => {
+      const doc = host.ownerDocument;
+      const overlay = doc.body.createDiv({ cls: `mmw-chart-zoom` });
+      const node = appendSvgDocument(overlay, svgText);
+      if (node) {
+        const view = doc.defaultView ?? window;
+        const scale = Math.min((view.innerWidth * 0.9) / width, (view.innerHeight * 0.9) / height, 3);
+        node.style.width = `${Math.round(width * scale)}px`;
+        node.style.height = `${Math.round(height * scale)}px`;
+      }
+      const close = (): void => {
+        doc.removeEventListener(`keydown`, onKey, true);
+        overlay.remove();
+      };
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key !== `Escape`) return;
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      };
+      doc.addEventListener(`keydown`, onKey, true);
+      overlay.addEventListener(`click`, close);
+    };
+
+    // The eight handles of a chart: the corners (width and height) and the middle of the sides (one of them).
+    const HANDLES: { id: string; sx: number; sy: number }[] = [
+      { id: `nw`, sx: -1, sy: -1 },
+      { id: `n`, sx: 0, sy: -1 },
+      { id: `ne`, sx: 1, sy: -1 },
+      { id: `e`, sx: 1, sy: 0 },
+      { id: `se`, sx: 1, sy: 1 },
+      { id: `s`, sx: 0, sy: 1 },
+      { id: `sw`, sx: -1, sy: 1 },
+      { id: `w`, sx: -1, sy: 0 },
+    ];
+
     api.registerCodeBlock(CHART_LANG, (source, el, ctx) => {
       el.empty();
       el.addClass(`mmw-chart-block`);
+      const fr = api.language() === `fr`;
       const spec = parseChart(source);
-      // The drawing sits in a frame with a handle on each corner: dragging a handle draws the chart again at the new size, and the text keeps its size.
+      // The drawing sits in a frame. A click selects it, as for a picture: eight handles and a small bar (magnifier and code) appear. Dragging a handle draws the chart again at the new size, and the text keeps its size.
       const frame = el.createDiv({ cls: `mmw-chart-frame` });
       const host = frame.createDiv({ cls: `mmw-chart-host` });
       const draw = (): void => {
@@ -110,21 +148,32 @@ export const CHARTS_SCRIPT: OfficialScript = {
         frame.style.maxWidth = `${spec.width}px`;
       };
       draw();
-      for (const corner of [`nw`, `ne`, `sw`, `se`]) {
-        const handle = frame.createDiv({ cls: `mmw-chart-handle mmw-chart-handle-${corner}`, attr: { "aria-label": api.language() === `fr` ? `Tirer pour redimensionner` : `Drag to resize` } });
-        const sx = corner.endsWith(`w`) ? -1 : 1;
-        const sy = corner.startsWith(`n`) ? -1 : 1;
+
+      const select = (on: boolean): void => frame.toggleClass(`mmw-chart-selected`, on);
+      frame.addEventListener(`pointerdown`, () => select(true));
+      const outside = (event: Event): void => {
+        if (!el.isConnected) {
+          el.ownerDocument.removeEventListener(`pointerdown`, outside, true);
+          return;
+        }
+        if (!frame.contains(event.target as Node)) select(false);
+      };
+      el.ownerDocument.addEventListener(`pointerdown`, outside, true);
+
+      for (const h of HANDLES) {
+        const handle = frame.createDiv({ cls: `mmw-chart-handle mmw-chart-handle-${h.id}`, attr: { "aria-label": fr ? `Tirer pour redimensionner` : `Drag to resize` } });
         handle.addEventListener(`pointerdown`, (down: PointerEvent) => {
           down.preventDefault();
           down.stopPropagation();
+          select(true);
           handle.setPointerCapture(down.pointerId);
           const startW = spec.width;
           const startH = spec.height;
           const shown = host.getBoundingClientRect().width;
           const scale = shown > 0 ? shown / startW : 1;
           const move = (event: PointerEvent): void => {
-            spec.width = clampSize(startW + (sx * (event.clientX - down.clientX)) / scale, MIN_WIDTH, MAX_WIDTH, startW);
-            spec.height = clampSize(startH + (sy * (event.clientY - down.clientY)) / scale, MIN_HEIGHT, MAX_HEIGHT, startH);
+            if (h.sx !== 0) spec.width = clampSize(startW + (h.sx * (event.clientX - down.clientX)) / scale, MIN_WIDTH, MAX_WIDTH, startW);
+            if (h.sy !== 0) spec.height = clampSize(startH + (h.sy * (event.clientY - down.clientY)) / scale, MIN_HEIGHT, MAX_HEIGHT, startH);
             draw();
           };
           const end = (): void => {
@@ -140,8 +189,18 @@ export const CHARTS_SCRIPT: OfficialScript = {
         // A double click on a handle must not open the editor.
         handle.addEventListener(`dblclick`, (event) => event.stopPropagation());
       }
+
       if (spec.title !== ``) el.createDiv({ cls: `mmw-chart-caption`, text: spec.title });
-      const button = el.createEl(`button`, { cls: `mmw-chart-edit clickable-icon`, attr: { type: `button`, "aria-label": editorName() } });
+
+      // Small bar at the top right: the code button is always there, the magnifier appears when the chart is selected.
+      const tools = frame.createDiv({ cls: `mmw-chart-tools` });
+      const zoom = tools.createEl(`button`, { cls: `mmw-chart-zoom-button clickable-icon`, attr: { type: `button`, "aria-label": fr ? `Agrandir` : `Enlarge` } });
+      obsidian.setIcon(zoom, `zoom-in`);
+      zoom.addEventListener(`click`, (event) => {
+        event.stopPropagation();
+        zoomChart(host, renderChart(spec, { decimal: decimal() }), spec.width, spec.height);
+      });
+      const button = tools.createEl(`button`, { cls: `mmw-chart-edit clickable-icon`, attr: { type: `button`, "aria-label": editorName() } });
       obsidian.setIcon(button, ICON_CHART);
       const open = (): void => void openForBlock(ctx.sourcePath, ctx.getSectionInfo(el)?.lineStart);
       button.addEventListener(`click`, open);
@@ -168,8 +227,8 @@ export const CHARTS_SCRIPT: OfficialScript = {
         id: `editor`,
         title: { fr: `Graphiques`, en: `Charts` },
         text: {
-          fr: `Le module Graphiques, désactivé par défaut (bouton bigorneau du panneau), ajoute un bouton Éditeur de graphiques. La fenêtre propose sept types (barres, courbes, aires, secteurs, anneau, nuage de points, radar), un titre qui devient la légende de la figure dans l'export, un tableau de nombres à saisir, à coller depuis un tableur ou à importer d'un fichier CSV, Excel (xlsx) ou LibreOffice (ods) du coffre ou de l'ordinateur (feuille, plage et inversion des lignes et des colonnes au choix, bouton Actualiser pour relire un fichier du coffre ; les nombres sont copiés dans le graphique), un style de couleurs (défaut, acide, pastel, camaïeux de bleus, de rouges ou de verts, noir et blanc avec des hachures) puis, au choix, la couleur de chaque série ou de chaque part, les valeurs affichées (aucune, données, pourcentages ou les deux), la légende (dessus, dessous, à gauche, à droite ou aucune), la grille, les titres des axes, les barres horizontales ou empilées, une unité et un nombre de décimales pour les nombres affichés, des lignes de seuil ou de moyenne, la taille du dessin, et un aperçu en direct. Le graphique est écrit dans la note sous la forme d'un bloc de texte nommé bigorneau-chart : l'aperçu en direct et la lecture le dessinent, l'export PDF et HTML le dessinent aussi, avec le titre comme légende. Pour changer la taille, tirez les poignées des coins du dessin dans la note : l'écriture ne se déforme pas. Pour le modifier, double-cliquez sur le dessin, ou cliquez sur l'icône de graphique en haut à droite, ou placez le curseur dans le graphique puis cliquez sur le bouton Éditeur de graphiques.`,
-          en: `The Charts module, off by default (bigorneau button of the panel), adds a Chart editor button. The window offers seven types (bars, lines, areas, pie, donut, scatter, radar), a title that becomes the caption of the figure in the export, a table of numbers to type, to paste from a spreadsheet or to import from a CSV, Excel (xlsx) or LibreOffice (ods) file of the vault or of the computer (sheet, range and swap of rows and columns at will, an Update button to read a file of the vault again; the numbers are copied into the chart), a colour style (default, acid, pastel, shades of blue, red or green, black and white with hatching) then, as you wish, the colour of each series or slice, the values shown (none, data, percentages or both), the legend (above, below, left, right or none), the grid, the titles of the axes, horizontal or stacked bars (areas too), a unit and a number of decimals for the numbers shown, threshold or mean lines, the size of the drawing, and a live preview. For a scatter chart, the first column of the table gives the X values and each series gives the Y values; for a radar, each category is an axis (at least three are needed). The chart is written in the note as a block of text named bigorneau-chart: live preview and reading mode draw it, and the PDF and HTML export draw it too, with the title as caption. To change the size, drag the handles at the corners of the drawing in the note: the text is not distorted. To edit it, double-click the drawing, or click the chart icon at its top right, or put the cursor in the chart and click the Chart editor button.`,
+          fr: `Le module Graphiques, désactivé par défaut (bouton bigorneau du panneau), ajoute un bouton Éditeur de graphiques. La fenêtre propose sept types (barres, courbes, aires, secteurs, anneau, nuage de points, radar), un titre qui devient la légende de la figure dans l'export, un tableau de nombres à saisir, à coller depuis un tableur ou à importer d'un fichier CSV, Excel (xlsx) ou LibreOffice (ods) du coffre ou de l'ordinateur (feuille, plage et inversion des lignes et des colonnes au choix, bouton Actualiser pour relire un fichier du coffre ; les nombres sont copiés dans le graphique), un style de couleurs (défaut, acide, pastel, camaïeux de bleus, de rouges ou de verts, noir et blanc avec des hachures) puis, au choix, la couleur de chaque série ou de chaque part, les valeurs affichées (aucune, données, pourcentages ou les deux), la légende (dessus, dessous, à gauche, à droite ou aucune), la grille, les titres des axes, les barres horizontales ou empilées, une unité et un nombre de décimales pour les nombres affichés, des lignes de seuil ou de moyenne, la taille du dessin, et un aperçu en direct. Le graphique est écrit dans la note sous la forme d'un bloc de texte nommé bigorneau-chart : l'aperçu en direct et la lecture le dessinent, l'export PDF et HTML le dessinent aussi, avec le titre comme légende. Un clic sur le dessin le sélectionne comme une image : tirez les poignées des coins ou des côtés pour changer sa taille (l'écriture ne se déforme pas), ou cliquez sur la loupe pour l'agrandir. Pour le modifier, double-cliquez sur le dessin, ou cliquez sur l'icône de graphique en haut à droite, ou placez le curseur dans le graphique puis cliquez sur le bouton Éditeur de graphiques.`,
+          en: `The Charts module, off by default (bigorneau button of the panel), adds a Chart editor button. The window offers seven types (bars, lines, areas, pie, donut, scatter, radar), a title that becomes the caption of the figure in the export, a table of numbers to type, to paste from a spreadsheet or to import from a CSV, Excel (xlsx) or LibreOffice (ods) file of the vault or of the computer (sheet, range and swap of rows and columns at will, an Update button to read a file of the vault again; the numbers are copied into the chart), a colour style (default, acid, pastel, shades of blue, red or green, black and white with hatching) then, as you wish, the colour of each series or slice, the values shown (none, data, percentages or both), the legend (above, below, left, right or none), the grid, the titles of the axes, horizontal or stacked bars (areas too), a unit and a number of decimals for the numbers shown, threshold or mean lines, the size of the drawing, and a live preview. For a scatter chart, the first column of the table gives the X values and each series gives the Y values; for a radar, each category is an axis (at least three are needed). The chart is written in the note as a block of text named bigorneau-chart: live preview and reading mode draw it, and the PDF and HTML export draw it too, with the title as caption. A click on the drawing selects it like a picture: drag the handles at the corners or the sides to change its size (the text is not distorted), or click the magnifier to enlarge it. To edit it, double-click the drawing, or click the chart icon at its top right, or put the cursor in the chart and click the Chart editor button.`,
         },
         keywords: { fr: `graphique graphiques courbe barres secteurs camembert histogramme tableau donnees excel csv`, en: `chart charts graph bars lines pie histogram data table excel csv` },
       },

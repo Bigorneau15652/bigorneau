@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.38.2
+
+Changed: a chart in the note now behaves like a picture. A click selects it: eight small squares appear on its border (the four corners resize the width and the height, the middle of each side resizes only one of them) with a small bar at the top right holding a magnifier and the code button. The magnifier shows the chart enlarged over the note (a click or the Escape key closes it). A double click still opens the chart editor.
+
+Modifié : un graphique dans la note se comporte maintenant comme une image. Un clic le sélectionne : huit petits carrés apparaissent sur son bord (les quatre coins changent la largeur et la hauteur, le milieu de chaque côté change seulement l'une des deux) avec une petite barre en haut à droite qui contient une loupe et le bouton du code. La loupe affiche le graphique agrandi par-dessus la note (un clic ou la touche Échap le ferme). Un double clic ouvre toujours l'éditeur de graphiques.
+
 ## 0.38.1
 
 Fixed: the resize handles of a chart were drawn half outside of the drawing and cut by the note. They are now drawn inside the corners of the drawing.
