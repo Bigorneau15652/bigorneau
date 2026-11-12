@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.36.2
+
+Changed: in the chart editor, a box "My table has headers" (as in Excel) replaces the automatic guess of version 0.36.1, for pasted cells and for imported files. Checked (the default): the first row gives the names of the series. Unchecked: the first row is data and the series have no name. The choice is written in the block of a chart linked to a file (header: false) and used again by the Update button.
+
+Modifié : dans l'éditeur de graphiques, une case « Mon tableau comporte des en-têtes » (comme dans Excel) remplace la détection automatique de la version 0.36.1, pour les cellules collées et pour les fichiers importés. Cochée (par défaut) : la première ligne donne les noms des séries. Décochée : la première ligne est une ligne de données et les séries n'ont pas de nom. Le choix est écrit dans le bloc d'un graphique lié à un fichier (header: false) et repris par le bouton Actualiser.
+
 ## 0.36.1
 
 Fixed: in the chart editor, when cells are pasted or a file is imported, the first row was always taken as the names of the series, so a first row of data was lost (for example the line Monday when the pasted cells had no row of names). The first row is now taken as data when it holds numbers, and as names of the series otherwise. A box under the pasted cells, set by itself from the text, lets you correct this choice. The series without a name are named 1, 2... in the legend.

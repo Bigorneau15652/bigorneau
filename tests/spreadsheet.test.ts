@@ -68,8 +68,13 @@ test(`tableur : plage, lignes et colonnes inversees, limites`, () => {
 });
 
 test(`tableur : la source d'un graphique est ecrite et relue dans son bloc`, () => {
-  const spec = { ...defaultChart(), source: { path: `Donnees/Ventes 2026.xlsx`, sheet: `Ventes`, range: `A1:C9`, transpose: true } };
+  const spec = { ...defaultChart(), source: { path: `Donnees/Ventes 2026.xlsx`, sheet: `Ventes`, range: `A1:C9`, transpose: true, header: true } };
   assert.deepEqual(parseChart(serializeChart(spec)), spec);
   assert.ok(chartBlock(spec).includes(`source: Donnees/Ventes 2026.xlsx\nsheet: Ventes\nrange: A1:C9\ntranspose: true\ndata:`));
+  // Headers are the default; a table without headers is written and read back.
+  assert.equal(parseChart(`source: a.csv\ndata:\n;A\nx;1`).source?.header, true);
+  const bare = { ...spec, source: { ...spec.source, header: false } };
+  assert.ok(chartBlock(bare).includes(`header: false\ndata:`));
+  assert.deepEqual(parseChart(serializeChart(bare)), bare);
   assert.equal(parseChart(`type: bar\n`).source, undefined);
 });

@@ -76,6 +76,8 @@ export interface ChartSource {
   sheet: string;
   range: string;
   transpose: boolean;
+  // The first row of the sheet holds the names of the series (the choice of Excel: "my table has headers").
+  header: boolean;
 }
 
 export interface ChartSpec {
@@ -204,9 +206,10 @@ export function parseChart(source: string): ChartSpec {
     else if (key === `sheet`) sourceLines.sheet = cleanText(value);
     else if (key === `range`) sourceLines.range = cleanText(value);
     else if (key === `transpose`) sourceLines.transpose = readBool(value, false);
+    else if (key === `header`) sourceLines.header = readBool(value, true);
     else if (key === `colors`) colors.push(...value.split(`,`).map((c) => (cleanColor(c) ?? ``)));
   }
-  if (sourceLines.path) spec.source = { path: sourceLines.path, sheet: sourceLines.sheet ?? ``, range: sourceLines.range ?? ``, transpose: sourceLines.transpose ?? false };
+  if (sourceLines.path) spec.source = { path: sourceLines.path, sheet: sourceLines.sheet ?? ``, range: sourceLines.range ?? ``, transpose: sourceLines.transpose ?? false, header: sourceLines.header ?? true };
   const table = parseTable(lines.slice(at).join(`\n`), { header: true });
   if (table) {
     spec.categories = table.categories;
@@ -281,6 +284,7 @@ export function serializeChart(spec: ChartSpec): string {
     if (spec.source.sheet !== ``) out.push(`sheet: ${cleanText(spec.source.sheet)}`);
     if (spec.source.range !== ``) out.push(`range: ${cleanText(spec.source.range)}`);
     if (spec.source.transpose) out.push(`transpose: true`);
+    if (!spec.source.header) out.push(`header: false`);
   }
   out.push(`data:`);
   out.push([``, ...spec.series.map((s) => cell(s.name))].join(`;`));
