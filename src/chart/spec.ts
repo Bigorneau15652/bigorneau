@@ -12,8 +12,56 @@ export const MAX_SERIES = 12;
 export const MAX_CATEGORIES = 200;
 export const MAX_TEXT = 120;
 
-// Colours offered by default, one per series (colour-blind friendly: the Tableau 10 series).
-export const CHART_PALETTE = [`#4e79a7`, `#f28e2b`, `#e15759`, `#76b7b2`, `#59a14f`, `#edc948`, `#b07aa1`, `#ff9da7`, `#9c755f`, `#bab0ac`, `#1f3b5c`, `#7f7f7f`];
+// Styles of colours of a chart.
+export type ChartPalette = `default` | `acid` | `pastel` | `blue` | `red` | `green` | `gray`;
+
+export const CHART_PALETTES: ChartPalette[] = [`default`, `acid`, `pastel`, `blue`, `red`, `green`, `gray`];
+
+// Where the legend stands, or no legend.
+export type LegendPosition = `bottom` | `top` | `left` | `right` | `none`;
+
+export const LEGEND_POSITIONS: LegendPosition[] = [`bottom`, `top`, `left`, `right`, `none`];
+
+// What is written on the bars, the points and the slices: nothing, the data, the percentage, or both.
+export type ValueMode = `none` | `value` | `percent` | `both`;
+
+export const VALUE_MODES: ValueMode[] = [`none`, `value`, `percent`, `both`];
+
+// Colours of the styles that have a fixed list (colour-blind friendly for the default one: the Tableau 10 series).
+const COLOR_LISTS: Record<`default` | `acid` | `pastel`, string[]> = {
+  default: [`#4e79a7`, `#f28e2b`, `#e15759`, `#76b7b2`, `#59a14f`, `#edc948`, `#b07aa1`, `#ff9da7`, `#9c755f`, `#bab0ac`, `#1f3b5c`, `#7f7f7f`],
+  acid: [`#ff006e`, `#fb5607`, `#ffbe0b`, `#8ac926`, `#3a86ff`, `#8338ec`, `#00f5d4`, `#f15bb5`, `#00bbf9`, `#fee440`, `#ff4d6d`, `#9b5de5`],
+  pastel: [`#a8d8ea`, `#ffb7b2`, `#b5ead7`, `#ffdac1`, `#c7ceea`, `#e2f0cb`, `#f8c8dc`, `#fdfd96`, `#cdb4db`, `#aec6cf`, `#ffd8be`, `#d4e09b`],
+};
+
+// Styles made of shades of one colour: from the darkest to the lightest, spread over the series (or the slices).
+const COLOR_RAMPS: Record<`blue` | `red` | `green` | `gray`, [string, string]> = {
+  blue: [`#08306b`, `#c6dbef`],
+  red: [`#67000d`, `#fcbba1`],
+  green: [`#00441b`, `#c7e9c0`],
+  gray: [`#f4f4f4`, `#8c8c8c`],
+};
+
+// Darker greys for the lines of the black and white style (the fills are hatched).
+export const GRAY_LINES: [string, string] = [`#111111`, `#6e6e6e`];
+
+function mixHex(a: string, b: string, t: number): string {
+  const part = (hex: string, k: number): number => parseInt(hex.slice(1 + 2 * k, 3 + 2 * k), 16);
+  const out = [0, 1, 2].map((k) => Math.round(part(a, k) + (part(b, k) - part(a, k)) * t));
+  return `#${out.map((v) => v.toString(16).padStart(2, `0`)).join(``)}`;
+}
+
+// Colour of a rank in a style, when `count` series (or slices) share the style.
+export function paletteColor(id: ChartPalette, index: number, count: number): string {
+  if (id === `default` || id === `acid` || id === `pastel`) return COLOR_LISTS[id][index % COLOR_LISTS[id].length];
+  const [dark, light] = COLOR_RAMPS[id];
+  return mixHex(dark, light, count <= 1 ? 0.3 : Math.min(1, index / (count - 1)));
+}
+
+// Shade of grey of a line at a rank (black and white style).
+export function grayLine(index: number, count: number): string {
+  return mixHex(GRAY_LINES[0], GRAY_LINES[1], count <= 1 ? 0 : Math.min(1, index / (count - 1)));
+}
 
 export interface ChartSeries {
   name: string;
@@ -31,8 +79,9 @@ export interface ChartSpec {
   // Bars: horizontal bars, and bars stacked on each other.
   horizontal: boolean;
   stacked: boolean;
-  showValues: boolean;
-  showLegend: boolean;
+  valueMode: ValueMode;
+  legend: LegendPosition;
+  palette: ChartPalette;
   showGrid: boolean;
   xTitle: string;
   yTitle: string;
@@ -47,8 +96,9 @@ export function defaultChart(): ChartSpec {
     colors: [],
     horizontal: false,
     stacked: false,
-    showValues: false,
-    showLegend: true,
+    valueMode: `none`,
+    legend: `bottom`,
+    palette: `default`,
     showGrid: true,
     xTitle: ``,
     yTitle: ``,
@@ -63,9 +113,10 @@ export function cleanColor(value: string): string | null {
   return m ? `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}` : null;
 }
 
-// Colour at a rank (a series, or a slice of a pie): its own colour, or the one of the palette.
-export function seriesColor(spec: ChartSpec, index: number): string {
-  return cleanColor(spec.colors[index] ?? ``) ?? CHART_PALETTE[index % CHART_PALETTE.length];
+// Colour at a rank (a series, or a slice of a pie): the colour chosen for it, or the one of the style. `count` is the number of series
+// (or of slices) that share the style.
+export function seriesColor(spec: ChartSpec, index: number, count: number): string {
+  return cleanColor(spec.colors[index] ?? ``) ?? paletteColor(spec.palette, index, count);
 }
 
 // A line of text without line breaks, at most MAX_TEXT characters.
@@ -81,6 +132,21 @@ export function parseNumber(text: string): number | null {
   const n = Number(t.replace(`,`, `.`));
   return Number.isFinite(n) ? n : NaN;
 }
+
+const LEGEND_WORDS: Record<string, LegendPosition> = {
+  bottom: `bottom`, dessous: `bottom`, bas: `bottom`, true: `bottom`, oui: `bottom`, yes: `bottom`,
+  top: `top`, dessus: `top`, haut: `top`,
+  left: `left`, gauche: `left`,
+  right: `right`, droite: `right`,
+  none: `none`, aucune: `none`, aucun: `none`, false: `none`, non: `none`, no: `none`,
+};
+
+const VALUE_WORDS: Record<string, ValueMode> = {
+  none: `none`, aucune: `none`, aucun: `none`, false: `none`, non: `none`, no: `none`,
+  value: `value`, donnee: `value`, donnees: `value`, true: `value`, oui: `value`, yes: `value`,
+  percent: `percent`, pourcentage: `percent`, pourcentages: `percent`,
+  both: `both`, les_deux: `both`,
+};
 
 const BOOLS: Record<string, boolean> = { true: true, false: false, oui: true, non: false, yes: true, no: false };
 
@@ -119,8 +185,9 @@ export function parseChart(source: string): ChartSpec {
     else if (key === `y-title`) spec.yTitle = cleanText(value);
     else if (key === `horizontal`) spec.horizontal = readBool(value, spec.horizontal);
     else if (key === `stacked`) spec.stacked = readBool(value, spec.stacked);
-    else if (key === `values`) spec.showValues = readBool(value, spec.showValues);
-    else if (key === `legend`) spec.showLegend = readBool(value, spec.showLegend);
+    else if (key === `values`) spec.valueMode = VALUE_WORDS[value.trim().toLowerCase().replace(/[éè]/g, `e`)] ?? spec.valueMode;
+    else if (key === `legend`) spec.legend = LEGEND_WORDS[value.trim().toLowerCase()] ?? spec.legend;
+    else if (key === `palette`) spec.palette = (CHART_PALETTES as string[]).includes(value.trim().toLowerCase()) ? (value.trim().toLowerCase() as ChartPalette) : spec.palette;
     else if (key === `grid`) spec.showGrid = readBool(value, spec.showGrid);
     else if (key === `colors`) colors.push(...value.split(`,`).map((c) => (cleanColor(c) ?? ``)));
   }
@@ -173,8 +240,9 @@ export function serializeChart(spec: ChartSpec): string {
     out.push(`horizontal: ${spec.horizontal}`);
     out.push(`stacked: ${spec.stacked}`);
   }
-  out.push(`values: ${spec.showValues}`);
-  out.push(`legend: ${spec.showLegend}`);
+  out.push(`values: ${spec.valueMode}`);
+  out.push(`legend: ${spec.legend}`);
+  out.push(`palette: ${spec.palette}`);
   if (spec.type !== `pie`) out.push(`grid: ${spec.showGrid}`);
   if (spec.colors.some((c) => cleanColor(c) !== null)) out.push(`colors: ${spec.colors.map((c) => cleanColor(c) ?? ``).join(`, `)}`);
   out.push(`data:`);

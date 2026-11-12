@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { chartBlock, chartTarget, cleanColor, defaultChart, findCharts, parseChart, parseNumber, parseTable, replaceChart, serializeChart } from "../src/chart/spec";
 import { buildExportDoc } from "../src/export/doc-tree";
 import { isImageTarget } from "../src/export/image";
-import { formatNumber, niceScale, renderChart } from "../src/chart/render";
+import { formatNumber, niceScale, renderChart, valueText } from "../src/chart/render";
+import { paletteColor } from "../src/chart/spec";
 
 // Light check that the SVG is well formed: every opening tag is closed (no XML parser needed).
 function wellFormed(svg: string): void {
@@ -20,7 +21,8 @@ test(`graphique : lecture et ecriture du bloc`, () => {
   const spec = parseChart([`type: line`, `title: Ventes de l'annee`, `x-title: Mois`, `legend: oui`, `values: true`, `colors: #f00, zzz, #00ff00`, `data:`, `;Serie A;Serie B;Serie C`, `Jan;1,5;2;`, `Fev;3;x;4`].join(`\n`));
   assert.equal(spec.type, `line`);
   assert.equal(spec.title, `Ventes de l'annee`);
-  assert.equal(spec.showValues, true);
+  assert.equal(spec.valueMode, `value`);
+  assert.equal(spec.legend, `bottom`);
   assert.deepEqual(spec.categories, [`Jan`, `Fev`]);
   assert.deepEqual(spec.series.map((s) => s.name), [`Serie A`, `Serie B`, `Serie C`]);
   assert.deepEqual(spec.series[0].values, [1.5, 3]);
@@ -91,4 +93,42 @@ test(`graphique : cellules collees, remplacement du bloc et figure de l'export`,
     assert.equal(isImageTarget(fig.target), true);
     assert.ok(fig.target.startsWith(`bigorneau-chart:`));
   }
+});
+
+test(`graphique : styles de couleurs, legende placee, valeurs et pourcentages`, () => {
+  // Old files: `values: true` and `legend: false` keep their meaning, the new words are read.
+  assert.equal(parseChart(`values: false`).valueMode, `none`);
+  assert.equal(parseChart(`values: pourcentages`).valueMode, `percent`);
+  assert.equal(parseChart(`values: both`).valueMode, `both`);
+  assert.equal(parseChart(`legend: false`).legend, `none`);
+  assert.equal(parseChart(`legend: gauche`).legend, `left`);
+  assert.equal(parseChart(`legend: dessus`).legend, `top`);
+  assert.equal(parseChart(`palette: pastel`).palette, `pastel`);
+  assert.equal(parseChart(`palette: inconnu`).palette, `default`);
+  const spec = parseChart(`type: bar\nvalues: both\nlegend: right\npalette: gray\ndata:\n;A;B\nx;1;3\ny;2;2`);
+  assert.deepEqual(parseChart(serializeChart(spec)), spec);
+  // The ramps spread their colours from dark to light over the series.
+  assert.notEqual(paletteColor(`blue`, 0, 4), paletteColor(`blue`, 3, 4));
+  assert.equal(paletteColor(`acid`, 0, 3), paletteColor(`acid`, 12, 3));
+  // Values: nothing, data, percentage of the total, or both.
+  assert.equal(valueText(`none`, 5, 20, `,`), ``);
+  assert.equal(valueText(`value`, 5, 20, `,`), `5`);
+  assert.equal(valueText(`percent`, 5, 20, `,`), `25 %`);
+  assert.equal(valueText(`both`, 1.5, 6, `,`), `1,5 (25 %)`);
+  assert.equal(valueText(`percent`, 1, 0, `.`), `0 %`);
+  // Every legend place, every style and every value mode give a clean picture; the grey style is hatched.
+  for (const type of [`bar`, `line`, `pie`] as const) {
+    for (const legend of [`top`, `bottom`, `left`, `right`, `none`] as const) {
+      for (const palette of [`default`, `acid`, `pastel`, `blue`, `red`, `green`, `gray`] as const) {
+        const svg = renderChart({ ...spec, type, legend, palette, valueMode: `both` }, { decimal: `,` });
+        assert.ok(!/NaN|undefined|Infinity/.test(svg), `${type} ${legend} ${palette}`);
+        wellFormed(svg);
+        if (palette === `gray`) assert.ok(svg.includes(`<pattern`) && (type === `line` || svg.includes(`url(#mmw-hatch-0)`)));
+        else assert.ok(!svg.includes(`<pattern`));
+      }
+    }
+  }
+  // No legend: the names of the series are not drawn.
+  assert.ok(!renderChart({ ...spec, legend: `none`, palette: `default`, series: spec.series.map((x, i) => ({ ...x, name: `Zorglub${i}` })) }).includes(`Zorglub`));
+  assert.ok(renderChart({ ...spec, legend: `left`, palette: `default`, series: spec.series.map((x, i) => ({ ...x, name: `Zorglub${i}` })) }).includes(`Zorglub0`));
 });
