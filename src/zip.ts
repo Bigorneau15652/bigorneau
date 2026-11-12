@@ -4,6 +4,8 @@
 export interface ZipEntry {
   // Nom du fichier sans son dossier.
   name: string;
+  // Chemin complet dans l'archive (avec ses dossiers).
+  path: string;
   data: Uint8Array;
 }
 
@@ -24,6 +26,12 @@ const FONT_FILE = /\.(ttf|otf)$/i;
 // Fichiers de polices de l'archive. Les fichiers caches (__MACOSX, ._nom, .nom) sont ignores. Une archive illisible donne une liste vide.
 // Un fichier qui depasse les limites ci-dessus n'est pas extrait : son nom est ajouté à `refused` quand cette liste est donnee.
 export async function fontFilesOfZip(bytes: Uint8Array, inflate: Inflate, refused?: string[]): Promise<ZipEntry[]> {
+  return zipFiles(bytes, inflate, (path, name) => FONT_FILE.test(name) && !path.startsWith(`__MACOSX/`) && !name.startsWith(`.`), refused);
+}
+
+// Fichiers d'une archive dont le chemin est accepte par `accept(chemin, nom)` (un tableur xlsx ou ods est une archive zip de fichiers XML).
+// Une archive illisible donne une liste vide ; un fichier qui depasse les limites n'est pas extrait.
+export async function zipFiles(bytes: Uint8Array, inflate: Inflate, accept: (path: string, name: string) => boolean, refused?: string[]): Promise<ZipEntry[]> {
   // Fin de l'annuaire central : signature 0x06054b50, au plus 65 557 octets avant la fin du fichier.
   let end = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 65535); i--) {
@@ -49,7 +57,7 @@ export async function fontFilesOfZip(bytes: Uint8Array, inflate: Inflate, refuse
     const path = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength));
     at += 46 + nameLength + extraLength + commentLength;
     const name = path.split(`/`).pop() ?? path;
-    if (!FONT_FILE.test(name) || path.startsWith(`__MACOSX/`) || name.startsWith(`.`)) continue;
+    if (!accept(path, name)) continue;
     if (compressed > ZIP_MAX_ENTRY || declared > ZIP_MAX_ENTRY || total + Math.min(declared, ZIP_MAX_ENTRY) > ZIP_MAX_TOTAL) {
       refused?.push(name);
       continue;
@@ -65,7 +73,7 @@ export async function fontFilesOfZip(bytes: Uint8Array, inflate: Inflate, refuse
         refused?.push(name);
       } else if (data) {
         total += data.length;
-        out.push({ name, data });
+        out.push({ name, path, data });
       }
     } catch {
       // Fichier de l'archive abime, ou plus gros que la limite : il est ignore.

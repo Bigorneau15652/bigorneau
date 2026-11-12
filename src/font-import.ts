@@ -20,7 +20,7 @@ export interface ImportReport {
 // Largest font file accepted, alone or inside an archive.
 const MAX_FONT_FILE = ZIP_MAX_ENTRY;
 
-const inflate: Inflate = async (data, limit) => {
+export const inflate: Inflate = async (data, limit) => {
   const g = window as unknown as { DecompressionStream?: new (format: string) => { readable: ReadableStream; writable: WritableStream } };
   if (!g.DecompressionStream) throw new Error(`DecompressionStream indisponible`);
   const stream = new Blob([data.slice().buffer]).stream().pipeThrough(new g.DecompressionStream(`deflate-raw`));

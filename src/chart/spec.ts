@@ -69,6 +69,15 @@ export interface ChartSeries {
   values: (number | null)[];
 }
 
+// File of the vault that the numbers were copied from (to read them again with the Update button).
+export interface ChartSource {
+  path: string;
+  // Name of the sheet (empty: the first one), part of the sheet (A1:D10, empty: all of it), rows and columns swapped.
+  sheet: string;
+  range: string;
+  transpose: boolean;
+}
+
 export interface ChartSpec {
   type: ChartType;
   title: string;
@@ -85,6 +94,7 @@ export interface ChartSpec {
   showGrid: boolean;
   xTitle: string;
   yTitle: string;
+  source?: ChartSource;
 }
 
 export function defaultChart(): ChartSpec {
@@ -120,7 +130,7 @@ export function seriesColor(spec: ChartSpec, index: number, count: number): stri
 }
 
 // A line of text without line breaks, at most MAX_TEXT characters.
-function cleanText(value: string): string {
+export function cleanText(value: string): string {
   return value.replace(/[\r\n\t]+/g, ` `).trim().slice(0, MAX_TEXT);
 }
 
@@ -167,6 +177,7 @@ export function parseChart(source: string): ChartSpec {
   const lines = source.replace(/\r\n?/g, `\n`).split(`\n`);
   let at = 0;
   const colors: string[] = [];
+  const sourceLines: Partial<ChartSource> = {};
   spec.colors = colors;
   for (; at < lines.length; at++) {
     const line = lines[at].trim();
@@ -189,8 +200,13 @@ export function parseChart(source: string): ChartSpec {
     else if (key === `legend`) spec.legend = LEGEND_WORDS[value.trim().toLowerCase()] ?? spec.legend;
     else if (key === `palette`) spec.palette = (CHART_PALETTES as string[]).includes(value.trim().toLowerCase()) ? (value.trim().toLowerCase() as ChartPalette) : spec.palette;
     else if (key === `grid`) spec.showGrid = readBool(value, spec.showGrid);
+    else if (key === `source`) sourceLines.path = cleanText(value);
+    else if (key === `sheet`) sourceLines.sheet = cleanText(value);
+    else if (key === `range`) sourceLines.range = cleanText(value);
+    else if (key === `transpose`) sourceLines.transpose = readBool(value, false);
     else if (key === `colors`) colors.push(...value.split(`,`).map((c) => (cleanColor(c) ?? ``)));
   }
+  if (sourceLines.path) spec.source = { path: sourceLines.path, sheet: sourceLines.sheet ?? ``, range: sourceLines.range ?? ``, transpose: sourceLines.transpose ?? false };
   const table = parseTable(lines.slice(at).join(`\n`));
   if (table) {
     spec.categories = table.categories;
@@ -245,6 +261,12 @@ export function serializeChart(spec: ChartSpec): string {
   out.push(`palette: ${spec.palette}`);
   if (spec.type !== `pie`) out.push(`grid: ${spec.showGrid}`);
   if (spec.colors.some((c) => cleanColor(c) !== null)) out.push(`colors: ${spec.colors.map((c) => cleanColor(c) ?? ``).join(`, `)}`);
+  if (spec.source) {
+    out.push(`source: ${cleanText(spec.source.path)}`);
+    if (spec.source.sheet !== ``) out.push(`sheet: ${cleanText(spec.source.sheet)}`);
+    if (spec.source.range !== ``) out.push(`range: ${cleanText(spec.source.range)}`);
+    if (spec.source.transpose) out.push(`transpose: true`);
+  }
   out.push(`data:`);
   out.push([``, ...spec.series.map((s) => cell(s.name))].join(`;`));
   spec.categories.forEach((c, i) => out.push([cell(c), ...spec.series.map((s) => numberText(s.values[i] ?? null))].join(`;`)));

@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.36.0
+
+Added: in the chart editor, the numbers can be imported from a spreadsheet file: CSV (UTF-8 or the Windows encoding of Excel, separators ; , or tab), Excel xlsx and LibreOffice ods, chosen in the vault or on the computer. The first row gives the names of the series and the first column the categories. For a file with several sheets, the sheet is chosen; a range (for example A1:D10) can limit the part read, and rows and columns can be swapped. The numbers are copied into the chart; for a file of the vault, the chart remembers the file (path, sheet, range) in its block and the Update button reads it again. Old xls files are not read (save them as xlsx or CSV). The files are read by code written for the plugin (the zip reader of the fonts is reused): no new library. Also added: a double click on a chart drawn in the note opens the chart editor.
+
+Ajouté : dans l'éditeur de graphiques, les nombres peuvent être importés d'un fichier de tableur : CSV (UTF-8 ou codage Windows d'Excel, séparateurs ; , ou tabulation), Excel xlsx et LibreOffice ods, choisis dans le coffre ou sur l'ordinateur. La première ligne donne les noms des séries et la première colonne les catégories. Pour un fichier à plusieurs feuilles, on choisit la feuille ; une plage (par exemple A1:D10) peut limiter la partie lue, et les lignes et les colonnes peuvent être inversées. Les nombres sont copiés dans le graphique ; pour un fichier du coffre, le graphique retient le fichier (chemin, feuille, plage) dans son bloc et le bouton Actualiser le relit. Les anciens fichiers xls ne sont pas lus (à enregistrer en xlsx ou en CSV). Les fichiers sont lus par du code écrit pour le plugin (le lecteur de zip des polices est réutilisé) : aucune nouvelle bibliothèque. Ajouté aussi : un double clic sur un graphique dessiné dans la note ouvre l'éditeur de graphiques.
+
 ## 0.35.1
 
 Fixed: in the Charts module, the icon of the edit button, at the top right of a chart drawn in the note, was enlarged to the whole chart (a big grey logo in the middle); it is back to its normal size.
