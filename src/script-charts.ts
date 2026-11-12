@@ -5,7 +5,9 @@ import type { Editor, TFile } from "obsidian";
 import { openChartEditor } from "./chart-modal";
 import { renderChart } from "./chart/render";
 import { CHART_LANG, chartBlock, ChartSpec, defaultChart, findCharts, FoundChart, parseChart, replaceChart } from "./chart/spec";
+import { SPREADSHEET_EXT } from "./chart/spreadsheet";
 import { ICON_CHART } from "./custom-icons";
+import { inflate } from "./font-import";
 import { appendSvgDocument } from "./dom";
 import type { OfficialScript } from "./scripts";
 
@@ -24,9 +26,24 @@ export const CHARTS_SCRIPT: OfficialScript = {
     const decimal = (): `,` | `.` => (api.language() === `fr` ? `,` : `.`);
     const editorName = (): string => (api.language() === `fr` ? `Éditeur de graphiques` : `Chart editor`);
 
+    // Spreadsheet files of the vault, for the import of the chart editor.
+    const files = {
+      list: (): string[] =>
+        api.app.vault
+          .getFiles()
+          .filter((f) => SPREADSHEET_EXT.test(f.name))
+          .map((f) => f.path)
+          .sort((a, b) => a.localeCompare(b)),
+      read: async (path: string): Promise<Uint8Array> => {
+        const file = api.app.vault.getAbstractFileByPath(path);
+        if (!file || !(file instanceof obsidian.TFile)) throw new Error(`file not found`);
+        return new Uint8Array(await api.app.vault.readBinary(file as TFile));
+      },
+    };
+
     // Opens the editor on a chart, and gives the result back.
     const edit = (spec: ChartSpec, editing: boolean, onSubmit: (spec: ChartSpec) => void): void => {
-      openChartEditor({ app: api.app, obsidian, lang: api.language(), spec, editing, onSubmit });
+      openChartEditor({ app: api.app, obsidian, lang: api.language(), spec, editing, onSubmit, files, inflate });
     };
 
     // From the editor of the open note: the chart under the cursor is edited, otherwise a new chart is inserted at the cursor.
@@ -73,7 +90,14 @@ export const CHARTS_SCRIPT: OfficialScript = {
       if (spec.title !== ``) el.createDiv({ cls: `mmw-chart-caption`, text: spec.title });
       const button = el.createEl(`button`, { cls: `mmw-chart-edit clickable-icon`, attr: { type: `button`, "aria-label": editorName() } });
       obsidian.setIcon(button, ICON_CHART);
-      button.addEventListener(`click`, () => void openForBlock(ctx.sourcePath, ctx.getSectionInfo(el)?.lineStart));
+      const open = (): void => void openForBlock(ctx.sourcePath, ctx.getSectionInfo(el)?.lineStart);
+      button.addEventListener(`click`, open);
+      // A double click on the picture opens the editor too (the code of the block is not shown).
+      el.addEventListener(`dblclick`, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        open();
+      });
     });
 
     api.addFunction({
@@ -91,8 +115,8 @@ export const CHARTS_SCRIPT: OfficialScript = {
         id: `editor`,
         title: { fr: `Graphiques`, en: `Charts` },
         text: {
-          fr: `Le module Graphiques, désactivé par défaut (bouton bigorneau du panneau), ajoute un bouton Éditeur de graphiques. La fenêtre propose trois types (barres, courbes, secteurs), un titre qui devient la légende de la figure dans l'export, un tableau de nombres à saisir ou à coller depuis un tableur (Excel, LibreOffice, CSV), un style de couleurs (défaut, acide, pastel, camaïeux de bleus, de rouges ou de verts, noir et blanc avec des hachures) puis, au choix, la couleur de chaque série ou de chaque part, les valeurs affichées (aucune, données, pourcentages ou les deux), la légende (dessus, dessous, à gauche, à droite ou aucune), la grille, les titres des axes, les barres horizontales ou empilées, et un aperçu en direct. Le graphique est écrit dans la note sous la forme d'un bloc de texte nommé bigorneau-chart : l'aperçu en direct et la lecture le dessinent, l'export PDF et HTML le dessinent aussi, avec le titre comme légende. Pour le modifier, placez le curseur dans le graphique puis cliquez sur le bouton Éditeur de graphiques, ou cliquez sur l'icône de graphique en haut à droite du dessin.`,
-          en: `The Charts module, off by default (bigorneau button of the panel), adds a Chart editor button. The window offers three types (bars, lines, pie), a title that becomes the caption of the figure in the export, a table of numbers to type or to paste from a spreadsheet (Excel, LibreOffice, CSV), a colour style (default, acid, pastel, shades of blue, red or green, black and white with hatching) then, as you wish, the colour of each series or slice, the values shown (none, data, percentages or both), the legend (above, below, left, right or none), the grid, the titles of the axes, horizontal or stacked bars, and a live preview. The chart is written in the note as a block of text named bigorneau-chart: live preview and reading mode draw it, and the PDF and HTML export draw it too, with the title as caption. To change it, put the cursor in the chart and click the Chart editor button, or click the chart icon at the top right of the drawing.`,
+          fr: `Le module Graphiques, désactivé par défaut (bouton bigorneau du panneau), ajoute un bouton Éditeur de graphiques. La fenêtre propose trois types (barres, courbes, secteurs), un titre qui devient la légende de la figure dans l'export, un tableau de nombres à saisir, à coller depuis un tableur ou à importer d'un fichier CSV, Excel (xlsx) ou LibreOffice (ods) du coffre ou de l'ordinateur (feuille, plage et inversion des lignes et des colonnes au choix, bouton Actualiser pour relire un fichier du coffre ; les nombres sont copiés dans le graphique), un style de couleurs (défaut, acide, pastel, camaïeux de bleus, de rouges ou de verts, noir et blanc avec des hachures) puis, au choix, la couleur de chaque série ou de chaque part, les valeurs affichées (aucune, données, pourcentages ou les deux), la légende (dessus, dessous, à gauche, à droite ou aucune), la grille, les titres des axes, les barres horizontales ou empilées, et un aperçu en direct. Le graphique est écrit dans la note sous la forme d'un bloc de texte nommé bigorneau-chart : l'aperçu en direct et la lecture le dessinent, l'export PDF et HTML le dessinent aussi, avec le titre comme légende. Pour le modifier, double-cliquez sur le dessin, ou cliquez sur l'icône de graphique en haut à droite, ou placez le curseur dans le graphique puis cliquez sur le bouton Éditeur de graphiques.`,
+          en: `The Charts module, off by default (bigorneau button of the panel), adds a Chart editor button. The window offers three types (bars, lines, pie), a title that becomes the caption of the figure in the export, a table of numbers to type, to paste from a spreadsheet or to import from a CSV, Excel (xlsx) or LibreOffice (ods) file of the vault or of the computer (sheet, range and swap of rows and columns at will, an Update button to read a file of the vault again; the numbers are copied into the chart), a colour style (default, acid, pastel, shades of blue, red or green, black and white with hatching) then, as you wish, the colour of each series or slice, the values shown (none, data, percentages or both), the legend (above, below, left, right or none), the grid, the titles of the axes, horizontal or stacked bars, and a live preview. The chart is written in the note as a block of text named bigorneau-chart: live preview and reading mode draw it, and the PDF and HTML export draw it too, with the title as caption. To change it, double-click the drawing, or click the chart icon at its top right, or put the cursor in the chart and click the Chart editor button.`,
         },
         keywords: { fr: `graphique graphiques courbe barres secteurs camembert histogramme tableau donnees excel csv`, en: `chart charts graph bars lines pie histogram data table excel csv` },
       },
