@@ -2,7 +2,7 @@
 // is opened by the Charts module, which gives it the Obsidian module: this file imports Obsidian only for its types.
 import type { App } from "obsidian";
 import { renderChart } from "./chart/render";
-import { CHART_PALETTES, CHART_TYPES, ChartPalette, ChartSource, ChartSpec, ChartType, cleanColor, hasAxes, isSliceChart, LEGEND_POSITIONS, LegendPosition, MAX_CATEGORIES, MAX_SERIES, parseNumber, parseTable, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
+import { CHART_PALETTES, CHART_TYPES, ChartLine, ChartPalette, ChartSource, ChartSpec, ChartType, clampSize, cleanColor, cleanText, DEFAULT_HEIGHT, DEFAULT_WIDTH, hasAxes, isSliceChart, LEGEND_POSITIONS, LegendPosition, lineText, MAX_CATEGORIES, MAX_DECIMALS, MAX_HEIGHT, MAX_LINES, MAX_SERIES, MAX_WIDTH, MIN_HEIGHT, MIN_WIDTH, parseLine, parseNumber, parseTable, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
 import { readSpreadsheet, Sheet, SpreadsheetError, SPREADSHEET_EXT, tableOfSheet } from "./chart/spreadsheet";
 import { appendSvgDocument } from "./dom";
 import type { HelpLang } from "./help";
@@ -85,6 +85,14 @@ const TEXTS = {
   replace: { fr: `Enregistrer les modifications`, en: `Save the changes` },
   cancel: { fr: `Annuler`, en: `Cancel` },
   preview: { fr: `Aperçu`, en: `Preview` },
+  unit: { fr: `Unité après les nombres (exemple : € ou %)`, en: `Unit after the numbers (for example: € or %)` },
+  decimals: { fr: `Décimales`, en: `Decimals` },
+  decimalsAuto: { fr: `Automatique`, en: `Automatic` },
+  width: { fr: `Largeur du dessin (pixels)`, en: `Width of the drawing (pixels)` },
+  height: { fr: `Hauteur du dessin (pixels)`, en: `Height of the drawing (pixels)` },
+  sizeHelp: { fr: `Vous pouvez aussi tirer les coins du dessin dans la note : l'écriture ne se déforme pas.`, en: `You can also drag the corners of the drawing in the note: the text is not distorted.` },
+  lines: { fr: `Lignes de seuil ou de moyenne (une par ligne)`, en: `Threshold or mean lines (one per line)` },
+  linesHelp: { fr: `Écrivez une valeur puis, si vous le souhaitez, un nom après une barre verticale, par exemple 50 | Objectif. Le mot moyenne trace la moyenne des données, par exemple moyenne | Moyenne 2024.`, en: `Write a value then, if you wish, a name after a vertical bar, for example 50 | Target. The word mean draws the mean of the data, for example mean | Mean 2024.` },
 } as const;
 
 type TextId = keyof typeof TEXTS;
@@ -131,6 +139,13 @@ interface State {
   cells: string[][];
   colors: string[];
   source: ChartSource | null;
+  width: string;
+  height: string;
+  unit: string;
+  // Empty text: automatic.
+  decimals: string;
+  // One threshold line per line of text.
+  lines: string;
 }
 
 function fromSpec(spec: ChartSpec): State {
@@ -150,6 +165,11 @@ function fromSpec(spec: ChartSpec): State {
     cells: spec.categories.map((_c, i) => spec.series.map((s) => (s.values[i] === null || s.values[i] === undefined ? `` : String(s.values[i])))),
     colors: [...spec.colors],
     source: spec.source ? { ...spec.source } : null,
+    width: String(spec.width),
+    height: String(spec.height),
+    unit: spec.unit,
+    decimals: spec.decimals === null ? `` : String(spec.decimals),
+    lines: spec.lines.map(lineText).join(`\n`),
   };
 }
 
@@ -174,6 +194,15 @@ function toSpec(st: State): ChartSpec {
       }),
     })),
     colors: [...st.colors],
+    width: clampSize(Number(st.width), MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH),
+    height: clampSize(Number(st.height), MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT),
+    unit: cleanText(st.unit).slice(0, 12),
+    decimals: st.decimals === `` ? null : Math.min(MAX_DECIMALS, Math.max(0, Number(st.decimals) || 0)),
+    lines: st.lines
+      .split(`\n`)
+      .map(parseLine)
+      .filter((l): l is ChartLine => l !== null)
+      .slice(0, MAX_LINES),
     ...(st.source ? { source: { ...st.source } } : {}),
   };
 }
@@ -270,6 +299,17 @@ export function openChartEditor(deps: ChartEditorDeps): void {
       return input;
     }
 
+    private numberField(parent: HTMLElement, id: TextId, value: string, set: (v: string) => void): void {
+      const row = parent.createDiv({ cls: `mmw-chart-row` });
+      row.createEl(`span`, { cls: `mmw-chart-label`, text: tr(id) });
+      const input = row.createEl(`input`, { cls: `mmw-chart-input`, attr: { type: `text`, inputmode: `numeric`, maxlength: `5` } });
+      input.value = value;
+      input.addEventListener(`input`, () => {
+        set(input.value);
+        this.refresh();
+      });
+    }
+
     private check(parent: HTMLElement, id: TextId, value: boolean, set: (v: boolean) => void): void {
       const label = parent.createEl(`label`, { cls: `mmw-chart-check` });
       const box = label.createEl(`input`, { attr: { type: `checkbox` } });
@@ -290,6 +330,22 @@ export function openChartEditor(deps: ChartEditorDeps): void {
         this.textField(box, `yTitle`, this.st.yTitle, (v) => (this.st.yTitle = v));
       }
       this.select(box, `valueMode`, VALUE_MODES.map((id) => [id, VALUE_NAMES[id][lang]]), this.st.valueMode, (v) => (this.st.valueMode = v as ValueMode));
+      this.textField(box, `unit`, this.st.unit, (v) => (this.st.unit = v));
+      this.select(box, `decimals`, [[``, tr(`decimalsAuto`)], ...[0, 1, 2, 3, 4].map((d): [string, string] => [String(d), String(d)])], this.st.decimals, (v) => (this.st.decimals = v));
+      this.numberField(box, `width`, this.st.width, (v) => (this.st.width = v));
+      this.numberField(box, `height`, this.st.height, (v) => (this.st.height = v));
+      box.createDiv({ cls: `mmw-chart-help`, text: tr(`sizeHelp`) });
+      if (hasAxes(this.st.type)) {
+        const row = box.createDiv({ cls: `mmw-chart-row mmw-chart-rowtop` });
+        row.createEl(`span`, { cls: `mmw-chart-label`, text: tr(`lines`) });
+        const area = row.createEl(`textarea`, { cls: `mmw-chart-input`, attr: { rows: `3`, placeholder: `50 | ${lang === `fr` ? `Objectif` : `Target`}` } });
+        area.value = this.st.lines;
+        area.addEventListener(`input`, () => {
+          this.st.lines = area.value;
+          this.refresh();
+        });
+        box.createDiv({ cls: `mmw-chart-help`, text: tr(`linesHelp`) });
+      }
       this.select(box, `legend`, LEGEND_POSITIONS.map((id) => [id, LEGEND_NAMES[id][lang]]), this.st.legend, (v) => (this.st.legend = v as LegendPosition));
       const checks = box.createDiv({ cls: `mmw-chart-checks` });
       if (hasAxes(this.st.type) || this.st.type === `radar`) this.check(checks, `grid`, this.st.showGrid, (v) => (this.st.showGrid = v));

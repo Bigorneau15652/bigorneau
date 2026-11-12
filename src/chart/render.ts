@@ -1,9 +1,6 @@
 // Drawing of a chart as an SVG picture (a text), from the model of src/chart/spec.ts. The same picture is shown in the note, in the
 // preview of the export, in the PDF (drawn as a picture) and in the HTML page. This file does not depend on Obsidian.
-import { ChartSpec, grayLine, isSliceChart, parseNumber, seriesColor, ValueMode } from "./spec";
-
-export const CHART_WIDTH = 640;
-export const CHART_HEIGHT = 380;
+import { ChartLine, ChartSpec, grayLine, isSliceChart, parseNumber, seriesColor, ValueMode } from "./spec";
 
 const FONT = `font-family="Helvetica, Arial, sans-serif"`;
 const TEXT = `#222222`;
@@ -35,17 +32,29 @@ function shorten(value: string, size: number, max: number): string {
   return `${value.slice(0, keep)}…`;
 }
 
-// A number written with at most two decimals.
-export function formatNumber(n: number, decimal: `,` | `.` = `.`): string {
-  const s = String(Math.round(n * 100) / 100);
+// How the numbers shown are written: a unit after the number and a fixed number of decimals (null: at most two, as needed).
+export interface NumberStyle {
+  unit?: string;
+  decimals?: number | null;
+}
+
+// A number written with the decimals asked for (at most two when none is asked), without unit.
+export function formatNumber(n: number, decimal: `,` | `.` = `.`, decimals: number | null = null): string {
+  const s = decimals === null ? String(Math.round(n * 100) / 100) : n.toFixed(Math.min(6, Math.max(0, decimals)));
   return decimal === `,` ? s.replace(`.`, `,`) : s;
 }
 
-// What is written for a value: nothing, the value, its percentage of `total`, or both.
-export function valueText(mode: ValueMode, value: number, total: number, decimal: `,` | `.`): string {
+// A number followed by its unit (a no-break space between them).
+export function withUnit(text: string, unit: string): string {
+  return unit === `` ? text : `${text}\u00a0${unit}`;
+}
+
+// What is written for a value: nothing, the value (with its unit), its percentage of `total`, or both.
+export function valueText(mode: ValueMode, value: number, total: number, decimal: `,` | `.`, style: NumberStyle = {}): string {
   if (mode === `none`) return ``;
-  const plain = formatNumber(value, decimal);
-  const percent = `${formatNumber(total === 0 ? 0 : (value / total) * 100, decimal)} %`;
+  const decimals = style.decimals ?? null;
+  const plain = withUnit(formatNumber(value, decimal, decimals), style.unit ?? ``);
+  const percent = `${formatNumber(total === 0 ? 0 : (value / total) * 100, decimal, decimals)} %`;
   return mode === `value` ? plain : mode === `percent` ? percent : `${plain} (${percent})`;
 }
 
@@ -88,6 +97,41 @@ function label(x: number, y: number, content: string, size: number, anchor: `sta
 function inkOn(color: string): string {
   const part = (k: number): number => parseInt(color.slice(1 + 2 * k, 3 + 2 * k), 16);
   return part(0) * 0.299 + part(1) * 0.587 + part(2) * 0.114 > 160 ? TEXT : `#ffffff`;
+}
+
+function styleOf(spec: ChartSpec): NumberStyle {
+  return { unit: spec.unit, decimals: spec.decimals };
+}
+
+// Value of a threshold line: its own value, or the mean of the numbers given.
+function lineValue(line: ChartLine, numbers: number[]): number | null {
+  if (line.kind === `value`) return line.value;
+  return numbers.length === 0 ? null : numbers.reduce((sum, v) => sum + v, 0) / numbers.length;
+}
+
+// Threshold lines drawn across a plot area. `at` gives the position of a value along the value axis; the line is horizontal, or vertical for horizontal bars.
+function drawLines(spec: ChartSpec, numbers: number[], at: (v: number) => number, box: { x0: number; x1: number; y0: number; y1: number }, vertical: boolean, dec: `,` | `.`): string {
+  const gray = spec.palette === `gray`;
+  const ink = gray ? `#222222` : `#c0392b`;
+  let svg = ``;
+  spec.lines.forEach((line, i) => {
+    const v = lineValue(line, numbers);
+    if (v === null) return;
+    const p = at(v);
+    const text = `${line.label === `` ? (line.kind === `mean` ? (dec === `,` ? `Moyenne` : `Mean`) : ``) : line.label}`;
+    const shownValue = withUnit(formatNumber(v, dec, spec.decimals), spec.unit);
+    const content = text === `` ? shownValue : `${text} (${shownValue})`;
+    const halo = ` stroke="#ffffff" stroke-width="3" paint-order="stroke"`;
+    const dash = i % 2 === 0 ? `7 4` : `2 3`;
+    if (vertical) {
+      svg += `<line x1="${r(p)}" y1="${r(box.y0)}" x2="${r(p)}" y2="${r(box.y1)}" stroke="${ink}" stroke-width="1.8" stroke-dasharray="${dash}"/>`;
+      svg += label(p + 4, box.y0 + 12 + i * 14, content, 11, `start`, ink, halo);
+    } else {
+      svg += `<line x1="${r(box.x0)}" y1="${r(p)}" x2="${r(box.x1)}" y2="${r(p)}" stroke="${ink}" stroke-width="1.8" stroke-dasharray="${dash}"/>`;
+      svg += label(box.x1 - 4, p - 4, content, 11, `end`, ink, halo);
+    }
+  });
+  return svg;
 }
 
 // How a series (or a slice) is painted: a fill, a line colour and a dash for the lines. The black and white style uses hatched fills.
@@ -148,8 +192,8 @@ const NO_LEGEND: LegendBox = { svg: ``, top: 0, bottom: 0, left: 0, right: 0 };
 // Legend above or below (items in rows) or at the left or the right (items in a column).
 function legendBox(spec: ChartSpec, names: string[], paints: Paint[]): LegendBox {
   if (spec.legend === `none` || names.length === 0) return NO_LEGEND;
-  const W = CHART_WIDTH;
-  const H = CHART_HEIGHT;
+  const W = spec.width;
+  const H = spec.height;
   const size = 12;
   const items = names.map((n, i) => ({ name: shorten(n === `` ? String(i + 1) : n, size, 170), paint: paints[i] }));
   const swatch = (x: number, y: number, paint: Paint): string => `<rect x="${r(x)}" y="${r(y - 10)}" width="14" height="12" rx="2" fill="${paint.fill}" stroke="${spec.palette === `gray` ? `#222222` : `none`}" stroke-width="0.8"/>`;
@@ -197,8 +241,8 @@ function frame(inner: string, width: number, height: number): string {
 
 // Chart drawn on axes: bars, or lines.
 function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
-  const W = CHART_WIDTH;
-  const H = CHART_HEIGHT;
+  const W = spec.width;
+  const H = spec.height;
   const dec = opts.decimal ?? `.`;
   const horizontal = spec.type === `bar` && spec.horizontal;
   const stacked = (spec.type === `bar` || spec.type === `area`) && spec.stacked;
@@ -235,6 +279,17 @@ function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
     // A line chart does not have to start at zero when all the values are far from it.
     const all = spec.series.flatMap((s) => s.values).filter((v): v is number => v !== null);
     if (all.length > 0 && Math.min(...all) > 0 && Math.min(...all) > (Math.max(...all) - Math.min(...all)) * 1.5) lo = Math.min(...all);
+  }
+  // Numbers that a mean line averages: every value, or the total of each category for stacked charts.
+  const lineNumbers = stacked
+    ? spec.categories.map((_c, c) => spec.series.reduce((sum, x) => sum + (x.values[c] ?? 0), 0))
+    : spec.series.flatMap((x) => x.values).filter((v): v is number => v !== null);
+  // The scale holds the threshold lines too.
+  for (const line of spec.lines) {
+    const v = lineValue(line, lineNumbers);
+    if (v === null) continue;
+    hi = Math.max(hi, v);
+    lo = Math.min(lo, v);
   }
   const scale = niceScale(lo, hi);
   const tickLabels = scale.ticks.map((t) => formatNumber(t, dec));
@@ -289,7 +344,7 @@ function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
     else svg += label(p, y1 + 16, shorten(c, labelSize, band - 4), labelSize, `middle`);
   });
 
-  const shown = (v: number, c: number): string => valueText(spec.valueMode, v, totals[c], dec);
+  const shown = (v: number, c: number): string => valueText(spec.valueMode, v, totals[c], dec, styleOf(spec));
   const valueLabel = (v: number, c: number, cx: number, cy: number, anchor: `start` | `middle` | `end`): string => label(cx, cy, shown(v, c), 11, anchor, MUTED);
   // Labels inside a filled shape: white on a colour, dark with a white halo on a hatched fill.
   const insideLabel = (v: number, c: number, cx: number, cy: number, paint: Paint): string => (gray ? label(cx, cy, shown(v, c), 11, `middle`, TEXT, ` stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="bold"`) : label(cx, cy, shown(v, c), 11, `middle`, inkOn(paint.fill)));
@@ -384,7 +439,8 @@ function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
     });
   }
 
-  // Titles of the axes, and legend.
+  // Threshold lines, titles of the axes, and legend.
+  svg += drawLines(spec, lineNumbers, vPos, { x0, x1, y0, y1 }, horizontal, dec);
   if (spec.xTitle !== ``) svg += label((x0 + x1) / 2, H - legendInfo.bottom - 6, shorten(spec.xTitle, 13, x1 - x0), 13, `middle`, TEXT, ` font-weight="bold"`);
   if (spec.yTitle !== ``) svg += label(14 + legendInfo.left, (y0 + y1) / 2, shorten(spec.yTitle, 13, y1 - y0), 13, `middle`, TEXT, ` font-weight="bold" transform="rotate(-90 ${14 + legendInfo.left} ${r((y0 + y1) / 2)})"`);
   return svg + legendInfo.svg;
@@ -392,8 +448,8 @@ function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
 
 // Pie chart: the first series, one slice per category.
 function drawPie(spec: ChartSpec, opts: RenderOptions): string {
-  const W = CHART_WIDTH;
-  const H = CHART_HEIGHT;
+  const W = spec.width;
+  const H = spec.height;
   const dec = opts.decimal ?? `.`;
   const values = spec.categories.map((_c, i) => {
     const v = spec.series[0]?.values[i];
@@ -441,20 +497,20 @@ function drawPie(spec: ChartSpec, opts: RenderOptions): string {
       const rr = inside ? (donut ? (rad + hole) / 2 : rad * 0.62) : rad + 14;
       const px = cx + rr * Math.cos(mid);
       const py = cy + rr * Math.sin(mid);
-      const shown = valueText(spec.valueMode, v, total, dec);
+      const shown = valueText(spec.valueMode, v, total, dec, styleOf(spec));
       if (inside) svg += gray ? label(px, py + 4, shown, 12, `middle`, TEXT, ` stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="bold"`) : label(px, py + 4, shown, 12, `middle`, inkOn(paints[i].fill), ` font-weight="bold"`);
       else svg += label(px, py + 4, shown, 12, Math.cos(mid) >= 0 ? `start` : `end`, TEXT);
     }
     angle = next;
   });
-  if (donut) svg += label(cx, cy + 7, formatNumber(total, dec), 22, `middle`, TEXT, ` font-weight="bold"`);
+  if (donut) svg += label(cx, cy + 7, withUnit(formatNumber(total, dec, spec.decimals), spec.unit), 22, `middle`, TEXT, ` font-weight="bold"`);
   return svg + legendInfo.svg;
 }
 
 // Scatter chart: each row is a point, the first column gives X (a number) and each series gives a Y.
 function drawScatter(spec: ChartSpec, opts: RenderOptions): string {
-  const W = CHART_WIDTH;
-  const H = CHART_HEIGHT;
+  const W = spec.width;
+  const H = spec.height;
   const dec = opts.decimal ?? `.`;
   const m = spec.series.length;
   const { paints, defs } = paintsOf(spec, m);
@@ -464,7 +520,8 @@ function drawScatter(spec: ChartSpec, opts: RenderOptions): string {
   });
   const ys = spec.series.flatMap((s) => s.values).filter((v): v is number => v !== null);
   const xScale = niceScale(Math.min(...xs, 0), Math.max(...xs, 0) === Math.min(...xs, 0) ? Math.max(...xs, 0) + 1 : Math.max(...xs, 0));
-  const yScale = niceScale(Math.min(...ys, 0), Math.max(...ys, 0));
+  const lineValues = spec.lines.map((line) => lineValue(line, ys)).filter((v): v is number => v !== null);
+  const yScale = niceScale(Math.min(...ys, ...lineValues, 0), Math.max(...ys, ...lineValues, 0));
   const xLabels = xScale.ticks.map((t) => formatNumber(t, dec));
   const yLabels = yScale.ticks.map((t) => formatNumber(t, dec));
   const legendInfo = m > 1 ? legendBox(spec, spec.series.map((x) => x.name), paints) : NO_LEGEND;
@@ -498,9 +555,10 @@ function drawScatter(spec: ChartSpec, opts: RenderOptions): string {
       else if (shape === 2) svg += `<path d="M ${r(cx)} ${r(cy - 6)} L ${r(cx + 6)} ${r(cy)} L ${r(cx)} ${r(cy + 6)} L ${r(cx - 6)} ${r(cy)} Z" fill="${fill}" stroke="#ffffff" stroke-width="1"/>`;
       else if (shape === 3) svg += `<path d="M ${r(cx)} ${r(cy - 6)} L ${r(cx + 6)} ${r(cy + 5)} L ${r(cx - 6)} ${r(cy + 5)} Z" fill="${fill}" stroke="#ffffff" stroke-width="1"/>`;
       else svg += `<circle cx="${r(cx)}" cy="${r(cy)}" r="5" fill="${fill}" fill-opacity="${gray ? 1 : 0.85}" stroke="#ffffff" stroke-width="1"/>`;
-      if (spec.valueMode !== `none`) svg += label(cx, cy - 9, formatNumber(v, dec), 11, `middle`, MUTED);
+      if (spec.valueMode !== `none`) svg += label(cx, cy - 9, withUnit(formatNumber(v, dec, spec.decimals), spec.unit), 11, `middle`, MUTED);
     });
   });
+  svg += drawLines(spec, ys, py, { x0, x1, y0, y1 }, false, dec);
   if (spec.xTitle !== ``) svg += label((x0 + x1) / 2, H - legendInfo.bottom - 6, shorten(spec.xTitle, 13, x1 - x0), 13, `middle`, TEXT, ` font-weight="bold"`);
   if (spec.yTitle !== ``) svg += label(14 + legendInfo.left, (y0 + y1) / 2, shorten(spec.yTitle, 13, y1 - y0), 13, `middle`, TEXT, ` font-weight="bold" transform="rotate(-90 ${14 + legendInfo.left} ${r((y0 + y1) / 2)})"`);
   return svg + legendInfo.svg;
@@ -508,8 +566,8 @@ function drawScatter(spec: ChartSpec, opts: RenderOptions): string {
 
 // Radar chart: each category is an axis from the centre, each series is a polygon.
 function drawRadar(spec: ChartSpec, opts: RenderOptions): string {
-  const W = CHART_WIDTH;
-  const H = CHART_HEIGHT;
+  const W = spec.width;
+  const H = spec.height;
   const dec = opts.decimal ?? `.`;
   const n = spec.categories.length;
   const m = spec.series.length;
@@ -556,7 +614,7 @@ function drawRadar(spec: ChartSpec, opts: RenderOptions): string {
       if (v === null) return;
       const [x, y] = point(k, v);
       svg += `<circle cx="${r(x)}" cy="${r(y)}" r="3.5" fill="${paints[si].stroke}" stroke="#ffffff" stroke-width="1"/>`;
-      if (spec.valueMode !== `none`) svg += label(x, y - 8, valueText(spec.valueMode, v, totals[k], dec), 11, `middle`, MUTED);
+      if (spec.valueMode !== `none`) svg += label(x, y - 8, valueText(spec.valueMode, v, totals[k], dec, styleOf(spec)), 11, `middle`, MUTED);
     });
   });
   return svg + legendInfo.svg;
@@ -565,5 +623,5 @@ function drawRadar(spec: ChartSpec, opts: RenderOptions): string {
 // The SVG picture of a chart (a text). The title of the chart is not drawn: it is the caption of the figure.
 export function renderChart(spec: ChartSpec, opts: RenderOptions = {}): string {
   const inner = isSliceChart(spec.type) ? drawPie(spec, opts) : spec.type === `scatter` ? drawScatter(spec, opts) : spec.type === `radar` ? drawRadar(spec, opts) : drawAxes(spec, opts);
-  return frame(inner, CHART_WIDTH, CHART_HEIGHT);
+  return frame(inner, spec.width, spec.height);
 }

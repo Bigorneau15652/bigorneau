@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.38.0
+
+Added: charts can now be resized in the note by dragging the handle at each corner of the drawing (shown when the pointer is over the chart): the drawing becomes wider or taller and the text keeps its size. The size is written in the block (width and height, in pixels) and is also used by the export; two fields of the editor give it too. Added: a unit written after the numbers shown (for example € or %) and a number of decimals (automatic, or from 0 to 4). Added: threshold or mean lines for the charts drawn on axes (bars, lines, areas, scatter): a line at a given value or at the mean of the data, with an optional name, written one per line in the editor. Blocks written by earlier versions are drawn as before.
+
+Ajouté : les graphiques se redimensionnent maintenant dans la note en tirant la poignée de chaque coin du dessin (visible quand le pointeur est sur le graphique) : le dessin devient plus large ou plus haut et l'écriture garde sa taille. La taille est écrite dans le bloc (width et height, en pixels) et sert aussi à l'export ; deux champs de l'éditeur la donnent également. Ajouté : une unité écrite après les nombres affichés (par exemple € ou %) et un nombre de décimales (automatique, ou de 0 à 4). Ajouté : des lignes de seuil ou de moyenne pour les graphiques tracés sur des axes (barres, courbes, aires, nuage de points) : une ligne à une valeur donnée ou à la moyenne des données, avec un nom facultatif, écrites une par ligne dans l'éditeur. Les blocs écrits par les versions précédentes sont dessinés comme avant.
+
 ## 0.37.0
 
 Added: four new types of charts in the chart editor, which now chooses the type in a menu: areas (filled surfaces, stacked or not), donut (a pie with a hole where the total is written), scatter (the first column of the table gives the X values, each series gives the Y values, points of different shapes in the black and white style) and radar (spider web: each category is an axis, each series a polygon, three categories at least). They use the colour styles, the values shown, the legend places and the export like the other types. The editor shows only the options that mean something for the chosen type.
