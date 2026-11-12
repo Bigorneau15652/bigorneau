@@ -55,6 +55,11 @@ test(`tableur : plage, lignes et colonnes inversees, limites`, () => {
   assert.deepEqual(flipped?.series.map((s) => s.name), [`r1`, `r2`, `r3`]);
   assert.equal(tableOfSheet(rows, { range: `zz`, transpose: false }), null);
   assert.equal(tableOfSheet([[`seulement`, `un en-tete`]], noTranspose), null);
+  // A sheet without a row of names: the first row is data.
+  const bare = tableOfSheet([[`Lundi`, `35`, `14`], [`Mardi`, `25`, `53`]], noTranspose);
+  assert.deepEqual(bare?.categories, [`Lundi`, `Mardi`]);
+  assert.deepEqual(bare?.series.map((x) => x.name), [``, ``]);
+  assert.deepEqual(tableOfSheet([[`x`, `y`], [`a`, `1`]], { ...noTranspose, header: false })?.categories, [`x`, `a`]);
   // More than 12 series are cut and reported.
   const wide = [Array.from({ length: 20 }, (_x, i) => `s${i}`), Array.from({ length: 20 }, (_x, i) => String(i))];
   const cut = tableOfSheet(wide, noTranspose);

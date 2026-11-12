@@ -2,7 +2,7 @@
 // sheet gives the table of numbers of a chart. No library: xlsx and ods are zip archives of XML files, read with the zip reader of the
 // plugin. The old binary xls format is not read. This file does not depend on Obsidian.
 import { Inflate, zipFiles } from "../zip";
-import { ChartSeries, cleanText, MAX_CATEGORIES, MAX_SERIES, parseNumber } from "./spec";
+import { ChartSeries, cleanText, MAX_CATEGORIES, MAX_SERIES, parseNumber, rowHasNumbers } from "./spec";
 
 export interface Sheet {
   name: string;
@@ -266,6 +266,8 @@ export interface ImportOptions {
   range: string;
   // Rows become columns and columns become rows.
   transpose: boolean;
+  // True: the first row gives the names of the series. False: it is a row of data. Absent: it is a row of names unless it holds numbers.
+  header?: boolean;
 }
 
 export interface ImportedTable {
@@ -275,8 +277,8 @@ export interface ImportedTable {
   truncated: boolean;
 }
 
-// The chart table of a sheet: the first row gives the names of the series, the first column the categories, the other cells are the numbers.
-// Null when the part chosen has no row of numbers under a row of names.
+// The chart table of a sheet: the first column gives the categories, the first row the names of the series (when it holds no number), the other
+// cells are the numbers. Null when the part chosen has no usable row of numbers.
 export function tableOfSheet(rows: string[][], options: ImportOptions): ImportedTable | null {
   let grid = rows;
   const range = options.range.trim() === `` ? null : parseRange(options.range);
@@ -287,16 +289,18 @@ export function tableOfSheet(rows: string[][], options: ImportOptions): Imported
     grid = Array.from({ length: width }, (_x, c) => grid.map((r) => r[c] ?? ``));
   }
   grid = grid.filter((r) => r.some((c) => c.trim() !== ``));
-  if (grid.length < 2) return null;
+  if (grid.length === 0) return null;
+  const hasHeader = options.header ?? !rowHasNumbers(grid[0]);
+  if (hasHeader && grid.length < 2) return null;
   const width = Math.max(...grid.map((r) => r.length)) - 1;
   if (width < 1) return null;
-  const body = grid.slice(1);
+  const body = hasHeader ? grid.slice(1) : grid;
   const seriesCount = Math.min(width, MAX_SERIES);
   const used = body.slice(0, MAX_CATEGORIES);
   const series: ChartSeries[] = [];
   for (let s = 0; s < seriesCount; s++) {
     series.push({
-      name: cleanText(grid[0][s + 1] ?? ``),
+      name: hasHeader ? cleanText(grid[0][s + 1] ?? ``) : ``,
       values: used.map((r) => {
         const n = parseNumber(r[s + 1] ?? ``);
         return n === null || Number.isNaN(n) ? null : n;
