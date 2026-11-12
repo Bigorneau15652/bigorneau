@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.36.1
+
+Fixed: in the chart editor, when cells are pasted or a file is imported, the first row was always taken as the names of the series, so a first row of data was lost (for example the line Monday when the pasted cells had no row of names). The first row is now taken as data when it holds numbers, and as names of the series otherwise. A box under the pasted cells, set by itself from the text, lets you correct this choice. The series without a name are named 1, 2... in the legend.
+
+Corrigé : dans l'éditeur de graphiques, quand on colle des cellules ou qu'on importe un fichier, la première ligne était toujours prise pour les noms des séries, si bien qu'une première ligne de données était perdue (par exemple la ligne Lundi quand les cellules collées n'avaient pas de ligne de noms). La première ligne est maintenant prise pour des données quand elle contient des nombres, et pour les noms des séries sinon. Une case sous les cellules collées, réglée toute seule d'après le texte, permet de corriger ce choix. Les séries sans nom s'appellent 1, 2... dans la légende.
+
 ## 0.36.0
 
 Added: in the chart editor, the numbers can be imported from a spreadsheet file: CSV (UTF-8 or the Windows encoding of Excel, separators ; , or tab), Excel xlsx and LibreOffice ods, chosen in the vault or on the computer. The first row gives the names of the series and the first column the categories. For a file with several sheets, the sheet is chosen; a range (for example A1:D10) can limit the part read, and rows and columns can be swapped. The numbers are copied into the chart; for a file of the vault, the chart remembers the file (path, sheet, range) in its block and the Update button reads it again. Old xls files are not read (save them as xlsx or CSV). The files are read by code written for the plugin (the zip reader of the fonts is reused): no new library. Also added: a double click on a chart drawn in the note opens the chart editor.

@@ -2,7 +2,7 @@
 // is opened by the Charts module, which gives it the Obsidian module: this file imports Obsidian only for its types.
 import type { App } from "obsidian";
 import { renderChart } from "./chart/render";
-import { CHART_PALETTES, ChartPalette, ChartSource, ChartSpec, ChartType, cleanColor, LEGEND_POSITIONS, LegendPosition, MAX_CATEGORIES, MAX_SERIES, parseNumber, parseTable, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
+import { CHART_PALETTES, ChartPalette, ChartSource, ChartSpec, ChartType, cleanColor, LEGEND_POSITIONS, LegendPosition, MAX_CATEGORIES, MAX_SERIES, parseNumber, parseTable, rowHasNumbers, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
 import { readSpreadsheet, Sheet, SpreadsheetError, SPREADSHEET_EXT, tableOfSheet } from "./chart/spreadsheet";
 import { appendSvgDocument } from "./dom";
 import type { HelpLang } from "./help";
@@ -51,7 +51,7 @@ const TEXTS = {
   removeSeries: { fr: `Retirer cette série`, en: `Remove this series` },
   colour: { fr: `Couleur`, en: `Colour` },
   importTitle: { fr: `Importer un fichier (CSV, Excel, LibreOffice)`, en: `Import a file (CSV, Excel, LibreOffice)` },
-  importHelp: { fr: `Les nombres du fichier sont copiés dans le graphique : le fichier n'est plus nécessaire ensuite. Pour un fichier du coffre, le bouton Actualiser relit le fichier. La première ligne donne les noms des séries, la première colonne les catégories. Les fichiers Excel anciens (xls) ne sont pas lus : enregistrez-les en xlsx ou en CSV.`, en: `The numbers of the file are copied into the chart: the file is not needed afterwards. For a file of the vault, the Update button reads the file again. The first row gives the names of the series, the first column the categories. Old Excel files (xls) are not read: save them as xlsx or CSV.` },
+  importHelp: { fr: `Les nombres du fichier sont copiés dans le graphique : le fichier n'est plus nécessaire ensuite. Pour un fichier du coffre, le bouton Actualiser relit le fichier. La première colonne donne les catégories, la première ligne les noms des séries (elle est prise pour des données si elle contient des nombres). Les fichiers Excel anciens (xls) ne sont pas lus : enregistrez-les en xlsx ou en CSV.`, en: `The numbers of the file are copied into the chart: the file is not needed afterwards. For a file of the vault, the Update button reads the file again. The first column gives the categories, the first row the names of the series (it is taken as data when it holds numbers). Old Excel files (xls) are not read: save them as xlsx or CSV.` },
   importVault: { fr: `Fichier du coffre…`, en: `File of the vault…` },
   importComputer: { fr: `Fichier de l'ordinateur…`, en: `File of the computer…` },
   importSource: { fr: `Fichier lié : `, en: `Linked file: ` },
@@ -63,15 +63,16 @@ const TEXTS = {
   importPick: { fr: `Choisir un fichier du coffre`, en: `Choose a file of the vault` },
   importDone: { fr: `Nombres importés.`, en: `Numbers imported.` },
   importCut: { fr: `Nombres importés. Le graphique garde au plus 200 lignes et 12 séries : le reste a été laissé de côté.`, en: `Numbers imported. A chart keeps at most 200 rows and 12 series: the rest was left out.` },
-  importNoTable: { fr: `Aucun tableau lisible dans cette feuille ou cette plage (il faut une ligne de noms et au moins une ligne de nombres).`, en: `No readable table in this sheet or range (a row of names and at least one row of numbers are needed).` },
+  importNoTable: { fr: `Aucun tableau lisible dans cette feuille ou cette plage (il faut une colonne de noms et au moins une colonne de nombres).`, en: `No readable table in this sheet or range (a column of names and at least one column of numbers are needed).` },
   importOld: { fr: `Ce format n'est pas lu. Enregistrez le fichier en xlsx, ods ou CSV.`, en: `This format is not read. Save the file as xlsx, ods or CSV.` },
   importEmpty: { fr: `Le fichier est vide.`, en: `The file is empty.` },
   importBad: { fr: `Le fichier n'a pas pu être lu.`, en: `The file could not be read.` },
   importMissing: { fr: `Fichier introuvable dans le coffre.`, en: `File not found in the vault.` },
+  pasteHeader: { fr: `La première ligne contient les noms des séries`, en: `The first row holds the names of the series` },
   paste: { fr: `Coller des cellules (Excel, LibreOffice, CSV)`, en: `Paste cells (Excel, LibreOffice, CSV)` },
-  pasteHelp: { fr: `Copiez des cellules dans votre tableur, collez-les ici : la première ligne donne les noms des séries, la première colonne les catégories.`, en: `Copy cells in your spreadsheet and paste them here: the first row gives the names of the series, the first column the categories.` },
+  pasteHelp: { fr: `Copiez des cellules dans votre tableur, collez-les ici : la première colonne donne les catégories. La première ligne donne les noms des séries, sauf si elle contient des nombres : elle est alors prise pour des données (la case ci-dessous permet de corriger ce choix).`, en: `Copy cells in your spreadsheet and paste them here: the first column gives the categories. The first row gives the names of the series, unless it holds numbers: it is then taken as data (the box below lets you correct this choice).` },
   pasteUse: { fr: `Utiliser ces cellules`, en: `Use these cells` },
-  pasteBad: { fr: `Ces cellules ne contiennent pas de tableau lisible (il faut au moins une ligne de noms et une ligne de nombres).`, en: `These cells do not hold a readable table (a row of names and a row of numbers are needed).` },
+  pasteBad: { fr: `Ces cellules ne contiennent pas de tableau lisible (il faut une colonne de noms et au moins une colonne de nombres).`, en: `These cells do not hold a readable table (a column of names and at least one column of numbers are needed).` },
   badNumber: { fr: `Ce n'est pas un nombre`, en: `Not a number` },
   insert: { fr: `Insérer`, en: `Insert` },
   replace: { fr: `Enregistrer les modifications`, en: `Save the changes` },
@@ -123,6 +124,11 @@ interface State {
   cells: string[][];
   colors: string[];
   source: ChartSource | null;
+}
+
+// Cells of a line pasted from a spreadsheet (a tab, `;` or a comma between them).
+function splitFirst(line: string): string[] {
+  return line.split(line.includes(`;`) ? `;` : line.includes(`\t`) ? `\t` : `,`).map((c) => c.trim());
 }
 
 function fromSpec(spec: ChartSpec): State {
@@ -544,10 +550,22 @@ export function openChartEditor(deps: ChartEditorDeps): void {
       details.createEl(`summary`, { text: tr(`paste`) });
       details.createEl(`p`, { cls: `mmw-chart-hint`, text: tr(`pasteHelp`) });
       const area = details.createEl(`textarea`, { cls: `mmw-chart-area`, attr: { rows: `5` } });
+      // The first row is a row of names unless it holds numbers; the box follows the pasted text until it is changed by hand.
+      const headerLabel = details.createEl(`label`, { cls: `mmw-chart-check` });
+      const headerBox = headerLabel.createEl(`input`, { attr: { type: `checkbox` } });
+      headerBox.checked = true;
+      headerLabel.createEl(`span`, { text: tr(`pasteHeader`) });
+      let headerTouched = false;
+      headerBox.addEventListener(`change`, () => (headerTouched = true));
+      area.addEventListener(`input`, () => {
+        if (headerTouched) return;
+        const first = area.value.replace(/\r\n?/g, `\n`).split(`\n`).find((l) => l.trim() !== ``);
+        headerBox.checked = first === undefined ? true : !rowHasNumbers(splitFirst(first));
+      });
       const message = details.createEl(`p`, { cls: `mmw-chart-hint` });
       const use = details.createEl(`button`, { cls: `mmw-dlg-btn`, text: tr(`pasteUse`), attr: { type: `button` } });
       use.addEventListener(`click`, () => {
-        const table = parseTable(area.value);
+        const table = parseTable(area.value, { header: headerBox.checked });
         if (!table) {
           message.setText(tr(`pasteBad`));
           return;

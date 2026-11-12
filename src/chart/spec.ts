@@ -207,7 +207,7 @@ export function parseChart(source: string): ChartSpec {
     else if (key === `colors`) colors.push(...value.split(`,`).map((c) => (cleanColor(c) ?? ``)));
   }
   if (sourceLines.path) spec.source = { path: sourceLines.path, sheet: sourceLines.sheet ?? ``, range: sourceLines.range ?? ``, transpose: sourceLines.transpose ?? false };
-  const table = parseTable(lines.slice(at).join(`\n`));
+  const table = parseTable(lines.slice(at).join(`\n`), { header: true });
   if (table) {
     spec.categories = table.categories;
     spec.series = table.series;
@@ -215,18 +215,33 @@ export function parseChart(source: string): ChartSpec {
   return spec;
 }
 
-// A table of numbers written as text (cells separated by `;`, a tab or a comma; first row: names of the series; first column: categories),
-// for instance cells copied from a spreadsheet. Null when the text has no usable data.
-export function parseTable(source: string): { categories: string[]; series: ChartSeries[] } | null {
+// True when a row, without its first cell, holds a number: it is then a row of data and not a row of names of series.
+export function rowHasNumbers(row: string[]): boolean {
+  return row.slice(1).some((c) => {
+    const n = parseNumber(c);
+    return n !== null && !Number.isNaN(n);
+  });
+}
+
+export interface TableOptions {
+  // True: the first row gives the names of the series. False: it is a row of data. Absent: it is a row of names unless it holds numbers.
+  header?: boolean;
+}
+
+// A table of numbers written as text (cells separated by `;`, a tab or a comma; first column: categories; first row: names of the series
+// when there is one), for instance cells copied from a spreadsheet. Null when the text has no usable data.
+export function parseTable(source: string, options: TableOptions = {}): { categories: string[]; series: ChartSeries[] } | null {
   const rows = source
     .replace(/\r\n?/g, `\n`)
     .split(`\n`)
     .filter((l) => l.trim() !== ``)
     .map(splitCells);
-  if (rows.length < 2) return null;
-  const header = rows[0];
+  if (rows.length === 0) return null;
+  const hasHeader = options.header ?? !rowHasNumbers(rows[0]);
+  if (hasHeader && rows.length < 2) return null;
+  const header = hasHeader ? rows[0] : [];
   const width = Math.min(MAX_SERIES, Math.max(0, Math.max(...rows.map((r) => r.length)) - 1));
-  const body = rows.slice(1, MAX_CATEGORIES + 1);
+  const body = (hasHeader ? rows.slice(1) : rows).slice(0, MAX_CATEGORIES);
   if (width === 0 || body.length === 0) return null;
   const series: ChartSeries[] = [];
   for (let s = 0; s < width; s++) {

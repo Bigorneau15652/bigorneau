@@ -79,6 +79,15 @@ test(`graphique : cellules collees, remplacement du bloc et figure de l'export`,
   assert.deepEqual(table?.categories, [`x`, `y`]);
   assert.deepEqual(table?.series.map((s) => s.values), [[1.5, 3], [2, null]]);
   assert.equal(parseTable(`seulement une ligne`), null);
+  // Without a row of names, the first row is data (it holds numbers): nothing is lost.
+  const days = parseTable(`Lundi\t35\t14\nMardi\t25\t53\nMercredi\t15\t86`);
+  assert.deepEqual(days?.categories, [`Lundi`, `Mardi`, `Mercredi`]);
+  assert.deepEqual(days?.series.map((x) => [x.name, x.values]), [[``, [35, 25, 15]], [``, [14, 53, 86]]]);
+  // A row of names stays a row of names; the choice can be forced.
+  assert.deepEqual(parseTable(`\tT1\tT2\nMardi\t25\t53`)?.series.map((x) => x.name), [`T1`, `T2`]);
+  assert.deepEqual(parseTable(`2020\t2021\nx\t1`, { header: true })?.series.map((x) => x.name), [`2021`]);
+  assert.equal(parseTable(`Lundi\t35\t14`)?.categories.length, 1);
+  assert.deepEqual(parseTable(`A\tB\nx\t1`, { header: false })?.categories, [`A`, `x`]);
   const note = [`avant`, "```bigorneau-chart", `type: pie`, "```", `apres`].join(`\n`);
   const found = findCharts(note)[0];
   const next = replaceChart(note, found, chartBlock({ ...defaultChart(), type: `line`, title: `T` }));
