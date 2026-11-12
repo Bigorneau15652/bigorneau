@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.38.1
+
+Fixed: the resize handles of a chart were drawn half outside of the drawing and cut by the note. They are now drawn inside the corners of the drawing.
+
+Corrigé : les poignées de redimensionnement d'un graphique étaient dessinées à moitié hors du dessin et coupées par la note. Elles sont maintenant dessinées à l'intérieur des coins du dessin.
+
 ## 0.38.0
 
 Added: charts can now be resized in the note by dragging the handle at each corner of the drawing (shown when the pointer is over the chart): the drawing becomes wider or taller and the text keeps its size. The size is written in the block (width and height, in pixels) and is also used by the export; two fields of the editor give it too. Added: a unit written after the numbers shown (for example € or %) and a number of decimals (automatic, or from 0 to 4). Added: threshold or mean lines for the charts drawn on axes (bars, lines, areas, scatter): a line at a given value or at the mean of the data, with an optional name, written one per line in the editor. Blocks written by earlier versions are drawn as before.
