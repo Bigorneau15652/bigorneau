@@ -1754,6 +1754,10 @@
   height: 22px;
   border-radius: 50%;
   object-fit: contain;
+  /* The picture is only a drawing on the button: the click goes to the button (Obsidian offers to resize and zoom pictures it hovers). */
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 /* Fonction a etat activee : bouton plus contraste, sans couleur. */
@@ -2932,4 +2936,159 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
 .mmw-node.mmw-float-hover {
   outline: 2px dashed var(--interactive-accent);
   outline-offset: 3px;
+}
+
+
+/* Chart editor */
+.mmw-chartmodal {
+  width: min(1040px, 96vw);
+}
+
+.mmw-chart-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 1fr) minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.mmw-chart-right {
+  position: sticky;
+  top: 0;
+}
+
+.mmw-chart-preview svg,
+.mmw-chart-block svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 640px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+}
+
+.mmw-chart-row {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mmw-chart-label {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.mmw-chart-input {
+  width: 100%;
+}
+
+.mmw-chart-types {
+  display: flex;
+  gap: 6px;
+}
+
+.mmw-chart-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 10px;
+}
+
+.mmw-chart-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-ui-small);
+}
+
+.mmw-chart-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.mmw-chart-grid th,
+.mmw-chart-grid td {
+  padding: 2px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.mmw-chart-grid th {
+  min-width: 96px;
+}
+
+.mmw-chart-number {
+  min-width: 70px;
+  text-align: right;
+}
+
+.mmw-chart-bad {
+  border-color: var(--text-error);
+  color: var(--text-error);
+}
+
+.mmw-chart-color {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  margin-right: 4px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.mmw-chart-x {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.mmw-chart-tableactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.mmw-chart-hint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin: 4px 0;
+}
+
+.mmw-chart-area {
+  width: 100%;
+  font-family: var(--font-monospace);
+}
+
+/* Chart drawn in the note */
+.mmw-chart-block {
+  position: relative;
+  margin: 8px 0;
+}
+
+.mmw-chart-caption {
+  margin-top: 4px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.mmw-chart-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0.6;
+}
+
+.mmw-chart-edit:hover {
+  opacity: 1;
+}
+
+@media (max-width: 820px) {
+  .mmw-chart-layout {
+    grid-template-columns: 1fr;
+  }
 }

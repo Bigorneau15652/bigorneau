@@ -17,6 +17,7 @@ import { PLUGIN_HELP } from "./help-data";
 import { HelpModal } from "./help-modal";
 import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
+import { CHARTS_SCRIPT } from "./script-charts";
 import { FORMULAS_SCRIPT } from "./script-formulas";
 import { ICON_FOOTNOTE, ICON_LOREM, registerCustomIcons } from "./custom-icons";
 import { drawFigure, excalidrawInstalled, insertNamedImage, nameAfterPaste } from "./drawing";
@@ -74,10 +75,11 @@ export default class MindmapWritingPlugin extends Plugin {
       notice: (message) => void new Notice(message),
       registerFunction: (fn) => this.addFunction(fn),
       addHelp: (entries) => this.helpEntries.add(entries),
+      registerCodeBlock: (language, handler) => void this.registerMarkdownCodeBlockProcessor(language, (source, el, ctx) => handler(source, el, ctx)),
       saveState: () => void this.saveSettings(false),
     },
     { enabled: {} },
-    [FORMULAS_SCRIPT, createPageScript(() => this.settings.exportAuthor, this.typographyHost())]
+    [FORMULAS_SCRIPT, CHARTS_SCRIPT, createPageScript(() => this.settings.exportAuthor, this.typographyHost())]
   );
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];

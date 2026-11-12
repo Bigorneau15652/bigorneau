@@ -3,6 +3,16 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.35.0
+
+Added: a Charts module (off by default, turned on in the Modules window of the bigorneau button). It adds a Chart editor button, with its own icon, that works like the formula editor. The window offers three types of chart (bars, lines, pie), a title that becomes the caption of the figure, a table of numbers to type or to paste from a spreadsheet (Excel, LibreOffice, CSV), the style (colour of each series or slice, values shown, legend, grid, titles of the axes, horizontal and stacked bars) and a live preview. The chart is written in the note as a block named bigorneau-chart and drawn in live preview and in reading mode; the PDF and HTML export draw it too, as a figure with its title as caption. To change a chart, put the cursor in it and click the Chart editor button, or click the chart icon at the top right of the drawing. The charts are drawn by a generator written for the plugin (no new library).
+
+Fixed: the bigorneau button of the panel no longer offers to resize and zoom its picture when it is hovered: it is only clickable.
+
+Ajouté : un module Graphiques (désactivé par défaut, à activer dans la fenêtre Modules du bouton bigorneau). Il ajoute un bouton Éditeur de graphiques, avec sa propre icône, qui fonctionne comme l'éditeur de formules. La fenêtre propose trois types de graphique (barres, courbes, secteurs), un titre qui devient la légende de la figure, un tableau de nombres à saisir ou à coller depuis un tableur (Excel, LibreOffice, CSV), le style (couleur de chaque série ou de chaque part, valeurs affichées, légende, grille, titres des axes, barres horizontales et empilées) et un aperçu en direct. Le graphique est écrit dans la note sous la forme d'un bloc nommé bigorneau-chart et dessiné dans l'aperçu en direct et en lecture ; l'export PDF et HTML le dessinent aussi, comme une figure dont le titre est la légende. Pour modifier un graphique, placez le curseur dedans puis cliquez sur le bouton Éditeur de graphiques, ou cliquez sur l'icône de graphique en haut à droite du dessin. Les graphiques sont dessinés par un générateur écrit pour le plugin (aucune nouvelle bibliothèque).
+
+Corrigé : le bouton bigorneau du panneau ne propose plus de redimensionner et de zoomer son image au survol : il est seulement cliquable.
+
 ## 0.34.2
 
 Fixed: a click on the title of the map now really brings the note back to its very top, with its properties, in the mode that shows all the chapters. The scroll of the editor is set to the top directly, and set again a moment later because the live preview measures its blocks late.
