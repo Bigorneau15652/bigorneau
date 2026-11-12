@@ -2,7 +2,7 @@
 // is opened by the Charts module, which gives it the Obsidian module: this file imports Obsidian only for its types.
 import type { App } from "obsidian";
 import { renderChart } from "./chart/render";
-import { CHART_PALETTES, ChartPalette, ChartSource, ChartSpec, ChartType, cleanColor, LEGEND_POSITIONS, LegendPosition, MAX_CATEGORIES, MAX_SERIES, parseNumber, parseTable, rowHasNumbers, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
+import { CHART_PALETTES, ChartPalette, ChartSource, ChartSpec, ChartType, cleanColor, LEGEND_POSITIONS, LegendPosition, MAX_CATEGORIES, MAX_SERIES, parseNumber, parseTable, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
 import { readSpreadsheet, Sheet, SpreadsheetError, SPREADSHEET_EXT, tableOfSheet } from "./chart/spreadsheet";
 import { appendSvgDocument } from "./dom";
 import type { HelpLang } from "./help";
@@ -51,7 +51,7 @@ const TEXTS = {
   removeSeries: { fr: `Retirer cette série`, en: `Remove this series` },
   colour: { fr: `Couleur`, en: `Colour` },
   importTitle: { fr: `Importer un fichier (CSV, Excel, LibreOffice)`, en: `Import a file (CSV, Excel, LibreOffice)` },
-  importHelp: { fr: `Les nombres du fichier sont copiés dans le graphique : le fichier n'est plus nécessaire ensuite. Pour un fichier du coffre, le bouton Actualiser relit le fichier. La première colonne donne les catégories, la première ligne les noms des séries (elle est prise pour des données si elle contient des nombres). Les fichiers Excel anciens (xls) ne sont pas lus : enregistrez-les en xlsx ou en CSV.`, en: `The numbers of the file are copied into the chart: the file is not needed afterwards. For a file of the vault, the Update button reads the file again. The first column gives the categories, the first row the names of the series (it is taken as data when it holds numbers). Old Excel files (xls) are not read: save them as xlsx or CSV.` },
+  importHelp: { fr: `Les nombres du fichier sont copiés dans le graphique : le fichier n'est plus nécessaire ensuite. Pour un fichier du coffre, le bouton Actualiser relit le fichier. La première colonne donne les catégories. Cochez « Mon tableau comporte des en-têtes » si la première ligne donne les noms des séries, comme dans Excel. Les fichiers Excel anciens (xls) ne sont pas lus : enregistrez-les en xlsx ou en CSV.`, en: `The numbers of the file are copied into the chart: the file is not needed afterwards. For a file of the vault, the Update button reads the file again. The first column gives the categories, tick "My table has headers" if the first row gives the names of the series, as in Excel. Old Excel files (xls) are not read: save them as xlsx or CSV.` },
   importVault: { fr: `Fichier du coffre…`, en: `File of the vault…` },
   importComputer: { fr: `Fichier de l'ordinateur…`, en: `File of the computer…` },
   importSource: { fr: `Fichier lié : `, en: `Linked file: ` },
@@ -68,9 +68,9 @@ const TEXTS = {
   importEmpty: { fr: `Le fichier est vide.`, en: `The file is empty.` },
   importBad: { fr: `Le fichier n'a pas pu être lu.`, en: `The file could not be read.` },
   importMissing: { fr: `Fichier introuvable dans le coffre.`, en: `File not found in the vault.` },
-  pasteHeader: { fr: `La première ligne contient les noms des séries`, en: `The first row holds the names of the series` },
+  headers: { fr: `Mon tableau comporte des en-têtes (noms des séries sur la première ligne)`, en: `My table has headers (names of the series on the first row)` },
   paste: { fr: `Coller des cellules (Excel, LibreOffice, CSV)`, en: `Paste cells (Excel, LibreOffice, CSV)` },
-  pasteHelp: { fr: `Copiez des cellules dans votre tableur, collez-les ici : la première colonne donne les catégories. La première ligne donne les noms des séries, sauf si elle contient des nombres : elle est alors prise pour des données (la case ci-dessous permet de corriger ce choix).`, en: `Copy cells in your spreadsheet and paste them here: the first column gives the categories. The first row gives the names of the series, unless it holds numbers: it is then taken as data (the box below lets you correct this choice).` },
+  pasteHelp: { fr: `Copiez des cellules dans votre tableur, collez-les ici : la première colonne donne les catégories. Cochez « Mon tableau comporte des en-têtes » si la première ligne donne les noms des séries, comme dans Excel ; sinon décochez la case et la première ligne est prise pour des données.`, en: `Copy cells in your spreadsheet and paste them here: the first column gives the categories. Tick "My table has headers" if the first row gives the names of the series, as in Excel; otherwise untick the box and the first row is taken as data.` },
   pasteUse: { fr: `Utiliser ces cellules`, en: `Use these cells` },
   pasteBad: { fr: `Ces cellules ne contiennent pas de tableau lisible (il faut une colonne de noms et au moins une colonne de nombres).`, en: `These cells do not hold a readable table (a column of names and at least one column of numbers are needed).` },
   badNumber: { fr: `Ce n'est pas un nombre`, en: `Not a number` },
@@ -124,11 +124,6 @@ interface State {
   cells: string[][];
   colors: string[];
   source: ChartSource | null;
-}
-
-// Cells of a line pasted from a spreadsheet (a tab, `;` or a comma between them).
-function splitFirst(line: string): string[] {
-  return line.split(line.includes(`;`) ? `;` : line.includes(`\t`) ? `\t` : `,`).map((c) => c.trim());
 }
 
 function fromSpec(spec: ChartSpec): State {
@@ -191,6 +186,8 @@ export function openChartEditor(deps: ChartEditorDeps): void {
     // Sheets of the file read last (to change the sheet, the range or the swap without reading the file again).
     private sheets: Sheet[] = [];
     private importBox!: HTMLDetailsElement;
+    // The first row of an imported sheet holds the names of the series (checked, as in Excel, unless the block says otherwise).
+    private importHeader = deps.spec.source?.header ?? true;
 
     onOpen(): void {
       this.titleEl.setText(tr(`title`));
@@ -422,6 +419,12 @@ export function openChartEditor(deps: ChartEditorDeps): void {
       box.empty();
       box.createEl(`summary`, { text: tr(`importTitle`) });
       box.createEl(`p`, { cls: `mmw-chart-hint`, text: tr(`importHelp`) });
+      const headerChecks = box.createDiv({ cls: `mmw-chart-checks` });
+      this.check(headerChecks, `headers`, this.importHeader, (v) => {
+        this.importHeader = v;
+        if (this.st.source) this.st.source.header = v;
+        if (this.sheets.length > 0) this.applySheets();
+      });
       const buttons = box.createDiv({ cls: `mmw-chart-tableactions` });
       const vault = buttons.createEl(`button`, { cls: `mmw-dlg-btn`, text: tr(`importVault`), attr: { type: `button` } });
       vault.addEventListener(`click`, () => this.pickVaultFile());
@@ -521,7 +524,7 @@ export function openChartEditor(deps: ChartEditorDeps): void {
         return;
       }
       const previous = this.st.source;
-      this.st.source = vaultPath ? { path: vaultPath, sheet: previous && previous.path === vaultPath ? previous.sheet : this.sheets[0].name, range: previous && previous.path === vaultPath ? previous.range : ``, transpose: previous && previous.path === vaultPath ? previous.transpose : false } : null;
+      this.st.source = vaultPath ? { path: vaultPath, sheet: previous && previous.path === vaultPath ? previous.sheet : this.sheets[0].name, range: previous && previous.path === vaultPath ? previous.range : ``, transpose: previous && previous.path === vaultPath ? previous.transpose : false, header: this.importHeader } : null;
       this.renderImport();
       this.applySheets();
     }
@@ -531,7 +534,7 @@ export function openChartEditor(deps: ChartEditorDeps): void {
       const source = this.st.source;
       const sheet = this.sheets.find((x) => x.name === source?.sheet) ?? this.sheets[0];
       if (!sheet) return;
-      const table = tableOfSheet(sheet.rows, { range: source?.range ?? ``, transpose: source?.transpose ?? false });
+      const table = tableOfSheet(sheet.rows, { range: source?.range ?? ``, transpose: source?.transpose ?? false, header: this.importHeader });
       if (!table) {
         this.say(tr(`importNoTable`));
         return;
@@ -550,18 +553,10 @@ export function openChartEditor(deps: ChartEditorDeps): void {
       details.createEl(`summary`, { text: tr(`paste`) });
       details.createEl(`p`, { cls: `mmw-chart-hint`, text: tr(`pasteHelp`) });
       const area = details.createEl(`textarea`, { cls: `mmw-chart-area`, attr: { rows: `5` } });
-      // The first row is a row of names unless it holds numbers; the box follows the pasted text until it is changed by hand.
       const headerLabel = details.createEl(`label`, { cls: `mmw-chart-check` });
       const headerBox = headerLabel.createEl(`input`, { attr: { type: `checkbox` } });
       headerBox.checked = true;
-      headerLabel.createEl(`span`, { text: tr(`pasteHeader`) });
-      let headerTouched = false;
-      headerBox.addEventListener(`change`, () => (headerTouched = true));
-      area.addEventListener(`input`, () => {
-        if (headerTouched) return;
-        const first = area.value.replace(/\r\n?/g, `\n`).split(`\n`).find((l) => l.trim() !== ``);
-        headerBox.checked = first === undefined ? true : !rowHasNumbers(splitFirst(first));
-      });
+      headerLabel.createEl(`span`, { text: tr(`headers`) });
       const message = details.createEl(`p`, { cls: `mmw-chart-hint` });
       const use = details.createEl(`button`, { cls: `mmw-dlg-btn`, text: tr(`pasteUse`), attr: { type: `button` } });
       use.addEventListener(`click`, () => {
