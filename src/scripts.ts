@@ -48,6 +48,9 @@ export interface BigorneauApi {
   // soon as the module is turned off.
   provide(name: string, impl: unknown): void;
   service<T = unknown>(name: string): T | undefined;
+  // Shows a fenced block of the given language (for example a chart) in the notes, in live preview and in reading mode. The block stays
+  // registered until Obsidian restarts, like the code of a module that is turned off.
+  registerCodeBlock(language: string, handler: (source: string, el: HTMLElement, ctx: { sourcePath: string; getSectionInfo(el: HTMLElement): { lineStart: number; lineEnd: number } | null }) => void): void;
 }
 
 export interface OfficialScript {
@@ -88,6 +91,7 @@ export interface ScriptHost {
   notice(message: string): void;
   registerFunction(fn: { id: string; button?: boolean; name: () => string; icons: string[]; needsEditor: boolean; available: () => boolean; run: (ctx: FunctionContext) => void | Promise<void> }): void;
   addHelp(entries: HelpEntry[]): void;
+  registerCodeBlock?(language: string, handler: (source: string, el: HTMLElement, ctx: { sourcePath: string; getSectionInfo(el: HTMLElement): { lineStart: number; lineEnd: number } | null }) => void): void;
   // Saves the state in the settings and refreshes the panel.
   saveState(): void;
 }
@@ -222,6 +226,7 @@ export class ScriptManager {
         this.services.set(name, { owner, impl });
       },
       service: <T>(name: string): T | undefined => this.service<T>(name),
+      registerCodeBlock: (language, handler) => host.registerCodeBlock?.(language, handler),
     };
   }
 }

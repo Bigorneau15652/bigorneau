@@ -4,6 +4,9 @@ import { App, TFile } from "obsidian";
 import { formulaTargets, imageTargets } from "./export/compose";
 import { displaySize, figureBounds, ImageAsset, imageCandidates, isImageTarget, isWebTarget, jpegInfo, stripJpegMetadata, targetPixels } from "./export/image";
 import { noteError } from "./diagnostics";
+import { chartSvgs } from "./chart/figures";
+import { isChartTarget } from "./chart/spec";
+import { currentLang } from "./i18n";
 import { excalidrawSvg } from "./excalidraw-export";
 import { isExcalidrawTarget } from "./export/image";
 import { MathAsset, mathKey } from "./export/math";
@@ -75,7 +78,20 @@ export async function loadAssets(app: App, text: string, fileName: string, sourc
   const bounds = figureBounds(columnSetupOf(findPageConfig(text)?.config.layout ?? defaultLayout()));
   const widths = new Map<string, number | undefined>();
   for (const { target, width } of imageTargets(text, fileName)) if (!widths.has(target) || widths.get(target) === undefined) widths.set(target, width);
+  const charts = chartSvgs(text, currentLang() === `fr` ? `,` : `.`);
   for (const [target, width] of widths) {
+    // A chart of the note is drawn from its numbers (no file): its SVG picture is turned into pixels like any other vector picture.
+    if (isChartTarget(target)) {
+      const svg = charts.get(target);
+      if (!svg) continue;
+      try {
+        const drawn = await cachedImage(`chart|${target}|${width ?? ``}|${boundsKey(bounds)}`, urls, async () => loadBytes(new TextEncoder().encode(svg), `svg`, width, bounds, urls));
+        if (drawn) images.set(target, drawn);
+      } catch (e) {
+        noteError(`Graphique de l'export`, e);
+      }
+      continue;
+    }
     if (!isImageTarget(target) || isWebTarget(target)) continue;
     // Un dessin Excalidraw se lit par son export image (.excalidraw.svg ou .excalidraw.png), sinon la cible elle-meme.
     for (const name of imageCandidates(target)) {
@@ -322,7 +338,21 @@ export async function loadHtmlImages(app: App, text: string, fileName: string, s
   const out = new Map<string, HtmlImage>();
   const targets = new Set<string>();
   for (const { target } of imageTargets(text, fileName)) targets.add(target);
+  const charts = chartSvgs(text, currentLang() === `fr` ? `,` : `.`);
   for (const target of targets) {
+    // A chart of the note: its SVG picture is written in the page (or in the folder of media).
+    if (isChartTarget(target)) {
+      const svg = charts.get(target);
+      if (!svg) continue;
+      try {
+        const bytes = new TextEncoder().encode(svg);
+        const image = sink ? await htmlFileOf(bytes, `svg`, false, `graphique-${target.split(`:`)[1]}.svg`, sink) : await htmlImageOf(bytes, `svg`, false);
+        if (image) out.set(target, image);
+      } catch (e) {
+        noteError(`Export HTML : graphique illisible`, e);
+      }
+      continue;
+    }
     if (!isImageTarget(target) || isWebTarget(target)) continue;
     for (const name of imageCandidates(target)) {
       const file = fileFor(app, name, sourcePath);

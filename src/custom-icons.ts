@@ -6,10 +6,13 @@ export const ICON_FOOTNOTE = `bigorneau-footnote`;
 export const ICON_LOREM = `bigorneau-lorem`;
 export const ICON_PARAGRAPH = `bigorneau-paragraph`;
 export const ICON_ORIENTATION = `bigorneau-orientation`;
+export const ICON_CHART = `bigorneau-chart`;
 
 const STROKE = `fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"`;
 
 const ICONS: Record<string, string> = {
+  // Two axes, three bars of different heights and a broken line above them: a chart.
+  [ICON_CHART]: `<g ${STROKE}><path d="M10 8 V90 H92"/><path d="M26 90 V60 H40 V90"/><path d="M48 90 V40 H62 V90"/><path d="M70 90 V54 H84 V90"/><path d="M22 36 L44 20 L62 28 L84 10" stroke-width="5"/></g>`,
   // Deux lignes de texte avec un 1 en exposant, puis un filet court et la note numerotee en bas de page.
   [ICON_FOOTNOTE]: `<g ${STROKE}><path d="M12 26 H52"/><path d="M12 46 H88"/><path d="M60 12 L66 7 V25" stroke-width="5"/><path d="M12 64 H36" stroke-width="4"/><path d="M12 82 L18 77 V94" stroke-width="5"/><path d="M30 82 H88"/><path d="M30 94 H66"/></g>`,
   // Les lettres L et I en capitales romaines, comme sur une inscription ancienne.

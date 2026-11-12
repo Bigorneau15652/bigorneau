@@ -1,3 +1,5 @@
+import { isChartTarget } from "../chart/spec";
+
 // Export de haute qualite : images des figures. Ce module ne depend pas d'Obsidian : le chargement des fichiers et leur
 // decodage se font cote Obsidian (export-images.ts) ; ici on ne garde que ce qui sert a la composition et au PDF.
 
@@ -23,7 +25,7 @@ const EXCALIDRAW_EXT = /\.excalidraw(\.md)?$/i;
 
 // Vrai si la cible d'une figure est un fichier image (les autres medias sont traites a la phase 6).
 export function isImageTarget(target: string): boolean {
-  return IMAGE_EXT.test(target.split(/[?#]/)[0]);
+  return isChartTarget(target) || IMAGE_EXT.test(target.split(/[?#]/)[0]);
 }
 
 // Dessin Excalidraw (![[dessin.excalidraw]]) : il s'imprime par son export image, .excalidraw.svg ou .excalidraw.png, que le plugin

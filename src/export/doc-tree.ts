@@ -4,6 +4,7 @@
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
 import { currentLang } from "../i18n";
 import { listFromSentinel, ListKind, markListMarkers } from "../illustration-list";
+import { CHART_LANG, chartTarget, parseChart } from "../chart/spec";
 import { markPageZones, PageZone, zoneFromSentinel } from "../page-zone";
 import { markParagraphMarkers, ParagraphFormat, splitParagraphSentinel } from "../paragraph-format";
 import { markTableMarkers, styleFromSentinel, TABLE_MARKER_SENTINEL, TableStyle } from "../table-marker";
@@ -312,6 +313,12 @@ export function parseBlocks(text: string): DocBlock[] {
       i++;
       while (i < lines.length && !fenceCloses(lines[i], fence)) body.push(lines[i++]);
       i++;
+      if (lang.toLowerCase() === CHART_LANG) {
+        // A chart block becomes a figure: its picture is drawn from the numbers, its title is the caption.
+        const source = body.join(`\n`);
+        blocks.push({ type: `figure`, target: chartTarget(source), caption: parseChart(source).title });
+        continue;
+      }
       blocks.push({ type: `code`, lang, text: body.join(`\n`) });
       continue;
     }
