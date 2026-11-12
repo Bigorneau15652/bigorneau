@@ -2980,12 +2980,14 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
 
 .mmw-chart-handle {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
   border: 2px solid var(--interactive-accent);
   background: var(--background-primary);
   border-radius: 3px;
   opacity: 0;
+  pointer-events: auto;
   touch-action: none;
   z-index: 2;
 }
@@ -2994,10 +2996,10 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   opacity: 0.9;
 }
 
-.mmw-chart-handle-nw { top: -6px; left: -6px; cursor: nwse-resize; }
-.mmw-chart-handle-ne { top: -6px; right: -6px; cursor: nesw-resize; }
-.mmw-chart-handle-sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
-.mmw-chart-handle-se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+.mmw-chart-handle-nw { top: 3px; left: 3px; cursor: nwse-resize; }
+.mmw-chart-handle-ne { top: 3px; right: 3px; cursor: nesw-resize; }
+.mmw-chart-handle-sw { bottom: 3px; left: 3px; cursor: nesw-resize; }
+.mmw-chart-handle-se { bottom: 3px; right: 3px; cursor: nwse-resize; }
 
 .mmw-chart-help {
   margin: 0 0 8px;
