@@ -2,7 +2,7 @@
 // is opened by the Charts module, which gives it the Obsidian module: this file imports Obsidian only for its types.
 import type { App } from "obsidian";
 import { renderChart } from "./chart/render";
-import { CHART_PALETTES, ChartPalette, ChartSource, ChartSpec, ChartType, cleanColor, LEGEND_POSITIONS, LegendPosition, MAX_CATEGORIES, MAX_SERIES, parseNumber, parseTable, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
+import { CHART_PALETTES, CHART_TYPES, ChartPalette, ChartSource, ChartSpec, ChartType, cleanColor, hasAxes, isSliceChart, LEGEND_POSITIONS, LegendPosition, MAX_CATEGORIES, MAX_SERIES, parseNumber, parseTable, seriesColor, ValueMode, VALUE_MODES } from "./chart/spec";
 import { readSpreadsheet, Sheet, SpreadsheetError, SPREADSHEET_EXT, tableOfSheet } from "./chart/spreadsheet";
 import { appendSvgDocument } from "./dom";
 import type { HelpLang } from "./help";
@@ -27,6 +27,13 @@ const TEXTS = {
   bar: { fr: `Barres`, en: `Bars` },
   line: { fr: `Courbes`, en: `Lines` },
   pie: { fr: `Secteurs`, en: `Pie` },
+  area: { fr: `Aires`, en: `Areas` },
+  donut: { fr: `Anneau`, en: `Donut` },
+  scatter: { fr: `Nuage de points`, en: `Scatter` },
+  radar: { fr: `Radar (toile d'araignée)`, en: `Radar (spider web)` },
+  xHead: { fr: `Valeur X`, en: `X value` },
+  xValue: { fr: `Valeur X`, en: `X value` },
+  yValue: { fr: `Valeur Y`, en: `Y value` },
   palette: { fr: `Style de couleurs`, en: `Colour style` },
   chartTitle: { fr: `Titre du graphique (légende de la figure)`, en: `Title of the chart (caption of the figure)` },
   xTitle: { fr: `Titre de l'axe horizontal`, en: `Title of the horizontal axis` },
@@ -198,23 +205,12 @@ export function openChartEditor(deps: ChartEditorDeps): void {
       right.createEl(`h4`, { text: tr(`preview`) });
       this.preview = right.createDiv({ cls: `mmw-chart-preview` });
 
-      // Type of chart.
-      const typeRow = left.createDiv({ cls: `mmw-chart-row` });
-      typeRow.createEl(`span`, { cls: `mmw-chart-label`, text: tr(`type`) });
-      const types: ChartType[] = [`bar`, `line`, `pie`];
-      const typeButtons = typeRow.createDiv({ cls: `mmw-chart-types` });
-      for (const type of types) {
-        const b = typeButtons.createEl(`button`, { cls: `mmw-dlg-btn`, text: tr(type), attr: { type: `button` } });
-        b.toggleClass(`mod-cta`, this.st.type === type);
-        b.addEventListener(`click`, () => {
-          this.st.type = type;
-          for (const sibling of Array.from(typeButtons.children)) sibling.removeClass(`mod-cta`);
-          b.addClass(`mod-cta`);
-          this.renderOptions();
-          this.renderTable();
-          this.refresh();
-        });
-      }
+      // Type of chart: the options and the table follow it.
+      this.select(left, `type`, CHART_TYPES.map((id) => [id, tr(id)]), this.st.type, (v) => {
+        this.st.type = v as ChartType;
+        this.renderOptions();
+        this.renderTable();
+      });
 
       // Colour style: choosing one gives its colours back to every series or slice.
       this.select(left, `palette`, CHART_PALETTES.map((id) => [id, PALETTE_NAMES[id][lang]]), this.st.palette, (v) => {
@@ -289,18 +285,16 @@ export function openChartEditor(deps: ChartEditorDeps): void {
     private renderOptions(): void {
       const box = this.optionsBox;
       box.empty();
-      if (this.st.type !== `pie`) {
+      if (hasAxes(this.st.type)) {
         this.textField(box, `xTitle`, this.st.xTitle, (v) => (this.st.xTitle = v));
         this.textField(box, `yTitle`, this.st.yTitle, (v) => (this.st.yTitle = v));
       }
       this.select(box, `valueMode`, VALUE_MODES.map((id) => [id, VALUE_NAMES[id][lang]]), this.st.valueMode, (v) => (this.st.valueMode = v as ValueMode));
       this.select(box, `legend`, LEGEND_POSITIONS.map((id) => [id, LEGEND_NAMES[id][lang]]), this.st.legend, (v) => (this.st.legend = v as LegendPosition));
       const checks = box.createDiv({ cls: `mmw-chart-checks` });
-      if (this.st.type !== `pie`) this.check(checks, `grid`, this.st.showGrid, (v) => (this.st.showGrid = v));
-      if (this.st.type === `bar`) {
-        this.check(checks, `horizontal`, this.st.horizontal, (v) => (this.st.horizontal = v));
-        this.check(checks, `stacked`, this.st.stacked, (v) => (this.st.stacked = v));
-      }
+      if (hasAxes(this.st.type) || this.st.type === `radar`) this.check(checks, `grid`, this.st.showGrid, (v) => (this.st.showGrid = v));
+      if (this.st.type === `bar`) this.check(checks, `horizontal`, this.st.horizontal, (v) => (this.st.horizontal = v));
+      if (this.st.type === `bar` || this.st.type === `area`) this.check(checks, `stacked`, this.st.stacked, (v) => (this.st.stacked = v));
     }
 
     // Round colour button of a series or a slice. The black and white style has hatched fills: no colour to choose.
@@ -320,12 +314,13 @@ export function openChartEditor(deps: ChartEditorDeps): void {
     private renderTable(): void {
       const box = this.tableBox;
       box.empty();
-      const pie = this.st.type === `pie`;
+      const pie = isSliceChart(this.st.type);
+      const scatter = this.st.type === `scatter`;
       const seriesShown = pie ? 1 : this.st.names.length;
       const colorCount = pie ? this.st.categories.length : this.st.names.length;
       const table = box.createEl(`table`, { cls: `mmw-chart-grid` });
       const head = table.createEl(`thead`).createEl(`tr`);
-      head.createEl(`th`, { text: tr(pie ? `sliceHead` : `category`) });
+      head.createEl(`th`, { text: tr(pie ? `sliceHead` : scatter ? `xHead` : `category`) });
       if (pie) head.createEl(`th`, { text: tr(`valueHead`) });
       else {
         for (let s = 0; s < seriesShown; s++) {
@@ -367,14 +362,14 @@ export function openChartEditor(deps: ChartEditorDeps): void {
         const tr1 = bodyEl.createEl(`tr`);
         const first = tr1.createEl(`td`).createDiv({ cls: `mmw-chart-cell` });
         if (pie) this.colorInput(first, i, colorCount);
-        const catInput = first.createEl(`input`, { cls: `mmw-chart-input`, attr: { type: `text`, placeholder: tr(pie ? `sliceName` : `categoryName`), maxlength: `120` } });
+        const catInput = first.createEl(`input`, { cls: `mmw-chart-input`, attr: { type: `text`, placeholder: tr(pie ? `sliceName` : scatter ? `xValue` : `categoryName`), maxlength: `120` } });
         catInput.value = cat;
         catInput.addEventListener(`input`, () => {
           this.st.categories[i] = catInput.value;
           this.refresh();
         });
         for (let s = 0; s < seriesShown; s++) {
-          const cell = tr1.createEl(`td`).createEl(`input`, { cls: `mmw-chart-input mmw-chart-number`, attr: { type: `text`, inputmode: `decimal`, placeholder: tr(`datum`) } });
+          const cell = tr1.createEl(`td`).createEl(`input`, { cls: `mmw-chart-input mmw-chart-number`, attr: { type: `text`, inputmode: `decimal`, placeholder: tr(scatter ? `yValue` : `datum`) } });
           cell.value = this.st.cells[i]?.[s] ?? ``;
           const check = (): void => {
             const n = parseNumber(cell.value);

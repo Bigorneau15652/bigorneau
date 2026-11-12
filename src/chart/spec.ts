@@ -1,9 +1,19 @@
 // Charts written in a note: the model of a chart, and its text form. A chart lives in the note as a fenced block named
 // bigorneau-chart, with a few `key: value` lines then the numbers as a small table. This file does not depend on Obsidian.
 
-export type ChartType = `bar` | `line` | `pie`;
+export type ChartType = `bar` | `line` | `area` | `pie` | `donut` | `scatter` | `radar`;
 
-export const CHART_TYPES: ChartType[] = [`bar`, `line`, `pie`];
+export const CHART_TYPES: ChartType[] = [`bar`, `line`, `area`, `pie`, `donut`, `scatter`, `radar`];
+
+// Charts made of slices (one colour per category, only the first series is drawn).
+export function isSliceChart(type: ChartType): boolean {
+  return type === `pie` || type === `donut`;
+}
+
+// Charts drawn on a horizontal and a vertical axis.
+export function hasAxes(type: ChartType): boolean {
+  return type === `bar` || type === `line` || type === `area` || type === `scatter`;
+}
 
 // Name of the fenced block that holds a chart.
 export const CHART_LANG = `bigorneau-chart`;
@@ -273,11 +283,11 @@ export function serializeChart(spec: ChartSpec): string {
   if (spec.type === `bar`) {
     out.push(`horizontal: ${spec.horizontal}`);
     out.push(`stacked: ${spec.stacked}`);
-  }
+  } else if (spec.type === `area`) out.push(`stacked: ${spec.stacked}`);
   out.push(`values: ${spec.valueMode}`);
   out.push(`legend: ${spec.legend}`);
   out.push(`palette: ${spec.palette}`);
-  if (spec.type !== `pie`) out.push(`grid: ${spec.showGrid}`);
+  if (hasAxes(spec.type) || spec.type === `radar`) out.push(`grid: ${spec.showGrid}`);
   if (spec.colors.some((c) => cleanColor(c) !== null)) out.push(`colors: ${spec.colors.map((c) => cleanColor(c) ?? ``).join(`, `)}`);
   if (spec.source) {
     out.push(`source: ${cleanText(spec.source.path)}`);

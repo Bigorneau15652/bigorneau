@@ -1,6 +1,6 @@
 // Drawing of a chart as an SVG picture (a text), from the model of src/chart/spec.ts. The same picture is shown in the note, in the
 // preview of the export, in the PDF (drawn as a picture) and in the HTML page. This file does not depend on Obsidian.
-import { ChartSpec, grayLine, seriesColor, ValueMode } from "./spec";
+import { ChartSpec, grayLine, isSliceChart, parseNumber, seriesColor, ValueMode } from "./spec";
 
 export const CHART_WIDTH = 640;
 export const CHART_HEIGHT = 380;
@@ -201,7 +201,7 @@ function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
   const H = CHART_HEIGHT;
   const dec = opts.decimal ?? `.`;
   const horizontal = spec.type === `bar` && spec.horizontal;
-  const stacked = spec.type === `bar` && spec.stacked;
+  const stacked = (spec.type === `bar` || spec.type === `area`) && spec.stacked;
   const n = spec.categories.length;
   const m = spec.series.length;
   const gray = spec.palette === `gray`;
@@ -334,6 +334,34 @@ function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
       });
     }
   } else {
+    // Height of a point: its value, or its value on top of the series below it for stacked areas.
+    const stackedTop = (si: number, c: number, v: number): number => (stacked ? spec.series.slice(0, si).reduce((sum, other) => sum + (other.values[c] ?? 0), 0) + v : v);
+    // Areas: each series is a filled surface between its line and the zero line (or the top of the series below it when stacked).
+    if (spec.type === `area`) {
+      const below: number[] = spec.categories.map(() => 0);
+      spec.series.forEach((s, si) => {
+        const lower = stacked ? [...below] : spec.categories.map(() => 0);
+        const upper = spec.categories.map((_c, c) => (s.values[c] === null || s.values[c] === undefined ? null : lower[c] + (s.values[c] as number)));
+        let c = 0;
+        while (c < n) {
+          if (upper[c] === null) {
+            c++;
+            continue;
+          }
+          const start = c;
+          while (c < n && upper[c] !== null) c++;
+          const upperPoints: string[] = [];
+          const lowerPoints: string[] = [];
+          for (let k = start; k < c; k++) {
+            upperPoints.push(`${r(catCenter(k))} ${r(vPos(upper[k] as number))}`);
+            lowerPoints.unshift(`${r(catCenter(k))} ${r(vPos(lower[k]))}`);
+          }
+          const opacity = gray ? `` : ` fill-opacity="0.55"`;
+          svg += `<path d="M ${upperPoints.join(` L `)} L ${lowerPoints.join(` L `)} Z" fill="${paints[si].fill}"${opacity} stroke="none"/>`;
+        }
+        if (stacked) s.values.forEach((v, k) => (below[k] += v ?? 0));
+      });
+    }
     spec.series.forEach((s, si) => {
       let path = ``;
       let pen = false;
@@ -342,15 +370,16 @@ function drawAxes(spec: ChartSpec, opts: RenderOptions): string {
           pen = false;
           return;
         }
-        path += `${pen ? `L` : `M`} ${r(catCenter(c))} ${r(vPos(v))} `;
+        path += `${pen ? `L` : `M`} ${r(catCenter(c))} ${r(vPos(stackedTop(si, c, v)))} `;
         pen = true;
       });
       const dash = paints[si].dash !== `` ? ` stroke-dasharray="${paints[si].dash}"` : ``;
       if (path !== ``) svg += `<path d="${path.trim()}" fill="none" stroke="${paints[si].stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${dash}/>`;
       s.values.forEach((v, c) => {
         if (v === null) return;
-        svg += `<circle cx="${r(catCenter(c))}" cy="${r(vPos(v))}" r="3.5" fill="${paints[si].stroke}" stroke="#ffffff" stroke-width="1"/>`;
-        if (spec.valueMode !== `none`) svg += valueLabel(v, c, catCenter(c), vPos(v) - 8, `middle`);
+        const y = vPos(stackedTop(si, c, v));
+        if (spec.type === `line`) svg += `<circle cx="${r(catCenter(c))}" cy="${r(y)}" r="3.5" fill="${paints[si].stroke}" stroke="#ffffff" stroke-width="1"/>`;
+        if (spec.valueMode !== `none`) svg += valueLabel(v, c, catCenter(c), y - 8, `middle`);
       });
     });
   }
@@ -380,6 +409,9 @@ function drawPie(spec: ChartSpec, opts: RenderOptions): string {
   const cx = legendInfo.left + areaW / 2;
   const cy = legendInfo.top + areaH / 2;
   const rad = Math.max(20, Math.min(areaW / 2, areaH / 2) - 30);
+  // A donut is a pie with a hole: the total is written in the hole.
+  const donut = spec.type === `donut`;
+  const hole = donut ? rad * 0.55 : 0;
   let svg = defs;
   if (total <= 0) return svg + label(cx, cy, `—`, 24, `middle`, MUTED) + legendInfo.svg;
   let angle = -Math.PI / 2;
@@ -389,8 +421,14 @@ function drawPie(spec: ChartSpec, opts: RenderOptions): string {
     if (v <= 0) return;
     const share = v / total;
     const next = angle + share * Math.PI * 2;
-    if (nonZero === 1) svg += `<circle cx="${r(cx)}" cy="${r(cy)}" r="${r(rad)}" fill="${paints[i].fill}" stroke="${edge}" stroke-width="${gray ? 1 : 2}"/>`;
-    else {
+    if (nonZero === 1) {
+      if (donut) svg += `<path d="M ${r(cx - rad)} ${r(cy)} a ${r(rad)} ${r(rad)} 0 1 0 ${r(2 * rad)} 0 a ${r(rad)} ${r(rad)} 0 1 0 ${r(-2 * rad)} 0 Z M ${r(cx - hole)} ${r(cy)} a ${r(hole)} ${r(hole)} 0 1 0 ${r(2 * hole)} 0 a ${r(hole)} ${r(hole)} 0 1 0 ${r(-2 * hole)} 0 Z" fill-rule="evenodd" fill="${paints[i].fill}" stroke="${edge}" stroke-width="${gray ? 1 : 2}"/>`;
+      else svg += `<circle cx="${r(cx)}" cy="${r(cy)}" r="${r(rad)}" fill="${paints[i].fill}" stroke="${edge}" stroke-width="${gray ? 1 : 2}"/>`;
+    } else if (donut) {
+      const large = share > 0.5 ? 1 : 0;
+      const p = (radius: number, a: number): string => `${r(cx + radius * Math.cos(a))} ${r(cy + radius * Math.sin(a))}`;
+      svg += `<path d="M ${p(rad, angle)} A ${r(rad)} ${r(rad)} 0 ${large} 1 ${p(rad, next)} L ${p(hole, next)} A ${r(hole)} ${r(hole)} 0 ${large} 0 ${p(hole, angle)} Z" fill="${paints[i].fill}" stroke="${edge}" stroke-width="${gray ? 1 : 2}"/>`;
+    } else {
       const x1 = cx + rad * Math.cos(angle);
       const y1 = cy + rad * Math.sin(angle);
       const x2 = cx + rad * Math.cos(next);
@@ -400,7 +438,7 @@ function drawPie(spec: ChartSpec, opts: RenderOptions): string {
     if (spec.valueMode !== `none`) {
       const mid = (angle + next) / 2;
       const inside = share >= 0.08 && spec.valueMode !== `both`;
-      const rr = inside ? rad * 0.62 : rad + 14;
+      const rr = inside ? (donut ? (rad + hole) / 2 : rad * 0.62) : rad + 14;
       const px = cx + rr * Math.cos(mid);
       const py = cy + rr * Math.sin(mid);
       const shown = valueText(spec.valueMode, v, total, dec);
@@ -409,11 +447,123 @@ function drawPie(spec: ChartSpec, opts: RenderOptions): string {
     }
     angle = next;
   });
+  if (donut) svg += label(cx, cy + 7, formatNumber(total, dec), 22, `middle`, TEXT, ` font-weight="bold"`);
+  return svg + legendInfo.svg;
+}
+
+// Scatter chart: each row is a point, the first column gives X (a number) and each series gives a Y.
+function drawScatter(spec: ChartSpec, opts: RenderOptions): string {
+  const W = CHART_WIDTH;
+  const H = CHART_HEIGHT;
+  const dec = opts.decimal ?? `.`;
+  const m = spec.series.length;
+  const { paints, defs } = paintsOf(spec, m);
+  const xs = spec.categories.map((c, i) => {
+    const n = parseNumber(c);
+    return n !== null && !Number.isNaN(n) ? n : i + 1;
+  });
+  const ys = spec.series.flatMap((s) => s.values).filter((v): v is number => v !== null);
+  const xScale = niceScale(Math.min(...xs, 0), Math.max(...xs, 0) === Math.min(...xs, 0) ? Math.max(...xs, 0) + 1 : Math.max(...xs, 0));
+  const yScale = niceScale(Math.min(...ys, 0), Math.max(...ys, 0));
+  const xLabels = xScale.ticks.map((t) => formatNumber(t, dec));
+  const yLabels = yScale.ticks.map((t) => formatNumber(t, dec));
+  const legendInfo = m > 1 ? legendBox(spec, spec.series.map((x) => x.name), paints) : NO_LEGEND;
+  const maxTick = Math.max(0, ...yLabels.map((t) => textWidth(t, 12)));
+  const x0 = 14 + maxTick + (spec.yTitle !== `` ? 20 : 0) + legendInfo.left;
+  const x1 = W - 18 - legendInfo.right;
+  const y0 = (spec.valueMode !== `none` ? 22 : 14) + legendInfo.top;
+  const y1 = H - (16 + (spec.xTitle !== `` ? 20 : 0) + legendInfo.bottom + 20);
+  const px = (x: number): number => x0 + ((x - xScale.min) / (xScale.max - xScale.min)) * (x1 - x0);
+  const py = (y: number): number => y1 - ((y - yScale.min) / (yScale.max - yScale.min)) * (y1 - y0);
+  let svg = defs;
+  xScale.ticks.forEach((t, i) => {
+    if (spec.showGrid) svg += `<line x1="${r(px(t))}" y1="${y0}" x2="${r(px(t))}" y2="${y1}" stroke="${GRID}" stroke-width="1"/>`;
+    svg += label(px(t), y1 + 16, xLabels[i], 12, `middle`, MUTED);
+  });
+  yScale.ticks.forEach((t, i) => {
+    if (spec.showGrid) svg += `<line x1="${x0}" y1="${r(py(t))}" x2="${x1}" y2="${r(py(t))}" stroke="${GRID}" stroke-width="1"/>`;
+    svg += label(x0 - 6, py(t) + 4, yLabels[i], 12, `end`, MUTED);
+  });
+  svg += `<line x1="${x0}" y1="${y0}" x2="${x0}" y2="${y1}" stroke="${AXIS}"/><line x1="${x0}" y1="${y1}" x2="${x1}" y2="${y1}" stroke="${AXIS}"/>`;
+  const gray = spec.palette === `gray`;
+  spec.series.forEach((s, si) => {
+    s.values.forEach((v, i) => {
+      if (v === null) return;
+      const cx = px(xs[i]);
+      const cy = py(v);
+      // Black and white: the series differ by their shape (circle, square, diamond, triangle) and not only by their grey.
+      const shape = gray ? si % 4 : 0;
+      const fill = paints[si].stroke;
+      if (shape === 1) svg += `<rect x="${r(cx - 4.5)}" y="${r(cy - 4.5)}" width="9" height="9" fill="${fill}" stroke="#ffffff" stroke-width="1"/>`;
+      else if (shape === 2) svg += `<path d="M ${r(cx)} ${r(cy - 6)} L ${r(cx + 6)} ${r(cy)} L ${r(cx)} ${r(cy + 6)} L ${r(cx - 6)} ${r(cy)} Z" fill="${fill}" stroke="#ffffff" stroke-width="1"/>`;
+      else if (shape === 3) svg += `<path d="M ${r(cx)} ${r(cy - 6)} L ${r(cx + 6)} ${r(cy + 5)} L ${r(cx - 6)} ${r(cy + 5)} Z" fill="${fill}" stroke="#ffffff" stroke-width="1"/>`;
+      else svg += `<circle cx="${r(cx)}" cy="${r(cy)}" r="5" fill="${fill}" fill-opacity="${gray ? 1 : 0.85}" stroke="#ffffff" stroke-width="1"/>`;
+      if (spec.valueMode !== `none`) svg += label(cx, cy - 9, formatNumber(v, dec), 11, `middle`, MUTED);
+    });
+  });
+  if (spec.xTitle !== ``) svg += label((x0 + x1) / 2, H - legendInfo.bottom - 6, shorten(spec.xTitle, 13, x1 - x0), 13, `middle`, TEXT, ` font-weight="bold"`);
+  if (spec.yTitle !== ``) svg += label(14 + legendInfo.left, (y0 + y1) / 2, shorten(spec.yTitle, 13, y1 - y0), 13, `middle`, TEXT, ` font-weight="bold" transform="rotate(-90 ${14 + legendInfo.left} ${r((y0 + y1) / 2)})"`);
+  return svg + legendInfo.svg;
+}
+
+// Radar chart: each category is an axis from the centre, each series is a polygon.
+function drawRadar(spec: ChartSpec, opts: RenderOptions): string {
+  const W = CHART_WIDTH;
+  const H = CHART_HEIGHT;
+  const dec = opts.decimal ?? `.`;
+  const n = spec.categories.length;
+  const m = spec.series.length;
+  const { paints, defs } = paintsOf(spec, m);
+  const legendInfo = m > 1 ? legendBox(spec, spec.series.map((x) => x.name), paints) : NO_LEGEND;
+  const areaW = W - legendInfo.left - legendInfo.right;
+  const areaH = H - legendInfo.top - legendInfo.bottom;
+  const cx = legendInfo.left + areaW / 2;
+  const cy = legendInfo.top + areaH / 2;
+  if (n < 3) return defs + label(cx, cy, `—`, 24, `middle`, MUTED) + legendInfo.svg;
+  const widest = Math.max(0, ...spec.categories.map((c) => textWidth(c, 12)));
+  const rad = Math.max(30, Math.min(areaW / 2 - Math.min(widest, 110) - 14, areaH / 2 - 34));
+  const all = spec.series.flatMap((x) => x.values).filter((v): v is number => v !== null);
+  const scale = niceScale(0, Math.max(0, ...all));
+  const angle = (k: number): number => -Math.PI / 2 + (k * 2 * Math.PI) / n;
+  const point = (k: number, v: number): [number, number] => {
+    const length = ((v - scale.min) / (scale.max - scale.min)) * rad;
+    return [cx + length * Math.cos(angle(k)), cy + length * Math.sin(angle(k))];
+  };
+  let svg = defs;
+  // Rings, axes and names of the categories.
+  scale.ticks.slice(1).forEach((t) => {
+    const ring = spec.categories.map((_c, k) => point(k, t)).map(([x, y]) => `${r(x)} ${r(y)}`);
+    if (spec.showGrid) svg += `<path d="M ${ring.join(` L `)} Z" fill="none" stroke="${GRID}" stroke-width="1"/>`;
+    svg += label(cx + 4, point(0, t)[1] - 2, formatNumber(t, dec), 10, `start`, MUTED);
+  });
+  spec.categories.forEach((c, k) => {
+    const [ex, ey] = point(k, scale.max);
+    svg += `<line x1="${r(cx)}" y1="${r(cy)}" x2="${r(ex)}" y2="${r(ey)}" stroke="${GRID}" stroke-width="1"/>`;
+    // The name of the axis at the top stands higher, clear of the value written on the first axis.
+    const away = rad + 12 + (Math.sin(angle(k)) < -0.9 ? 12 : 0);
+    const lx = cx + away * Math.cos(angle(k));
+    const ly = cy + away * Math.sin(angle(k)) + 4;
+    const cos = Math.cos(angle(k));
+    svg += label(lx, ly, shorten(c, 12, 110), 12, Math.abs(cos) < 0.2 ? `middle` : cos > 0 ? `start` : `end`);
+  });
+  const gray = spec.palette === `gray`;
+  const totals = spec.categories.map((_c, k) => spec.series.reduce((sum, x) => sum + Math.abs(x.values[k] ?? 0), 0));
+  spec.series.forEach((s, si) => {
+    const points = spec.categories.map((_c, k) => point(k, s.values[k] ?? 0)).map(([x, y]) => `${r(x)} ${r(y)}`);
+    const dash = paints[si].dash !== `` ? ` stroke-dasharray="${paints[si].dash}"` : ``;
+    svg += `<path d="M ${points.join(` L `)} Z" fill="${gray ? `none` : paints[si].fill}"${gray ? `` : ` fill-opacity="0.22"`} stroke="${paints[si].stroke}" stroke-width="2.5" stroke-linejoin="round"${dash}/>`;
+    s.values.forEach((v, k) => {
+      if (v === null) return;
+      const [x, y] = point(k, v);
+      svg += `<circle cx="${r(x)}" cy="${r(y)}" r="3.5" fill="${paints[si].stroke}" stroke="#ffffff" stroke-width="1"/>`;
+      if (spec.valueMode !== `none`) svg += label(x, y - 8, valueText(spec.valueMode, v, totals[k], dec), 11, `middle`, MUTED);
+    });
+  });
   return svg + legendInfo.svg;
 }
 
 // The SVG picture of a chart (a text). The title of the chart is not drawn: it is the caption of the figure.
 export function renderChart(spec: ChartSpec, opts: RenderOptions = {}): string {
-  const inner = spec.type === `pie` ? drawPie(spec, opts) : drawAxes(spec, opts);
+  const inner = isSliceChart(spec.type) ? drawPie(spec, opts) : spec.type === `scatter` ? drawScatter(spec, opts) : spec.type === `radar` ? drawRadar(spec, opts) : drawAxes(spec, opts);
   return frame(inner, CHART_WIDTH, CHART_HEIGHT);
 }
