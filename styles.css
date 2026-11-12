@@ -2956,8 +2956,8 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   top: 0;
 }
 
-.mmw-chart-preview svg,
-.mmw-chart-block svg {
+.mmw-chart-preview > svg,
+.mmw-chart-block > svg {
   display: block;
   width: 100%;
   height: auto;
@@ -3009,13 +3009,13 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
 
 .mmw-chart-grid th,
 .mmw-chart-grid td {
-  padding: 2px;
+  padding: 2px 3px;
   text-align: left;
   vertical-align: middle;
 }
 
 .mmw-chart-grid th {
-  min-width: 96px;
+  font-size: var(--font-ui-small);
 }
 
 .mmw-chart-number {
@@ -3028,12 +3028,46 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   color: var(--text-error);
 }
 
+.mmw-chart-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mmw-chart-cell .mmw-chart-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Round colour button, level with the field next to it. */
 .mmw-chart-color {
-  width: 26px;
-  height: 22px;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  margin-right: 4px;
-  vertical-align: middle;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.mmw-chart-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.mmw-chart-color::-webkit-color-swatch {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+}
+
+.mmw-chart-plus {
+  min-width: 32px;
+  font-size: 1.2em;
+  font-weight: bold;
+  line-height: 1;
+  margin-top: 6px;
   cursor: pointer;
 }
 
