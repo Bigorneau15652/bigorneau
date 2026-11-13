@@ -1847,6 +1847,27 @@
   color: var(--text-muted);
 }
 
+.mmw-scripts-help {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 6px;
+  color: var(--text-muted);
+}
+
+.mmw-scripts-pop {
+  position: fixed;
+  z-index: var(--layer-popover, 40);
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-s);
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+}
+
 .mmw-scripts-status {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);

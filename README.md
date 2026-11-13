@@ -94,7 +94,7 @@ Some commands of the command palette have no button in the panel. "Previous chap
 
 ## Modules
 
-Modules add functions to Bigorneau: each one brings its own buttons and commands. The modules Formulas, Page layout and Charts are built into the plugin and are off by default. The bigorneau button at the top of the panel, or the command "Open the modules", opens the modules window, where each module is turned on or off. Turning a module off makes it inactive at once, but its code is only unloaded when Obsidian restarts. A new user turns on Formulas to get formulas in the PDF and the two formula commands, and Page layout to set the sheet, the header and the footer note by note. The on or off state of the modules is part of the profiles.
+Modules add functions to Bigorneau: each one brings its own buttons and commands. The modules Formulas, Page layout and Charts are built into the plugin and are off by default. The bigorneau button at the top of the panel, or the command "Open the modules", opens the modules window, where each module is turned on or off (a question mark next to its name shows what it does in a small window, closed by the Escape key or a click outside). Turning a module off makes it inactive at once, but its code is only unloaded when Obsidian restarts. A new user turns on Formulas to get formulas in the PDF and the two formula commands, and Page layout to set the sheet, the header and the footer note by note. The on or off state of the modules is part of the profiles.
 
 Bigorneau never loads code from a file or from the internet: everything it runs is in the `main.js` file that you install.
 

@@ -583,6 +583,7 @@ const PAIRS: [string, string][] = [
   [`Nécessite : {0}.`, `Requires: {0}.`],
   [`Erreur : {0}`, `Error: {0}`],
   [`Activé.`, `On.`],
+  [`Description du module`, `Description of the module`],
   [`Désactivé.`, `Off.`],
   [`Le script Formules est désactivé : les formules restent écrites telles quelles. Activez-le avec le bouton bigorneau du panneau.`, `The Formulas script is off: formulas stay written as they are. Turn it on with the bigorneau button of the panel.`],
   [`Insérer une ligne au-dessus`, `Insert a row above`],
