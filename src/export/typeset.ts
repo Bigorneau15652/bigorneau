@@ -4,7 +4,7 @@
 // tableaux, formules et figures sont encore des reperes provisoires.
 import { BulletId, BulletShape, bulletAt, bulletMark, DEFAULT_BULLETS } from "../bullets";
 import { defaultParagraphSettings, INDENT_POINTS, PARAGRAPH_SPACE_POINTS, ParagraphSettings, SHIFT_MAX_LEVELS, SHIFT_POINTS } from "../paragraph-format";
-import { calloutColors } from "./callout";
+import { CalloutKind, calloutColors } from "./callout";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
 import { applyCase, BASE_POINTS, CaseMode, defaultTypography, HeadingSpec, headingNumber, inFamilyOf, sizeFactor, styleOf, TextSpec, TypographyStyle } from "../text-style";
 import { FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
@@ -202,6 +202,8 @@ export interface Row {
   // Callouts that the row belongs to, the outermost first: position and width from the left margin, colour of the bar and of the ground.
   // The row is drawn on the ground, with the bar at the left edge of the box.
   callouts?: { x: number; width: number; bar: string; fill: string }[];
+  // Pictogram of a callout, on its title row: position of its left edge from the left margin, side of its square and colour.
+  calloutIcon?: { kind: CalloutKind; x: number; size: number; color: string };
   // Couleur du texte de la ligne et surlignage derriere son texte (#rrggbb), quand ils different de l'origine.
   color?: string;
   highlight?: string;
@@ -685,8 +687,12 @@ class Typesetter {
     this.textWidth = inner;
     // The title keeps with the first lines of the content.
     const spec = { ...this.ty.body, color: colors.ink };
-    this.paragraph(b.title, `text`, 0, inner, { indent: 0, justify: false, hyphenate: false, fontSize: this.bodySize, keep: true, style: inFamilyOf(this.bodyStyle, `bold`), spec });
+    // The pictogram stands at the left of the title, which is moved to the right of it.
+    const iconSize = this.bodySize * 1.15;
+    const iconColumn = iconSize + 5;
+    this.paragraph(b.title, `text`, iconColumn, inner - iconColumn, { indent: 0, justify: false, hyphenate: false, fontSize: this.bodySize, keep: true, style: inFamilyOf(this.bodyStyle, `bold`), spec });
     this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+    if (this.sink[first]) this.sink[first].calloutIcon = { kind: b.kind, x: 0, size: iconSize, color: colors.ink };
     this.space(lead * 0.25);
     this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
     this.afterParagraph = false;
@@ -698,6 +704,7 @@ class Typesetter {
     if (rows.length === 0) return;
     for (const r of rows) {
       r.x += offset;
+      if (r.calloutIcon) r.calloutIcon = { ...r.calloutIcon, x: r.calloutIcon.x + offset };
       r.callouts = [{ x: 0, width: outer, bar: colors.bar, fill: colors.fill }, ...(r.callouts ?? []).map((c) => ({ ...c, x: c.x + offset }))];
     }
     // Air above the first row and below the last one, inside the box.
