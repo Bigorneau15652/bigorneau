@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.40.3
+
+Changed: in the window "Modules and buttons", the description of each module is no longer written under its name. A question mark next to the name (for example Formulas (1.0.0)) shows it in a small window, which closes with the Escape key (the window of the modules stays open) or with a click outside of it. Under a module, only a problem is still written (a module that needs another one, or an error); the line "On." or "Off." is gone, the switch says it.
+
+Modifié : dans la fenêtre « Modules et boutons », la description de chaque module n'est plus écrite sous son nom. Un point d'interrogation à côté du nom (par exemple Formules (1.0.0)) l'affiche dans une petite fenêtre, qui se ferme avec la touche Échap (la fenêtre des modules reste ouverte) ou par un clic à côté d'elle. Sous un module, seul un problème reste écrit (un module qui en demande un autre, ou une erreur) ; la ligne « Activé. » ou « Désactivé. » disparaît, l'interrupteur l'indique.
+
 ## 0.40.2
 
 Changed: the callout editor is no longer a module. It was listed twice in the window "Modules and buttons" (once as the module Callouts, once as its button). The module is removed: the Callout editor is now a function that is always there, with its button at the end of the list "Buttons of the panel" (it can be hidden, moved and separated from the other buttons like them) and its command of the command palette, which work even when the button is hidden. Nothing changes in the window itself or in the way the callouts are written. The state of the former module Callouts in the saved settings is simply ignored.
