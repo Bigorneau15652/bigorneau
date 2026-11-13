@@ -3,7 +3,7 @@
 // embedded videos). No access to Obsidian: the module is tested with node --test.
 import { defaultParagraphSettings, ParagraphSettings } from "../../paragraph-format";
 import { BASE_POINTS, defaultTypography, HeadingSpec, TextSpec, TypographyStyle } from "../../text-style";
-import { calloutColors } from "../callout";
+import { calloutPaint, CalloutLook } from "../callout";
 import { CALLOUT_ICONS } from "../callout-icons";
 import { DocBlock, DocListItem, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "../doc-tree";
 import { isImageTarget, isWebTarget } from "../image";
@@ -28,6 +28,8 @@ export interface HtmlOptions {
   formulas: Map<string, MathAsset>;
   typography?: TypographyStyle;
   paragraphs?: ParagraphSettings;
+  // Look of the callouts (colour or black and white), see callout.ts.
+  callouts?: CalloutLook;
   // @font-face rules of the fonts that the page uses, already written.
   fontCss?: string;
   // Panorama viewer (script and style sheet), written into the page only when the note holds a panorama. With `jsUrl` and `cssUrl` the
@@ -315,10 +317,10 @@ class Renderer {
       }
       case `callout`: {
         // A box with a bar in the colour of its kind: the title, then the content. The page is read, so a folded callout is shown open.
-        const colors = calloutColors(b.kind);
+        const colors = calloutPaint(b.kind, this.opts.callouts ?? `color`, b.override);
         for (const kind of b.degraded ?? []) this.warnings.push(`callout:${kind}`);
         const body = b.blocks.map((child) => this.block(child, undefined)).join(``);
-        return `<div class="callout callout-${b.kind}" style="--c:${colors.rgb};--ci:${colors.ink}"><div class="callout-titre"><svg class="callout-icone" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${CALLOUT_ICONS[b.kind]}"/></svg><span>${this.inline(b.title, false)}</span></div>${body === `` ? `` : `<div class="callout-corps">${body}</div>`}</div>`;
+        return `<div class="callout callout-${b.kind} callout-look-${colors.look}"${colors.look === `color` ? ` style="--c:${colors.rgb};--ci:${colors.ink}"` : ``}><div class="callout-titre"><svg class="callout-icone" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${CALLOUT_ICONS[b.kind]}"/></svg><span>${this.inline(b.title, false)}</span></div>${body === `` ? `` : `<div class="callout-corps">${body}</div>`}</div>`;
       }
       case `code`:
         return `<pre class="code"><code${b.lang ? ` class="langue-${escapeHtml(b.lang.replace(/[^\w+-]/g, ``))}"` : ``}>${escapeHtml(b.text)}</code></pre>`;

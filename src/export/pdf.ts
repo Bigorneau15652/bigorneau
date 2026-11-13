@@ -293,7 +293,19 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
         // Callout boxes: the ground and the bar behind the row (a little taller than the row, so that no thin line shows between two rows).
         for (const box of row.callouts) {
           const y = H - rowTop - row.height - 0.4;
-          ops.push(`q ${hexOperands(box.fill)} rg ${num(left + box.x)} ${num(y)} ${num(box.width)} ${num(row.height + 0.4)} re f ${hexOperands(box.bar)} rg ${num(left + box.x)} ${num(y)} 3 ${num(row.height + 0.4)} re f Q`);
+          if (box.fill !== ``) ops.push(`q ${hexOperands(box.fill)} rg ${num(left + box.x)} ${num(y)} ${num(box.width)} ${num(row.height + 0.4)} re f Q`);
+          if (box.bar !== ``) ops.push(`q ${hexOperands(box.bar)} rg ${num(left + box.x)} ${num(y)} 3 ${num(row.height + 0.4)} re f Q`);
+          if (box.frame !== ``) {
+            // Frame: the two sides on every row, the top edge on the first row and the bottom edge on the last one.
+            const x1 = left + box.x;
+            const x2 = x1 + box.width;
+            const y1 = H - rowTop;
+            const y2 = H - rowTop - row.height;
+            const edges = [`${num(x1)} ${num(y1)} m ${num(x1)} ${num(y2)} l S`, `${num(x2)} ${num(y1)} m ${num(x2)} ${num(y2)} l S`];
+            if (box.top) edges.push(`${num(x1)} ${num(y1)} m ${num(x2)} ${num(y1)} l S`);
+            if (box.bottom) edges.push(`${num(x1)} ${num(y2)} m ${num(x2)} ${num(y2)} l S`);
+            ops.push(`q ${hexOperands(box.frame)} RG 0.8 w ${edges.join(` `)} Q`);
+          }
         }
       }
       if (row.calloutIcon) {

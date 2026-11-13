@@ -266,8 +266,17 @@ export class ExportPreviewView extends ItemView {
         const ground = el.createDiv({ cls: `mmw-row-callout` });
         ground.style.left = `${box.x}pt`;
         ground.style.width = `${box.width}pt`;
-        ground.style.background = box.fill;
-        ground.style.borderLeftColor = box.bar;
+        ground.style.background = box.fill === `` ? `transparent` : box.fill;
+        if (box.bar !== ``) ground.style.borderLeft = `3pt solid ${box.bar}`;
+        if (box.frame !== ``) {
+          // Frame: the two sides on every row, the top edge on the first row and the bottom edge on the last one.
+          const edge = `0.8pt solid ${box.frame}`;
+          ground.style.borderLeft = edge;
+          ground.style.borderRight = edge;
+          if (box.top) ground.style.borderTop = edge;
+          if (box.bottom) ground.style.borderBottom = edge;
+          ground.style.height = `100%`;
+        }
       }
     }
     if (row.calloutIcon) {

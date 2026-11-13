@@ -1,5 +1,6 @@
 // Reglages du plugin (sans dependance a Obsidian pour pouvoir etre teste hors de l'application).
 import { BulletId, DEFAULT_BULLETS, sanitizeBullets } from "./bullets";
+import { CalloutLook, isCalloutLook } from "./export/callout";
 import { defaultParagraphSettings, ParagraphSettings, sanitizeParagraphSettings } from "./paragraph-format";
 import { defaultTypography, sanitizeTypography, TypographyStyle } from "./text-style";
 
@@ -173,6 +174,8 @@ export interface MmSettings {
   exportPageRefs: boolean;
   // Medias (video, son, contenu integre) : un cadre avec le titre et l'adresse, ou une simple ligne de texte.
   exportMedia: `frame` | `text`;
+  // Look of the callouts in the export: in colour, or in black and white (grey ground with a bar, black frame, black bar).
+  exportCallouts: CalloutLook;
   // Mise en page de l'export : en-tete courant, pied de page, pages alignees en bas, saut de page avant chaque chapitre,
   // numerotation des notes de bas de page et protrusion.
   exportHeader: `chapter` | `title` | `none`;
@@ -296,6 +299,7 @@ export const DEFAULT_SETTINGS: MmSettings = {
   loremBlankLine: false,
   exportPageRefs: false,
   exportMedia: `frame`,
+  exportCallouts: `color`,
   exportHeader: `chapter`,
   exportFooter: `number`,
   exportFlushBottom: false,
@@ -410,6 +414,7 @@ export function migrateSettings(stored: unknown): MmSettings {
   merged.namePastedImages = merged.namePastedImages !== false;
   merged.exportPageRefs = merged.exportPageRefs === true;
   if (merged.exportMedia !== `frame` && merged.exportMedia !== `text`) merged.exportMedia = `frame`;
+  if (!isCalloutLook(merged.exportCallouts)) merged.exportCallouts = `color`;
   if (![`chapter`, `title`, `none`].includes(merged.exportHeader)) merged.exportHeader = `chapter`;
   if (![`number`, `none`].includes(merged.exportFooter)) merged.exportFooter = `number`;
   merged.exportFlushBottom = merged.exportFlushBottom === true;

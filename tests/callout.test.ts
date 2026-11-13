@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calloutColors, calloutKindOf, defaultCalloutTitle, parseCalloutHead } from "../src/export/callout";
+import { calloutColors, calloutKindOf, calloutPaint, defaultCalloutTitle, formatCalloutOverride, parseCalloutHead, parseCalloutOverride } from "../src/export/callout";
 import { composeNote, composeToPdf } from "../src/export/compose";
 import { buildExportDoc } from "../src/export/doc-tree";
 import { renderHtml } from "../src/export/html/html-doc";
+import { DEFAULT_PAGE_STYLE } from "../src/export/typeset";
 
 const NOTE = `# Titre\n\nAvant.\n\n> [!tip] Astuce utile\n> Premier paragraphe du callout.\n>\n> - une puce\n> - une autre\n\nApres.\n`;
 
@@ -71,7 +72,7 @@ test(`callout : un contenu non pris en charge est signale dans le compte rendu`,
 
 test(`callout : la page HTML dessine le cadre avec sa couleur et son titre`, () => {
   const html = renderHtml(buildExportDoc(NOTE, `Note.md`), { images: new Map(), formulas: new Map() }).html;
-  assert.ok(html.includes(`class="callout callout-tip"`));
+  assert.ok(html.includes(`class="callout callout-tip callout-look-color"`));
   assert.ok(html.includes(`<span>Astuce utile</span>`));
   assert.ok(html.includes(`<li>`) && html.includes(`une puce`));
   assert.ok(!html.includes(`[!tip]`));
@@ -96,4 +97,62 @@ test(`callout : la page HTML met le pictogramme devant le titre`, () => {
   const html = renderHtml(buildExportDoc(`> [!warning] Attention\n> Texte\n`, `Note.md`), { images: new Map(), formulas: new Map() }).html;
   assert.ok(/<div class="callout-titre"><svg class="callout-icone"[^>]*><path d="M 12 3.5/.test(html));
   assert.ok(html.includes(`<span>Attention</span>`));
+});
+
+test(`callout : lecture et ecriture de la ligne de commentaire qui choisit l'aspect`, () => {
+  assert.deepEqual(parseCalloutOverride(`bw`), { mode: `bw` });
+  assert.deepEqual(parseCalloutOverride(` Noir et Blanc `), { mode: `bw` });
+  assert.deepEqual(parseCalloutOverride(`couleur`), { mode: `color` });
+  assert.deepEqual(parseCalloutOverride(`#3366CC`), { mode: `color`, color: `#3366cc` });
+  assert.deepEqual(parseCalloutOverride(`#36c`), { mode: `color`, color: `#3366cc` });
+  assert.equal(parseCalloutOverride(`n'importe quoi`), null);
+  assert.equal(parseCalloutOverride(`#12`), null);
+  for (const o of [{ mode: `bw` as const }, { mode: `color` as const }, { mode: `color` as const, color: `#3366cc` }]) {
+    const line = formatCalloutOverride(o);
+    const spec = /%% callout: (.*) %%/.exec(line)![1];
+    assert.deepEqual(parseCalloutOverride(spec), o);
+  }
+});
+
+test(`callout : aspect choisi par l'export puis par le callout`, () => {
+  assert.equal(calloutPaint(`tip`, `color`).look, `color`);
+  assert.equal(calloutPaint(`tip`, `color`, { mode: `bw` }).look, `gray`);
+  assert.equal(calloutPaint(`tip`, `frame`, { mode: `bw` }).look, `frame`);
+  assert.equal(calloutPaint(`tip`, `frame`, { mode: `color` }).look, `color`);
+  const custom = calloutPaint(`tip`, `bar`, { mode: `color`, color: `#336699` });
+  assert.ok(custom.look === `color` && custom.bar === `#336699`);
+  const frame = calloutPaint(`note`, `frame`);
+  assert.ok(frame.frame === `#000000` && frame.fill === `` && frame.bar === ``);
+  const gray = calloutPaint(`note`, `gray`);
+  assert.ok(gray.bar === `#000000` && gray.fill !== `` && gray.frame === ``);
+  const bar = calloutPaint(`note`, `bar`);
+  assert.ok(bar.bar === `#000000` && bar.fill === `` && bar.frame === ``);
+});
+
+test(`callout : la ligne de commentaire n'est jamais imprimee et fixe l'aspect`, () => {
+  const doc = buildExportDoc(`> [!tip] Titre\n> %% callout: bw %%\n> Texte.\n\n> [!note] Autre\n> Texte.\n\n> Citation\n> %% callout: bw %%\n> suite\n`, `N.md`);
+  const first = doc.blocks[0];
+  assert.ok(first.type === `callout` && first.override?.mode === `bw` && first.blocks.length === 1);
+  const second = doc.blocks[1];
+  assert.ok(second.type === `callout` && second.override === undefined);
+  const quote = doc.blocks[2];
+  assert.ok(quote.type === `quote` && !quote.text.includes(`callout`) && !/[\u0002\u0003]/.test(quote.text));
+});
+
+test(`callout : les lignes d'un callout en cadre portent les bords haut et bas aux extremites`, () => {
+  const c = composeNote(`> [!note] Titre\n> Un.\n>\n> Deux.\n`, `N.md`, undefined, { ...DEFAULT_PAGE_STYLE, callouts: `frame` });
+  const rows = c.typeset.rows.filter((r) => r.callouts !== undefined);
+  assert.ok(rows.length >= 3);
+  assert.equal(rows[0].callouts![0].top, true);
+  assert.equal(rows[rows.length - 1].callouts![0].bottom, true);
+  assert.ok(rows.slice(1).every((r) => r.callouts![0].top !== true));
+  assert.ok(rows.every((r) => r.callouts![0].fill === `` && r.callouts![0].frame === `#000000`));
+});
+
+test(`callout : la page HTML suit l'aspect de l'export et celui du callout`, () => {
+  const note = `> [!tip] Un\n> a\n\n> [!tip] Deux\n> %% callout: color %%\n> b\n`;
+  const html = renderHtml(buildExportDoc(note, `Note.md`), { images: new Map(), formulas: new Map(), callouts: `frame` }).html;
+  assert.ok(html.includes(`callout callout-tip callout-look-frame`));
+  assert.ok(html.includes(`callout callout-tip callout-look-color`));
+  assert.ok(!html.includes(`callout:`));
 });
