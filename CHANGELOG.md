@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.39.1
+
+Fixed: when printing the preview, the pictures could come out white: a drawing of Excalidraw, a chart or any other picture that was not yet loaded when the print window took its picture of the pages. The pictures of the pages are now loaded and decoded before the print window opens (with a limit of fifteen seconds, so that a picture that cannot be read never blocks the printing). Formulas are drawn as vector paths inside the pages and were not concerned.
+
+Corrigé : à l'impression de l'aperçu, les images pouvaient sortir en blanc : un dessin Excalidraw, un graphique ou toute autre image qui n'était pas encore chargée quand la fenêtre d'impression a pris sa photo des pages. Les images des pages sont maintenant chargées et décodées avant l'ouverture de la fenêtre d'impression (avec une limite de quinze secondes, pour qu'une image illisible ne bloque jamais l'impression). Les formules sont dessinées en tracés vectoriels dans les pages et n'étaient pas concernées.
+
 ## 0.39.0
 
 Added: the callouts of Obsidian (a quote that starts with [!type] and a title, written by hand or with the Callout Manager plugin) are now printed in the PDF, in the preview, when printing and in the HTML export. A callout is a box with a bar and a light ground in the colour of its type (note, abstract, info, todo, tip, success, question, warning, failure, danger, bug, example, quote and their aliases such as hint, caution, error or cite), a title in bold and its content: paragraphs with their formatting, lists, quotes, code and callouts inside callouts. A title can be left out (the type is then the title, as in Obsidian). A type that is not known is printed like a note. A folded callout is printed open. A picture, a media, a table or a display formula inside a callout is printed as text and the export report says so; these come in a later version, as do the small pictograms of the types.
