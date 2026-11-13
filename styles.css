@@ -2752,10 +2752,16 @@ table.mmw-t-equal td {
 .mmw-row-callout {
   position: absolute;
   top: 0;
-  height: calc(100% + 0.4pt);
+  height: calc(100% + 1.5px);
   z-index: -1;
   box-sizing: border-box;
   border-left: 3pt solid #448aff;
+  pointer-events: none;
+}
+
+.mmw-row-callout-icon {
+  position: absolute;
+  overflow: visible;
   pointer-events: none;
 }
 

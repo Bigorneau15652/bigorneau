@@ -4,6 +4,7 @@
 // metadonnees. Chaque ligne est placee a la position que calcule la composition, comme dans l'apercu.
 import { BulletShape } from "../bullets";
 import { fontFor, resolvedVariant, userStyle, FontStyle, parseUserStyle, variantOf } from "./font-metrics";
+import { ICON_STROKE, iconPdfPath } from "./callout-icons";
 import { ImageAsset } from "./image";
 import { OpenTypeFont } from "./font";
 import type { DecorLeaf } from "./page-decor";
@@ -294,6 +295,15 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
           const y = H - rowTop - row.height - 0.4;
           ops.push(`q ${hexOperands(box.fill)} rg ${num(left + box.x)} ${num(y)} ${num(box.width)} ${num(row.height + 0.4)} re f ${hexOperands(box.bar)} rg ${num(left + box.x)} ${num(y)} 3 ${num(row.height + 0.4)} re f Q`);
         }
+      }
+      if (row.calloutIcon) {
+        // Pictogram of a callout: strokes in a square of 24 units, put at the left of the title and centred on its line.
+        const ic = row.calloutIcon;
+        const insetTop = row.inset?.top ?? 0;
+        const area = row.height - insetTop - (row.inset?.bottom ?? 0);
+        const top = rowTop + insetTop + (area - ic.size) / 2;
+        const s = ic.size / 24;
+        ops.push(`q ${hexOperands(ic.color)} RG ${num(ICON_STROKE)} w 1 J 1 j ${num(s)} 0 0 ${num(-s)} ${num(left + ic.x)} ${num(H - top)} cm ${iconPdfPath(ic.kind)} S Q`);
       }
       if (row.shade) ops.push(`q ${num(row.shade.fill)} g ${num(left + row.x)} ${num(H - rowTop - row.height)} ${num(row.width)} ${num(row.height)} re f Q`);
       if (row.rules) {

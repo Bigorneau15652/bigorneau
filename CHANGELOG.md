@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.39.2
+
+Added: each type of callout has its small pictogram, drawn by the plugin, in front of its title in the PDF, the preview, the printing and the HTML export (a pencil for a note, a flame for a tip, a triangle for a warning, a lightning for a danger, and so on, in the colour of the title). Fixed: in the preview, the bottom of the text of a callout was cut off (the ground of the next line covered it) because a line with air above it was shorter than in the PDF; the lines now have the same height in the preview and in the PDF, which also puts the lines that follow a framed heading back at their place. The ground of a callout is now drawn under all the text of the page, without thin lines between two lines.
+
+Ajouté : chaque type de callout a son petit pictogramme, dessiné par le plugin, devant son titre dans le PDF, l'aperçu, l'impression et l'export HTML (un crayon pour une note, une flamme pour une astuce, un triangle pour un avertissement, un éclair pour un danger, etc., dans la couleur du titre). Corrigé : dans l'aperçu, le bas de l'écriture d'un callout était coupé (le fond de la ligne suivante la recouvrait) parce qu'une ligne avec de l'air au-dessus était plus courte que dans le PDF ; les lignes ont maintenant la même hauteur dans l'aperçu et dans le PDF, ce qui remet aussi à leur place les lignes qui suivent un titre encadré. Le fond d'un callout est maintenant dessiné sous tout le texte de la page, sans fines lignes entre deux lignes.
+
 ## 0.39.1
 
 Fixed: when printing the preview, the pictures could come out white: a drawing of Excalidraw, a chart or any other picture that was not yet loaded when the print window took its picture of the pages. The pictures of the pages are now loaded and decoded before the print window opens (with a limit of fifteen seconds, so that a picture that cannot be read never blocks the printing). Formulas are drawn as vector paths inside the pages and were not concerned.

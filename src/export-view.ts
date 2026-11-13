@@ -17,6 +17,7 @@ import { loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
 import { afterPaint, imagesReady } from "./print-ready";
+import { CALLOUT_ICONS, ICON_STROKE } from "./export/callout-icons";
 
 export const VIEW_TYPE_EXPORT = `mindmap-writing-export-preview`;
 
@@ -256,9 +257,11 @@ export class ExportPreviewView extends ItemView {
     if (row.alias !== undefined) el.dataset.alias = row.alias;
     if (row.kind === `quote`) el.style.backgroundPosition = `${row.x - 12}pt 0`;
     if (row.callouts) {
-      // Callout boxes: the ground and the bar sit behind the text of the row (negative level inside the row).
+      // Callout boxes: the ground and the bar are drawn by an element of the row that sits under all the text of the page (negative level in
+      // the stacking context of the page): a line that is a little higher than its row is never covered by the ground of the next row. The
+      // innermost box comes last, which puts it on top. Each ground is a little taller than its row, which closes the thin gap that two
+      // rows could leave.
       el.style.position = `relative`;
-      el.style.isolation = `isolate`;
       for (const box of row.callouts) {
         const ground = el.createDiv({ cls: `mmw-row-callout` });
         ground.style.left = `${box.x}pt`;
@@ -266,6 +269,18 @@ export class ExportPreviewView extends ItemView {
         ground.style.background = box.fill;
         ground.style.borderLeftColor = box.bar;
       }
+    }
+    if (row.calloutIcon) {
+      // Pictogram of a callout, at the left of its title and centred on the line of the title.
+      el.style.position = `relative`;
+      const ic = row.calloutIcon;
+      const insetTop = row.inset?.top ?? 0;
+      const area = row.height - insetTop - (row.inset?.bottom ?? 0);
+      const svg = el.createSvg(`svg`, { attr: { width: `${ic.size}pt`, height: `${ic.size}pt`, viewBox: `0 0 24 24`, fill: `none`, stroke: ic.color, "stroke-width": String(ICON_STROKE), "stroke-linecap": `round`, "stroke-linejoin": `round` } });
+      svg.createSvg(`path`, { attr: { d: CALLOUT_ICONS[ic.kind] } });
+      svg.addClass(`mmw-row-callout-icon`);
+      svg.style.left = `${ic.x}pt`;
+      svg.style.top = `${insetTop + (area - ic.size) / 2}pt`;
     }
     if (row.shade) {
       // Fond de la ligne d'un tableau, sur toute sa largeur (en-tete fonce, alternance).
@@ -312,7 +327,7 @@ export class ExportPreviewView extends ItemView {
     el.style.fontSize = `${row.fontSize}pt`;
     if (row.inset && !row.cells) {
       // Air au-dessus ou au-dessous du texte (cadre d'un titre) : le texte reste centre dans l'espace restant.
-      el.style.height = `${row.height - row.inset.top}pt`;
+      el.style.height = `${row.height}pt`;
       el.style.paddingTop = `${row.inset.top}pt`;
       el.style.lineHeight = `${row.height - row.inset.top - row.inset.bottom}pt`;
     } else el.style.lineHeight = `${row.height}pt`;

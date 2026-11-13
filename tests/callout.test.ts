@@ -72,7 +72,28 @@ test(`callout : un contenu non pris en charge est signale dans le compte rendu`,
 test(`callout : la page HTML dessine le cadre avec sa couleur et son titre`, () => {
   const html = renderHtml(buildExportDoc(NOTE, `Note.md`), { images: new Map(), formulas: new Map() }).html;
   assert.ok(html.includes(`class="callout callout-tip"`));
-  assert.ok(html.includes(`<div class="callout-titre">Astuce utile</div>`));
+  assert.ok(html.includes(`<span>Astuce utile</span>`));
   assert.ok(html.includes(`<li>`) && html.includes(`une puce`));
   assert.ok(!html.includes(`[!tip]`));
+});
+
+test(`callout : chaque type a son pictogramme et le titre est decale a droite de lui`, async () => {
+  const { CALLOUT_ICONS, iconPdfPath } = await import(`../src/export/callout-icons`);
+  for (const kind of Object.keys(CALLOUT_ICONS) as (keyof typeof CALLOUT_ICONS)[]) {
+    const ops = iconPdfPath(kind);
+    assert.ok(/ m /.test(` ${ops}`) && !/NaN|undefined/.test(ops), kind);
+  }
+  const c = composeNote(`> [!note] Un titre\n> Du texte.\n`, `N.md`);
+  const title = c.typeset.rows.find((r) => r.calloutIcon !== undefined);
+  assert.ok(title && title.calloutIcon!.kind === `note` && title.x > title.calloutIcon!.x + title.calloutIcon!.size);
+  const nested = composeNote(`> [!note] Dehors\n>\n> > [!danger] Dedans\n> > Texte.\n`, `N.md`);
+  const icons = nested.typeset.rows.filter((r) => r.calloutIcon !== undefined);
+  assert.equal(icons.length, 2);
+  assert.ok(icons[1].calloutIcon!.x > icons[0].calloutIcon!.x);
+});
+
+test(`callout : la page HTML met le pictogramme devant le titre`, () => {
+  const html = renderHtml(buildExportDoc(`> [!warning] Attention\n> Texte\n`, `Note.md`), { images: new Map(), formulas: new Map() }).html;
+  assert.ok(/<div class="callout-titre"><svg class="callout-icone"[^>]*><path d="M 12 3.5/.test(html));
+  assert.ok(html.includes(`<span>Attention</span>`));
 });
