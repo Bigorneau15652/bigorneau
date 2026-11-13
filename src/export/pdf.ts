@@ -288,6 +288,13 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
     const drawRow = (row: Row, left: number, rowTop: number): void => {
       if (row.anchor !== undefined && !anchors.has(row.anchor)) anchors.set(row.anchor, { page: pageIndex, x: left + row.x, y: rowTop });
       if (row.alias !== undefined && !anchors.has(row.alias)) anchors.set(row.alias, { page: pageIndex, x: left + row.x, y: rowTop });
+      if (row.callouts) {
+        // Callout boxes: the ground and the bar behind the row (a little taller than the row, so that no thin line shows between two rows).
+        for (const box of row.callouts) {
+          const y = H - rowTop - row.height - 0.4;
+          ops.push(`q ${hexOperands(box.fill)} rg ${num(left + box.x)} ${num(y)} ${num(box.width)} ${num(row.height + 0.4)} re f ${hexOperands(box.bar)} rg ${num(left + box.x)} ${num(y)} 3 ${num(row.height + 0.4)} re f Q`);
+        }
+      }
       if (row.shade) ops.push(`q ${num(row.shade.fill)} g ${num(left + row.x)} ${num(H - rowTop - row.height)} ${num(row.width)} ${num(row.height)} re f Q`);
       if (row.rules) {
         // Filets du tableau, sur toute sa largeur.
@@ -349,7 +356,7 @@ export async function buildPdf(pages: Page[], baseSetup: PageSetup, opts: PdfOpt
       if (row.heading) headings.push({ level: row.heading.level, title: row.heading.title, page: pageIndex, x: left + row.x, y: rowTop });
       if (row.kind === `quote`) {
         // Filet vertical a gauche des citations.
-        ops.push(`q 0.6 g ${num(left + 12)} ${num(H - rowTop - row.height)} 1.5 ${num(row.height)} re f Q`);
+        ops.push(`q 0.6 g ${num(left + row.x - 12)} ${num(H - rowTop - row.height)} 1.5 ${num(row.height)} re f Q`);
       }
       if (row.marker !== undefined) {
         const small = row.kind === `footnote`;

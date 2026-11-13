@@ -61,6 +61,11 @@ body.plein main{margin:0;padding:24px 8px 60px}
 .mode-space p{margin:0 0 var(--ecart,.8em)}
 .feuille ul,.feuille ol{margin:0 0 .9em;padding-left:1.6em}
 .feuille blockquote{margin:0 0 .9em;padding:.1em 1em;border-left:3px solid var(--bord);color:var(--doux)}
+.feuille .callout{margin:0 0 .9em;padding:.6em 1em .5em .9em;border-left:3px solid rgb(var(--c));background:rgba(var(--c),.1);border-radius:0 4px 4px 0}
+.callout-titre{font-weight:700;color:var(--ci);margin:0 0 .35em}
+.callout-corps>:last-child{margin-bottom:0}
+.callout-corps .callout{margin-top:.6em}
+:root[data-theme="sombre"] .callout-titre{color:rgb(var(--c))}
 .feuille pre.code{background:var(--code);padding:10px 14px;border-radius:6px;overflow:auto;font:13px/1.45 ui-monospace,Consolas,monospace}
 .feuille figure{margin:1.2em 0;text-align:center}
 .feuille figure img{max-width:100%;height:auto}

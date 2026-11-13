@@ -56,6 +56,10 @@ export function formulaTargets(text: string, fileName: string): { tex: string; d
     for (const b of list) {
       if (b.type === `math`) add(b.tex, true);
       else if (b.type === `paragraph` || b.type === `quote`) inText(b.text);
+      else if (b.type === `callout`) {
+        inText(b.title);
+        blocks(b.blocks);
+      }
       else if (b.type === `list`) for (const it of b.items) inText(it.text);
       else if (b.type === `table`) {
         inText(b.caption);

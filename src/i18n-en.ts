@@ -857,6 +857,7 @@ const PAIRS: [string, string][] = [
 
   [`Image ou fichier intégré non imprimé : il n'est pas seul sur sa ligne (phrase, liste ou tableau) : {0}`, `Embedded image or file not printed: it is not alone on its line (sentence, list or table): {0}`],
   [`Note intégrée non reprise, remplacée par un repère : {0}`, `Embedded note not included, replaced by a placeholder: {0}`],
+  [`Contenu d'un callout imprimé comme texte (image, média, tableau ou formule en bloc non pris en charge dans un callout) : {0}`, `Content of a callout printed as text (picture, media, table or display formula are not supported inside a callout): {0}`],
   [`Bloc {0} imprimé comme texte source : Bigorneau n'exécute pas les requêtes ni les diagrammes.`, `Block {0} printed as source text: Bigorneau does not run queries or diagrams.`],
   [`ATTENTION : le titre « {0} » ouvre un commentaire ou une formule (%%, <!-- ou double signe dollar) qui masque les titres suivants.`, `WARNING: the heading "{0}" opens a comment or a formula (%%, <!-- or double dollar sign) that hides the headings that follow.`],
   [`La note a changé pendant l'opération : elle n'a pas été modifiée. Recommencez.`, `The note changed during the operation: it was not modified. Try again.`],

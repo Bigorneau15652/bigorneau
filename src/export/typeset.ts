@@ -4,6 +4,7 @@
 // tableaux, formules et figures sont encore des reperes provisoires.
 import { BulletId, BulletShape, bulletAt, bulletMark, DEFAULT_BULLETS } from "../bullets";
 import { defaultParagraphSettings, INDENT_POINTS, PARAGRAPH_SPACE_POINTS, ParagraphSettings, SHIFT_MAX_LEVELS, SHIFT_POINTS } from "../paragraph-format";
+import { calloutColors } from "./callout";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
 import { applyCase, BASE_POINTS, CaseMode, defaultTypography, HeadingSpec, headingNumber, inFamilyOf, sizeFactor, styleOf, TextSpec, TypographyStyle } from "../text-style";
 import { FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
@@ -198,6 +199,9 @@ export interface Row {
   // Cadre d'un titre : position et largeur (a partir de la marge gauche), bords haut et bas (premiere et derniere ligne du titre ; les bords
   // gauche et droit sont sur chaque ligne), epaisseur du trait, couleur du trait et du fond (#rrggbb, fond vide : transparent).
   box?: { x: number; width: number; top: boolean; bottom: boolean; line: number; color: string; fill: string };
+  // Callouts that the row belongs to, the outermost first: position and width from the left margin, colour of the bar and of the ground.
+  // The row is drawn on the ground, with the bar at the left edge of the box.
+  callouts?: { x: number; width: number; bar: string; fill: string }[];
   // Couleur du texte de la ligne et surlignage derriere son texte (#rrggbb), quand ils different de l'origine.
   color?: string;
   highlight?: string;
@@ -285,6 +289,7 @@ export function collectAnchors(doc: ExportDoc, language: LanguageCode): Anchors 
       else if (b.type === `table` && b.caption) label = `${words.table} ${++tables}`;
       if (label) a.labels.set(b, label);
       if ((b.type === `paragraph` || b.type === `quote` || b.type === `table` || b.type === `figure` || b.type === `math` || b.type === `media`) && b.id) a.blocks.set(b.id, { anchor: `b:${b.id}`, ...(label ? { label } : {}) });
+      if (b.type === `callout`) blocks(b.blocks);
     }
   };
   const walk = (s: DocSection): void => {
@@ -310,6 +315,10 @@ const HEADING_SIZES = [22, 17, 14, 12, 11, 11];
 const NOTE_INDENT = 14;
 // Air entre un titre et son cadre, a gauche et a droite puis au-dessus et au-dessous, en points.
 const BOX_PAD_X = 5;
+// Callout box: width of the bar, air between the bar and the text and on the right, air above and below the content (points).
+const CALLOUT_BAR = 3;
+const CALLOUT_PAD_X = 8;
+const CALLOUT_PAD_Y = 5;
 const BOX_PAD_Y = 3;
 
 class Typesetter {
@@ -611,6 +620,9 @@ class Typesetter {
     if (id !== undefined && this.sink[from]) this.sink[from].anchor = `b:${id}`;
   }
 
+  // Number of callouts that the block being composed is inside.
+  private boxDepth = 0;
+
   // Vrai quand le bloc precedent etait un paragraphe de texte (pour l'espace entre paragraphes).
   private afterParagraph = false;
 
@@ -658,6 +670,46 @@ class Typesetter {
     }
   }
 
+  // A callout: a box with a bar in the colour of its kind, a title in bold and its content (paragraphs, lists, quotes, code and callouts
+  // inside it). The content is composed on a narrower column, then every row is moved to the right and marked with the box: the pages
+  // draw the ground and the bar behind each row, so that a box that is cut by a page break goes on on the next page.
+  private callout(b: Extract<DocBlock, { type: `callout` }>): void {
+    const colors = calloutColors(b.kind);
+    const lead = this.setup.leading;
+    const offset = CALLOUT_BAR + CALLOUT_PAD_X;
+    const outer = this.textWidth;
+    const inner = outer - offset - CALLOUT_PAD_X;
+    for (const kind of b.degraded ?? []) this.warnings.push(`callout:${kind}`);
+    this.space(lead * 0.4);
+    const first = this.sink.length;
+    this.textWidth = inner;
+    // The title keeps with the first lines of the content.
+    const spec = { ...this.ty.body, color: colors.ink };
+    this.paragraph(b.title, `text`, 0, inner, { indent: 0, justify: false, hyphenate: false, fontSize: this.bodySize, keep: true, style: inFamilyOf(this.bodyStyle, `bold`), spec });
+    this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+    this.space(lead * 0.25);
+    this.sink[this.sink.length - 1].breakAfter = INF_PENALTY;
+    this.afterParagraph = false;
+    this.boxDepth++;
+    for (const child of b.blocks) this.blockContent(child);
+    this.boxDepth--;
+    this.textWidth = outer;
+    const rows = this.sink.slice(first);
+    if (rows.length === 0) return;
+    for (const r of rows) {
+      r.x += offset;
+      r.callouts = [{ x: 0, width: outer, bar: colors.bar, fill: colors.fill }, ...(r.callouts ?? []).map((c) => ({ ...c, x: c.x + offset }))];
+    }
+    // Air above the first row and below the last one, inside the box.
+    const top = rows[0];
+    const bottom = rows[rows.length - 1];
+    top.height += CALLOUT_PAD_Y;
+    if (top.kind !== `space`) top.inset = { top: (top.inset?.top ?? 0) + CALLOUT_PAD_Y, bottom: top.inset?.bottom ?? 0 };
+    bottom.height += CALLOUT_PAD_Y;
+    if (bottom.kind !== `space`) bottom.inset = { top: bottom.inset?.top ?? 0, bottom: (bottom.inset?.bottom ?? 0) + CALLOUT_PAD_Y };
+    this.space(lead * 0.5);
+  }
+
   private blockContent(b: DocBlock): void {
     let paragraphDone = false;
     const lead = this.setup.leading;
@@ -668,7 +720,8 @@ class Typesetter {
         // Reglage du document, puis exception de ce paragraphe (%% p: ... %%) : alignement, retrait ou espace entre paragraphes.
         const base = this.opts.paragraphs ?? defaultParagraphSettings();
         const align = b.format?.align ?? base.align;
-        const mode = b.format?.mode ?? base.mode;
+        // Inside a callout, paragraphs are separated by a space and not indented.
+        const mode = this.boxDepth > 0 ? `space` : (b.format?.mode ?? base.mode);
         const gap = PARAGRAPH_SPACE_POINTS[b.format?.size ?? base.size];
         if (mode === `space` && this.afterParagraph) this.space(gap);
         // Le retrait n'a de sens que pour du texte a gauche ou justifie.
@@ -702,6 +755,9 @@ class Typesetter {
         for (const para of b.text.split(/\n{2,}/)) this.paragraph(para, `quote`, 24, this.textWidth - 36, { indent: 0, justify: true, hyphenate: true, fontSize: size });
         this.anchorFrom(from, b.id);
         this.space(lead * 0.5);
+        break;
+      case `callout`:
+        this.callout(b);
         break;
       case `code`:
         // Blocks written for a plugin (query, diagram) are printed as their source: the report says so.
@@ -1022,6 +1078,7 @@ function countWords(blocks: DocBlock[]): number {
   let n = 0;
   for (const b of blocks) {
     if (b.type === `paragraph` || b.type === `quote`) n += words(b.text);
+    else if (b.type === `callout`) n += words(b.title) + countWords(b.blocks);
     else if (b.type === `list`) for (const it of b.items) n += words(it.text);
     else if (b.type === `table`) for (const r of b.rows) for (const c of r) n += words(c);
   }

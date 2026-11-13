@@ -3,6 +3,7 @@
 // sans aucune information de mise en page. Les commentaires du plugin (%% ... %%) n'y apparaissent jamais.
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
 import { currentLang } from "../i18n";
+import { CalloutKind, parseCalloutHead } from "./callout";
 import { listFromSentinel, ListKind, markListMarkers } from "../illustration-list";
 import { CHART_LANG, chartTarget, parseChart } from "../chart/spec";
 import { markPageZones, PageZone, zoneFromSentinel } from "../page-zone";
@@ -30,6 +31,9 @@ export type DocBlock =
   | { type: `paragraph`; text: string; id?: string; format?: ParagraphFormat; shift?: number }
   | { type: `list`; ordered: boolean; items: DocListItem[] }
   | { type: `quote`; text: string; id?: string }
+  // Callout (> [!type] Title): a quote with a kind (colour), a title and content. The content holds paragraphs, lists, quotes, code and
+  // other callouts; what cannot be printed inside a box (pictures, tables, media, display formulas) is turned into text, `degraded` names it.
+  | { type: `callout`; kind: CalloutKind; name: string; title: string; blocks: DocBlock[]; degraded?: string[] }
   | { type: `code`; lang: string; text: string }
   // La premiere ligne est l'en-tete. `caption` : texte de la ligne « Tableau : ... » placee juste au-dessus.
   | { type: `table`; rows: string[][]; align: ColumnAlign[]; caption?: string; id?: string; style?: TableStyle }
@@ -254,6 +258,29 @@ function indentWidth(s: string): number {
   return w;
 }
 
+// Content of a callout: the blocks that cannot be printed inside a box become text (a picture its caption or its file name, a table one
+// line per row, a display formula an inline one); the kinds of what was changed are added to `degraded`.
+function boxContent(list: DocBlock[], degraded: string[]): DocBlock[] {
+  const note = (kind: string): void => {
+    if (!degraded.includes(kind)) degraded.push(kind);
+  };
+  const out: DocBlock[] = [];
+  for (const b of list) {
+    if (b.type === `figure` || b.type === `media`) {
+      note(b.type);
+      out.push({ type: `paragraph`, text: b.caption.trim() !== `` ? b.caption : b.target });
+    } else if (b.type === `table`) {
+      note(`table`);
+      for (const row of b.rows) out.push({ type: `paragraph`, text: row.join(` | `) });
+    } else if (b.type === `math`) {
+      note(`math`);
+      out.push({ type: `paragraph`, text: `$${b.tex}$` });
+    } else if (b.type === `zone` || b.type === `illustrations`) note(`zone`);
+    else out.push(b);
+  }
+  return out;
+}
+
 // Decoupe le texte situe sous un titre en blocs.
 export function parseBlocks(text: string): DocBlock[] {
   const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(markParagraphMarkers(markListMarkers(markPageZones(text)))))).text.split(`\n`);
@@ -409,6 +436,13 @@ export function parseBlocks(text: string): DocBlock[] {
       flushPara();
       const body: string[] = [];
       while (i < lines.length && QUOTE_RE.test(lines[i])) body.push(QUOTE_RE.exec(lines[i++])![1]);
+      const head = parseCalloutHead(body[0] ?? ``);
+      if (head) {
+        const degraded: string[] = [];
+        const inner = boxContent(parseBlocks(body.slice(1).join(`\n`)), degraded);
+        blocks.push({ type: `callout`, kind: head.kind, name: head.type, title: head.title, blocks: inner, ...(degraded.length > 0 ? { degraded } : {}) });
+        continue;
+      }
       const quoteText = body.join(`\n`).trim();
       const q = BLOCK_ID_RE.exec(quoteText);
       blocks.push(q ? { type: `quote`, text: quoteText.slice(0, q.index), id: q[1] } : { type: `quote`, text: quoteText });
