@@ -2765,6 +2765,48 @@ table.mmw-t-equal td {
   pointer-events: none;
 }
 
+/* Fenetre de l'editeur de callouts. */
+.mmw-calloutmodal {
+  width: min(900px, 96vw);
+}
+
+.mmw-callout-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(260px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.mmw-calloutmodal .mmw-hidden {
+  display: none;
+}
+
+.mmw-callout-card {
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+}
+
+.mmw-callout-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.mmw-callout-text {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  color: var(--text-normal);
+}
+
+@media (max-width: 820px) {
+  .mmw-callout-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Profils : saisie du nom et liste des profils dans les reglages. */
 .mmw-profile-name {
   width: 100%;
@@ -3061,7 +3103,7 @@ body.mmw-zen .workspace-tabs.mmw-zen-list-hidden {
   font-size: var(--font-ui-smaller);
 }
 
-.mmw-chart-rowtop {
+.mmw-chart-row.mmw-chart-rowtop {
   align-items: start;
 }
 

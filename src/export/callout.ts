@@ -73,13 +73,19 @@ export function defaultCalloutTitle(type: string): string {
   return words === `` ? `Note` : words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-// The first line of a quote read as the head of a callout, or null when the quote is a plain one.
-export function parseCalloutHead(line: string): CalloutHead | null {
+// The first line of a quote split as it is written: the type (in lower case), the sign of folding and the title as typed (possibly empty).
+// Null when the line is not the head of a callout.
+export function splitCalloutHead(line: string): { type: string; fold?: `open` | `closed`; title: string } | null {
   const m = HEAD_RE.exec(line.trim());
   if (!m) return null;
-  const type = m[1].toLowerCase();
-  const title = m[3].trim();
-  return { type, kind: calloutKindOf(type), title: title === `` ? defaultCalloutTitle(type) : title, ...(m[2] === `+` ? { fold: `open` as const } : m[2] === `-` ? { fold: `closed` as const } : {}) };
+  return { type: m[1].toLowerCase(), title: m[3].trim(), ...(m[2] === `+` ? { fold: `open` as const } : m[2] === `-` ? { fold: `closed` as const } : {}) };
+}
+
+// The first line of a quote read as the head of a callout, or null when the quote is a plain one.
+export function parseCalloutHead(line: string): CalloutHead | null {
+  const h = splitCalloutHead(line);
+  if (!h) return null;
+  return { type: h.type, kind: calloutKindOf(h.type), title: h.title === `` ? defaultCalloutTitle(h.type) : h.title, ...(h.fold ? { fold: h.fold } : {}) };
 }
 
 const hex = (n: number): string => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, `0`);

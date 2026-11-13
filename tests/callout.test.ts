@@ -156,3 +156,34 @@ test(`callout : la page HTML suit l'aspect de l'export et celui du callout`, () 
   assert.ok(html.includes(`callout callout-tip callout-look-color`));
   assert.ok(!html.includes(`callout:`));
 });
+
+test(`editeur de callouts : un callout se retrouve sous le curseur`, async () => {
+  const { findCalloutRange } = await import(`../src/callout-edit`);
+  const lines = [`Avant`, ``, `> [!tip] Astuce`, `> ligne`, `>`, `> > citation`, ``, `> Une citation`, `> suite`, `Apres`];
+  assert.deepEqual(findCalloutRange(lines, 3), { start: 2, end: 5 });
+  assert.deepEqual(findCalloutRange(lines, 2), { start: 2, end: 5 });
+  assert.equal(findCalloutRange(lines, 7), null);
+  assert.equal(findCalloutRange(lines, 0), null);
+  assert.equal(findCalloutRange(lines, 99), null);
+});
+
+test(`editeur de callouts : les champs se lisent et s'ecrivent comme Obsidian`, async () => {
+  const { cleanType, emptyForm, formFromLines, linesFromForm } = await import(`../src/callout-edit`);
+  const lines = linesFromForm({ ...emptyForm(), type: `tip`, title: `Mon titre`, fold: `closed`, text: `Un.\n\n- a\n- b\n> citation`, look: `custom`, color: `#336699` });
+  assert.deepEqual(lines, [`> [!tip]- Mon titre`, `> %% callout: #336699 %%`, `> Un.`, `>`, `> - a`, `> - b`, `> > citation`]);
+  const back = formFromLines(lines)!;
+  assert.deepEqual([back.type, back.title, back.fold, back.look, back.color], [`tip`, `Mon titre`, `closed`, `custom`, `#336699`]);
+  assert.equal(back.text, `Un.\n\n- a\n- b\n> citation`);
+  // Without title, text or choice of look, the callout is its first line only.
+  assert.deepEqual(linesFromForm(emptyForm()), [`> [!note]`]);
+  assert.deepEqual(linesFromForm({ ...emptyForm(), type: `Mon Type!`, fold: `open`, look: `bw`, text: `x` }), [`> [!mon-type]+`, `> %% callout: bw %%`, `> x`]);
+  assert.equal(cleanType(`  `), `note`);
+  // A callout written by hand: any spacing, no comment line.
+  const hand = formFromLines([`>[!warning]+`, `>texte`, `> `])!;
+  assert.deepEqual([hand.type, hand.title, hand.fold, hand.look, hand.text], [`warning`, ``, `open`, `default`, `texte`]);
+  assert.equal(formFromLines([`> pas un callout`]), null);
+  // What the window writes is read again by the export.
+  const doc = buildExportDoc(`${lines.join(`\n`)}\n`, `N.md`);
+  const b = doc.blocks[0];
+  assert.ok(b.type === `callout` && b.kind === `tip` && b.title === `Mon titre` && b.override?.color === `#336699`);
+});
