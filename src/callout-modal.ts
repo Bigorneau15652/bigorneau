@@ -1,5 +1,5 @@
 // Window of the callout editor: type (with its pictogram and colour), title, text, folding and look of a callout, with a live preview.
-// It is opened by the Callouts module, which gives it the Obsidian module: this file imports Obsidian only for its types.
+// It is opened by the callout editor function of the plugin, which gives it the Obsidian module: this file imports Obsidian only for its types.
 import type { App } from "obsidian";
 import { CalloutForm, CalloutLookChoice, cleanType, overrideOfForm } from "./callout-edit";
 import { CALLOUT_ICONS, ICON_STROKE } from "./export/callout-icons";

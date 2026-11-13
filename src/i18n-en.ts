@@ -491,6 +491,8 @@ const PAIRS: [string, string][] = [
   [`Un média ne se lit pas sur papier : il est remplacé par son titre et son adresse, cliquable dans le PDF.`, `Media cannot be played on paper: it is replaced by its title and its address, clickable in the PDF.`],
   [`Dans un cadre`, `In a frame`],
   [`Callouts`, `Callouts`],
+  [`Éditeur de callouts`, `Callout editor`],
+  [`Le callout a changé pendant que la fenêtre était ouverte : il est inséré à la place du curseur.`, `The callout changed while the window was open: it is inserted at the cursor.`],
   [`Aspect des callouts dans le PDF, l'aperçu, l'impression et la page HTML. Un callout peut choisir le sien avec une ligne de commentaire sous sa première ligne : > %% callout: bw %% (noir et blanc), > %% callout: color %% (couleur) ou > %% callout: #336699 %% (cette couleur).`, `Look of the callouts in the PDF, the preview, the printing and the HTML page. A callout can choose its own with a line of comment under its first line: > %% callout: bw %% (black and white), > %% callout: color %% (colour) or > %% callout: #336699 %% (this colour).`],
   [`En couleur`, `In colour`],
   [`Noir et blanc : filet noir et fond gris clair`, `Black and white: black bar and light grey ground`],
