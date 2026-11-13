@@ -16,6 +16,7 @@ import { MATH_SERVICE, MathRenderer } from "./script-formulas";
 import { loadExportFont } from "./export-font";
 import { t } from "./i18n";
 import type MindmapWritingPlugin from "./main";
+import { afterPaint, imagesReady } from "./print-ready";
 
 export const VIEW_TYPE_EXPORT = `mindmap-writing-export-preview`;
 
@@ -98,6 +99,9 @@ export class ExportPreviewView extends ItemView {
     pageRules.replaceSync(rules.join(`\n`));
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, pageRules];
     document.body.addClass(`mmw-printing`);
+    // The pictures of the copy (charts, drawings, photographs) are loaded and decoded before the window opens, otherwise they come out white.
+    await imagesReady(Array.from(root.querySelectorAll(`img`)));
+    await afterPaint();
     let cleaned = false;
     const cleanup = (): void => {
       if (cleaned) return;
