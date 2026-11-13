@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.40.4
+
+Fixed: in the window "Modules and buttons", the small window of the question mark was drawn behind the window of the modules, so that a click on the question mark seemed to do nothing. It is now placed inside the window of the modules, above it.
+
+Corrigé : dans la fenêtre « Modules et boutons », la petite fenêtre du point d'interrogation était dessinée derrière la fenêtre des modules, si bien qu'un clic sur le point d'interrogation semblait ne rien faire. Elle est maintenant placée dans la fenêtre des modules, au-dessus d'elle.
+
 ## 0.40.3
 
 Changed: in the window "Modules and buttons", the description of each module is no longer written under its name. A question mark next to the name (for example Formulas (1.0.0)) shows it in a small window, which closes with the Escape key (the window of the modules stays open) or with a click outside of it. Under a module, only a problem is still written (a module that needs another one, or an error); the line "On." or "Off." is gone, the switch says it.

@@ -35,7 +35,8 @@ export class ScriptsModal extends Modal {
     const same = this.help?.pop.dataset.for === button.dataset.module;
     this.closeHelp();
     if (same) return;
-    const pop = document.body.createDiv({ cls: `mmw-scripts-pop` });
+    // Inside the container of the window, so that it is drawn above it (a level lower than the window would hide it behind).
+    const pop = this.containerEl.createDiv({ cls: `mmw-scripts-pop` });
     pop.dataset.for = button.dataset.module ?? ``;
     pop.setText(text);
     // Placed under the question mark, kept inside the screen.
