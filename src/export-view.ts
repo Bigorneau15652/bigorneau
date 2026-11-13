@@ -250,6 +250,19 @@ export class ExportPreviewView extends ItemView {
     el.style.height = `${row.height}pt`;
     if (row.anchor !== undefined) el.dataset.anchor = row.anchor;
     if (row.alias !== undefined) el.dataset.alias = row.alias;
+    if (row.kind === `quote`) el.style.backgroundPosition = `${row.x - 12}pt 0`;
+    if (row.callouts) {
+      // Callout boxes: the ground and the bar sit behind the text of the row (negative level inside the row).
+      el.style.position = `relative`;
+      el.style.isolation = `isolate`;
+      for (const box of row.callouts) {
+        const ground = el.createDiv({ cls: `mmw-row-callout` });
+        ground.style.left = `${box.x}pt`;
+        ground.style.width = `${box.width}pt`;
+        ground.style.background = box.fill;
+        ground.style.borderLeftColor = box.bar;
+      }
+    }
     if (row.shade) {
       // Fond de la ligne d'un tableau, sur toute sa largeur (en-tete fonce, alternance).
       el.style.position = `relative`;

@@ -3,6 +3,7 @@
 // embedded videos). No access to Obsidian: the module is tested with node --test.
 import { defaultParagraphSettings, ParagraphSettings } from "../../paragraph-format";
 import { BASE_POINTS, defaultTypography, HeadingSpec, TextSpec, TypographyStyle } from "../../text-style";
+import { calloutColors } from "../callout";
 import { DocBlock, DocListItem, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "../doc-tree";
 import { isImageTarget, isWebTarget } from "../image";
 import { BOLD_OFF, BOLD_ON, InlineContext, ITALIC_OFF, ITALIC_ON, LINK_NUM_END, LINK_OFF, LINK_ON, MATH_END, MATH_ON, normalizeHeading, parseInline, plainOf, STRIKE_OFF, STRIKE_ON } from "../inline";
@@ -310,6 +311,13 @@ class Renderer {
       case `quote`: {
         const id = b.id ? ` id="b-${escapeHtml(b.id)}"` : ``;
         return `<blockquote${id}>${b.text.split(/\n{2,}/).map((p) => `<p>${this.inline(p)}</p>`).join(``)}</blockquote>`;
+      }
+      case `callout`: {
+        // A box with a bar in the colour of its kind: the title, then the content. The page is read, so a folded callout is shown open.
+        const colors = calloutColors(b.kind);
+        for (const kind of b.degraded ?? []) this.warnings.push(`callout:${kind}`);
+        const body = b.blocks.map((child) => this.block(child, undefined)).join(``);
+        return `<div class="callout callout-${b.kind}" style="--c:${colors.rgb};--ci:${colors.ink}"><div class="callout-titre">${this.inline(b.title, false)}</div>${body === `` ? `` : `<div class="callout-corps">${body}</div>`}</div>`;
       }
       case `code`:
         return `<pre class="code"><code${b.lang ? ` class="langue-${escapeHtml(b.lang.replace(/[^\w+-]/g, ``))}"` : ``}>${escapeHtml(b.text)}</code></pre>`;

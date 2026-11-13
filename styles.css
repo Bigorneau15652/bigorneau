@@ -2749,6 +2749,16 @@ table.mmw-t-equal td {
   pointer-events: none;
 }
 
+.mmw-row-callout {
+  position: absolute;
+  top: 0;
+  height: calc(100% + 0.4pt);
+  z-index: -1;
+  box-sizing: border-box;
+  border-left: 3pt solid #448aff;
+  pointer-events: none;
+}
+
 /* Profils : saisie du nom et liste des profils dans les reglages. */
 .mmw-profile-name {
   width: 100%;
