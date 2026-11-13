@@ -67,6 +67,10 @@ body.plein main{margin:0;padding:24px 8px 60px}
 .callout-corps>:last-child{margin-bottom:0}
 .callout-corps .callout{margin-top:.6em}
 :root[data-theme="sombre"] .callout-titre{color:rgb(var(--c))}
+.callout-look-gray{border-left:3px solid var(--texte);background:rgba(128,128,128,.14)}
+.callout-look-frame{border:1px solid var(--texte);background:none;border-radius:2px}
+.callout-look-bar{border-left:3px solid var(--texte);background:none}
+:root[data-theme] .callout-look-gray .callout-titre,:root[data-theme] .callout-look-frame .callout-titre,:root[data-theme] .callout-look-bar .callout-titre{color:var(--texte)}
 .feuille pre.code{background:var(--code);padding:10px 14px;border-radius:6px;overflow:auto;font:13px/1.45 ui-monospace,Consolas,monospace}
 .feuille figure{margin:1.2em 0;text-align:center}
 .feuille figure img{max-width:100%;height:auto}

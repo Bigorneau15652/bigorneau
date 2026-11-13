@@ -3,7 +3,7 @@
 // sans aucune information de mise en page. Les commentaires du plugin (%% ... %%) n'y apparaissent jamais.
 // Ce module ne depend pas d'Obsidian : il se teste avec node --test.
 import { currentLang } from "../i18n";
-import { CalloutKind, parseCalloutHead } from "./callout";
+import { CalloutKind, CalloutOverride, markCalloutOverrides, overrideOfMarkedLine, parseCalloutHead } from "./callout";
 import { listFromSentinel, ListKind, markListMarkers } from "../illustration-list";
 import { CHART_LANG, chartTarget, parseChart } from "../chart/spec";
 import { markPageZones, PageZone, zoneFromSentinel } from "../page-zone";
@@ -33,7 +33,7 @@ export type DocBlock =
   | { type: `quote`; text: string; id?: string }
   // Callout (> [!type] Title): a quote with a kind (colour), a title and content. The content holds paragraphs, lists, quotes, code and
   // other callouts; what cannot be printed inside a box (pictures, tables, media, display formulas) is turned into text, `degraded` names it.
-  | { type: `callout`; kind: CalloutKind; name: string; title: string; blocks: DocBlock[]; degraded?: string[] }
+  | { type: `callout`; kind: CalloutKind; name: string; title: string; blocks: DocBlock[]; degraded?: string[]; override?: CalloutOverride }
   | { type: `code`; lang: string; text: string }
   // La premiere ligne est l'en-tete. `caption` : texte de la ligne « Tableau : ... » placee juste au-dessus.
   | { type: `table`; rows: string[][]; align: ColumnAlign[]; caption?: string; id?: string; style?: TableStyle }
@@ -283,7 +283,7 @@ function boxContent(list: DocBlock[], degraded: string[]): DocBlock[] {
 
 // Decoupe le texte situe sous un titre en blocs.
 export function parseBlocks(text: string): DocBlock[] {
-  const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(markParagraphMarkers(markListMarkers(markPageZones(text)))))).text.split(`\n`);
+  const lines = splitFootnoteDefinitions(stripComments(markTableMarkers(markParagraphMarkers(markListMarkers(markPageZones(markCalloutOverrides(text))))))).text.split(`\n`);
   const blocks: DocBlock[] = [];
   let para: string[] = [];
   // Exception d'un repere seul sur sa ligne : elle s'applique au paragraphe suivant.
@@ -437,12 +437,21 @@ export function parseBlocks(text: string): DocBlock[] {
       const body: string[] = [];
       while (i < lines.length && QUOTE_RE.test(lines[i])) body.push(QUOTE_RE.exec(lines[i++])![1]);
       const head = parseCalloutHead(body[0] ?? ``);
+      // Lines of override written under the first line (`> %% callout: bw %%`): the first one counts, none of them is printed.
+      let override: CalloutOverride | undefined;
+      const content = body.slice(1).filter((l) => {
+        const o = overrideOfMarkedLine(l);
+        if (o === null) return true;
+        if (override === undefined && Object.keys(o).length > 0) override = o;
+        return false;
+      });
       if (head) {
         const degraded: string[] = [];
-        const inner = boxContent(parseBlocks(body.slice(1).join(`\n`)), degraded);
-        blocks.push({ type: `callout`, kind: head.kind, name: head.type, title: head.title, blocks: inner, ...(degraded.length > 0 ? { degraded } : {}) });
+        const inner = boxContent(parseBlocks(content.join(`\n`)), degraded);
+        blocks.push({ type: `callout`, kind: head.kind, name: head.type, title: head.title, blocks: inner, ...(degraded.length > 0 ? { degraded } : {}), ...(override ? { override } : {}) });
         continue;
       }
+      body.splice(0, body.length, ...body.filter((l) => overrideOfMarkedLine(l) === null));
       const quoteText = body.join(`\n`).trim();
       const q = BLOCK_ID_RE.exec(quoteText);
       blocks.push(q ? { type: `quote`, text: quoteText.slice(0, q.index), id: q[1] } : { type: `quote`, text: quoteText });

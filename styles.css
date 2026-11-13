@@ -2755,7 +2755,7 @@ table.mmw-t-equal td {
   height: calc(100% + 1.5px);
   z-index: -1;
   box-sizing: border-box;
-  border-left: 3pt solid #448aff;
+  border: 0 solid transparent;
   pointer-events: none;
 }
 

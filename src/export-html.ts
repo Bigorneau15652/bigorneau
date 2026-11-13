@@ -67,6 +67,7 @@ export async function exportNoteToHtml(plugin: MindmapWritingPlugin, file: TFile
       formulas,
       typography,
       ...(config ? { paragraphs: config.paragraphs } : {}),
+      callouts: plugin.settings.exportCallouts,
       fontCss: builtinFonts && userFonts ? builtinFonts.css + userFonts.css : builtinFontCss() + userFontCss(typography, plugin.fonts.library.families),
       ...(panorama ? { panorama: folderMode ? { ...panorama, jsUrl: `lib/pannellum.js`, cssUrl: `lib/pannellum.css` } : panorama } : {}),
       ...(folderMode ? { separate: true } : {}),

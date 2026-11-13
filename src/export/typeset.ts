@@ -4,7 +4,7 @@
 // tableaux, formules et figures sont encore des reperes provisoires.
 import { BulletId, BulletShape, bulletAt, bulletMark, DEFAULT_BULLETS } from "../bullets";
 import { defaultParagraphSettings, INDENT_POINTS, PARAGRAPH_SPACE_POINTS, ParagraphSettings, SHIFT_MAX_LEVELS, SHIFT_POINTS } from "../paragraph-format";
-import { CalloutKind, calloutColors } from "./callout";
+import { CalloutKind, CalloutLook, calloutPaint } from "./callout";
 import { DocBlock, DocSection, ExportDoc, FOOTNOTE_CALL_RE } from "./doc-tree";
 import { applyCase, BASE_POINTS, CaseMode, defaultTypography, HeadingSpec, headingNumber, inFamilyOf, sizeFactor, styleOf, TextSpec, TypographyStyle } from "../text-style";
 import { FontStyle, measureText, NO_BREAK_SPACE } from "./font-metrics";
@@ -74,6 +74,8 @@ export interface PageStyle {
   protrusion: boolean;
   // Puce de chaque niveau d'une liste a puces (six niveaux), puis le trait d'union.
   bullets: BulletId[];
+  // Look of the callouts: in colour, or in black and white (grey ground with a bar, black frame, black bar). A callout can ask for another one.
+  callouts?: CalloutLook;
   // Paragraphes de toutes les notes ; la note peut avoir les siens (voir effectiveParagraphs).
   paragraphs?: ParagraphSettings;
   // Table des matieres generale au debut du document, et niveaux de titres qu'elle liste (1 a 6). Une propriete de la note
@@ -201,7 +203,9 @@ export interface Row {
   box?: { x: number; width: number; top: boolean; bottom: boolean; line: number; color: string; fill: string };
   // Callouts that the row belongs to, the outermost first: position and width from the left margin, colour of the bar and of the ground.
   // The row is drawn on the ground, with the bar at the left edge of the box.
-  callouts?: { x: number; width: number; bar: string; fill: string }[];
+  // `bar`, `fill` and `frame` are colours (`#rrggbb`) or an empty text when the part is not drawn; `top` and `bottom` mark the first and the
+  // last row of a framed box (the edges across the box).
+  callouts?: { x: number; width: number; bar: string; fill: string; frame: string; top?: boolean; bottom?: boolean }[];
   // Pictogram of a callout, on its title row: position of its left edge from the left margin, side of its square and colour.
   calloutIcon?: { kind: CalloutKind; x: number; size: number; color: string };
   // Couleur du texte de la ligne et surlignage derriere son texte (#rrggbb), quand ils different de l'origine.
@@ -676,7 +680,7 @@ class Typesetter {
   // inside it). The content is composed on a narrower column, then every row is moved to the right and marked with the box: the pages
   // draw the ground and the bar behind each row, so that a box that is cut by a page break goes on on the next page.
   private callout(b: Extract<DocBlock, { type: `callout` }>): void {
-    const colors = calloutColors(b.kind);
+    const colors = calloutPaint(b.kind, this.style.callouts ?? `color`, b.override);
     const lead = this.setup.leading;
     const offset = CALLOUT_BAR + CALLOUT_PAD_X;
     const outer = this.textWidth;
@@ -705,7 +709,12 @@ class Typesetter {
     for (const r of rows) {
       r.x += offset;
       if (r.calloutIcon) r.calloutIcon = { ...r.calloutIcon, x: r.calloutIcon.x + offset };
-      r.callouts = [{ x: 0, width: outer, bar: colors.bar, fill: colors.fill }, ...(r.callouts ?? []).map((c) => ({ ...c, x: c.x + offset }))];
+      r.callouts = [{ x: 0, width: outer, bar: colors.bar, fill: colors.fill, frame: colors.frame }, ...(r.callouts ?? []).map((c) => ({ ...c, x: c.x + offset }))];
+    }
+    // The first and the last row of a framed box carry the top and the bottom edge.
+    if (colors.frame !== ``) {
+      rows[0].callouts![0].top = true;
+      rows[rows.length - 1].callouts![0].bottom = true;
     }
     // Air above the first row and below the last one, inside the box.
     const top = rows[0];

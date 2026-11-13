@@ -531,6 +531,12 @@ export class MmSettingTab extends PluginSettingTab {
             [`frame`, t(`Dans un cadre`)],
             [`text`, t(`En simple texte`)],
           ]),
+          this.dropdown(t(`Callouts`), t(`Aspect des callouts dans le PDF, l'aperçu, l'impression et la page HTML. Un callout peut choisir le sien avec une ligne de commentaire sous sa première ligne : > %% callout: bw %% (noir et blanc), > %% callout: color %% (couleur) ou > %% callout: #336699 %% (cette couleur).`), `exportCallouts`, [
+            [`color`, t(`En couleur`)],
+            [`gray`, t(`Noir et blanc : filet noir et fond gris clair`)],
+            [`frame`, t(`Noir et blanc : cadre noir, intérieur non rempli`)],
+            [`bar`, t(`Noir et blanc : filet noir seul, sans fond`)],
+          ]),
         ],
       },
     ];
