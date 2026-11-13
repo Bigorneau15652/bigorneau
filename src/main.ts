@@ -18,7 +18,7 @@ import { HelpModal } from "./help-modal";
 import { ButtonPanel, FunctionContext } from "./panel";
 import { applyInsert } from "./insert-apply";
 import { CHARTS_SCRIPT } from "./script-charts";
-import { createCalloutsScript } from "./script-callouts";
+import { runCalloutEditor } from "./callout-command";
 import { FORMULAS_SCRIPT } from "./script-formulas";
 import { ICON_FOOTNOTE, ICON_LOREM, registerCustomIcons } from "./custom-icons";
 import { drawFigure, excalidrawInstalled, insertNamedImage, nameAfterPaste } from "./drawing";
@@ -80,7 +80,7 @@ export default class MindmapWritingPlugin extends Plugin {
       saveState: () => void this.saveSettings(false),
     },
     { enabled: {} },
-    [FORMULAS_SCRIPT, CHARTS_SCRIPT, createCalloutsScript(() => this.settings.exportCallouts), createPageScript(() => this.settings.exportAuthor, this.typographyHost())]
+    [FORMULAS_SCRIPT, CHARTS_SCRIPT, createPageScript(() => this.settings.exportAuthor, this.typographyHost())]
   );
   // Notes fixes ouvertes : chapitre montre et volet qui les contient (retrouve par son identifiant apres un redemarrage).
   fixed: { entry: FixedEntry; leaf: WorkspaceLeaf | null }[] = [];
@@ -369,6 +369,13 @@ export default class MindmapWritingPlugin extends Plugin {
       icons: [`table`, `table-2`],
       needsEditor: true,
       run: ({ editor }) => this.openTableDialog(editor as Editor),
+    });
+    this.addFunction({
+      id: `edit-callout`,
+      name: () => t(`Éditeur de callouts`),
+      icons: [`message-square-quote`, `quote`, `message-square`],
+      needsEditor: true,
+      run: ({ editor }) => runCalloutEditor({ app: this.app, obsidian: obsidianApi, editor: editor as Editor, lang: currentLang(), look: this.settings.exportCallouts }),
     });
     this.addFunction({
       id: `lorem-ipsum`,

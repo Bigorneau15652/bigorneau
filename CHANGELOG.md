@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.40.2
+
+Changed: the callout editor is no longer a module. It was listed twice in the window "Modules and buttons" (once as the module Callouts, once as its button). The module is removed: the Callout editor is now a function that is always there, with its button at the end of the list "Buttons of the panel" (it can be hidden, moved and separated from the other buttons like them) and its command of the command palette, which work even when the button is hidden. Nothing changes in the window itself or in the way the callouts are written. The state of the former module Callouts in the saved settings is simply ignored.
+
+Modifié : l'éditeur de callouts n'est plus un module. Il figurait deux fois dans la fenêtre « Modules et boutons » (une fois comme module Callouts, une fois comme bouton). Le module est supprimé : l'éditeur de callouts est maintenant une fonction toujours présente, avec son bouton en bas de la liste « Boutons du panneau » (on peut le masquer, le déplacer et le séparer des autres boutons comme eux) et sa commande de la palette, qui fonctionne même quand le bouton est masqué. Rien ne change dans la fenêtre elle-même ni dans la façon dont les callouts s'écrivent. L'état de l'ancien module Callouts dans les réglages enregistrés est simplement ignoré.
+
 ## 0.40.1
 
 Added: the Callouts module (off by default, turned on with the bigorneau button of the panel) with a Callout editor button and command. A window creates or edits a callout: the type (the thirteen types of Obsidian with their pictogram and colour, or any type name, for example one made with the Callout Manager plugin), an optional title, the text, foldable or not (folded or open at first), and the look in the export (as the export setting says, in colour, in black and white, or in a free colour), with a live preview. The callout is written exactly as Obsidian and Callout Manager write it (`> [!tip]- Title` then the lines of the text with `> `), so it can also be typed by hand or created with Callout Manager. With the cursor in a callout, the button opens that callout to edit it and writes it back in place; elsewhere it inserts a new one, and the selected text, if any, becomes its content. The button can be hidden in the settings of the buttons.
