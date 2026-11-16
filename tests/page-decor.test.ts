@@ -404,3 +404,42 @@ test(`les reperes d'alignement se lisent et s'ecrivent, et une zone qui n'en con
   c.footer.single = true;
   assert.equal(parsePageMarker(formatPageMarker(c))?.footer.single, true);
 });
+
+const logo = { naturalWidth: 600, naturalHeight: 200, pixelWidth: 600, pixelHeight: 200, kind: `rgb` as const, data: new Uint8Array(0) };
+
+test(`un logo dans l'en-tete ne touche pas le bord de la feuille : la zone est agrandie, jamais les marges reduites`, () => {
+  const text = noteWith((c) => {
+    c.header.zones.center = `![[logo.png]]`;
+  }, `Un texte.`);
+  const plain = composeNote(noteWith((c) => (c.header.zones.center = `Titre`), `Un texte.`), `N.md`);
+  const withLogo = composeNote(text, `N.md`, undefined, undefined, { images: new Map([[`logo.png`, logo]]) });
+  // The top margin grew, the other ones did not change.
+  assert.ok(withLogo.setup.marginTop > plain.setup.marginTop);
+  assert.equal(withLogo.setup.marginBottom, plain.setup.marginBottom);
+  assert.equal(withLogo.setup.marginLeft, plain.setup.marginLeft);
+  const image = (withLogo.pages[0].decor ?? []).find((i) => i.kind === `image`);
+  assert.ok(image && image.kind === `image` && image.y >= 20 - 0.01, `the picture starts at 7 mm from the top at least`);
+  // The first line of the text is under the header.
+  const first = withLogo.pages[0].rows.find((r) => r.kind !== `space`);
+  assert.ok(first);
+});
+
+test(`sans image, ou avec un logo deja assez bas, la marge du haut ne change pas`, () => {
+  const none = composeNote(noteWith((c) => (c.header.zones.center = `Titre`), `Un texte.`), `N.md`);
+  const base = composeNote(`Un texte.`, `N.md`);
+  assert.equal(none.setup.marginTop, base.setup.marginTop);
+  // A small picture starts low enough.
+  const small = { ...logo, naturalWidth: 100, naturalHeight: 20 };
+  const c = composeNote(noteWith((x) => (x.header.zones.center = `![[logo.png]]`), `Un texte.`), `N.md`, undefined, undefined, { images: new Map([[`logo.png`, small]]) });
+  assert.equal(c.setup.marginTop, base.setup.marginTop);
+});
+
+test(`un en-tete a une distance choisie garde sa distance et laisse la place sous lui`, () => {
+  const c = composeNote(noteWith((x) => {
+    x.header.zones.center = `![[logo.png]]`;
+    x.header.distance = 5;
+  }, `Un texte.`), `N.md`, undefined, undefined, { images: new Map([[`logo.png`, logo]]) });
+  const image = (c.pages[0].decor ?? []).find((i) => i.kind === `image`);
+  assert.ok(image && image.kind === `image`);
+  if (image && image.kind === `image`) assert.ok(image.y + image.height + 5 <= c.setup.marginTop + 0.5, `the picture ends above the text`);
+});

@@ -318,6 +318,37 @@ function edgeItems(band: Band, odd: boolean, values: PageValues, ctx: DecorConte
   out.push({ kind: `group`, rot: odd ? 90 : -90, qx, qy: odd ? setup.marginTop : setup.height - setup.marginBottom, items: leaves });
 }
 
+// Smallest distance, in points, between the top edge of the sheet and what the header draws (7 mm): a printer does not print the first
+// millimetres of a sheet, so a picture of the header that starts higher than this is cut.
+export const HEADER_MIN_EDGE = 20;
+// Air kept between the bottom of a header placed at a given distance and the text of the page, in points.
+const HEADER_BODY_GAP = 6;
+
+// How many points the top margin must grow so that the header, pictures included, stays clear of the top edge of the sheet (and of the
+// text of the page). Zero when the header is not used or already fits. The header follows the top margin, so growing the margin by this
+// amount moves it down by the same amount and the margins are never reduced.
+export function headerExtraTop(config: PageConfig, ctx: DecorContext): number {
+  const band = config.header;
+  if (!bandUsed(band)) return 0;
+  const values: PageValues = { document: ctx.title, chapter: ``, section: ``, author: ctx.author, date: ctx.date, created: ctx.created, modified: ctx.modified, page: 1, pages: 1 };
+  const missing = new Set<string>();
+  let extra = 0;
+  for (const zones of band.mirror ? [band.zones, band.verso] : [band.zones]) {
+    const m = layoutBand(band, zones, false, values, ctx, missing);
+    const d = band.distance === null ? null : band.distance * POINTS_PER_MM;
+    if (d === null) {
+      // The first baseline sits at a fixed place under the top margin (see bandItems): the band begins above it by its height.
+      const top = ctx.setup.marginTop - HEADER_BASELINE_OFFSET - (m.rows - 1) * ZONE_LINE_HEIGHT - m.above - m.pad;
+      extra = Math.max(extra, HEADER_MIN_EDGE - top);
+    } else {
+      // A distance chosen by the user is kept; only the room under the band is made.
+      const bottom = d + 2 * m.pad + m.above + m.below + (m.rows - 1) * ZONE_LINE_HEIGHT + (band.rule ? RULE_GAP + 3 : 0);
+      extra = Math.max(extra, bottom + HEADER_BODY_GAP - ctx.setup.marginTop);
+    }
+  }
+  return Math.max(0, Math.ceil(extra));
+}
+
 export function layoutDecor(config: PageConfig, pages: Page[], ctx: DecorContext): DecorResult {
   const titles = runningTitles(pages);
   const missing = new Set<string>();

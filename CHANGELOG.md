@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.40.7
+
+Fixed: a picture in the header could be cut when printing, because it started a few points from the top edge of the sheet, where a printer does not print. The header zone is now enlarged when a picture would start less than 7 mm from the top edge: the header moves down and the text of the page starts lower by the same amount, on every sheet (portrait, landscape, columns). The margins are never reduced, nothing changes for a header without a picture or with a small one, and a distance chosen in the header window is kept (only the room under the header is made).
+
+Corrigé : une image de l'en-tête pouvait être coupée à l'impression, parce qu'elle commençait à quelques points du bord haut de la feuille, là où une imprimante n'imprime pas. La zone d'en-tête est maintenant agrandie quand une image commencerait à moins de 7 mm du bord haut : l'en-tête descend et le texte de la page commence plus bas de la même quantité, sur toutes les feuilles (portrait, paysage, colonnes). Les marges ne sont jamais réduites, rien ne change pour un en-tête sans image ou avec une petite image, et une distance choisie dans la fenêtre de l'en-tête est conservée (seule la place sous l'en-tête est faite).
+
 ## 0.40.6
 
 Changed: the ground of the callouts is a little stronger (14 per cent of the colour of the type instead of 10) and the grey of the quote callout is darker, because a very light ground, the grey one above all, was drawn on the screen and in the PDF but not rendered by a printer. The ground of the black and white look with a grey ground is darker too. The bar and the other colours keep their hue.

@@ -1,6 +1,6 @@
 // Export de haute qualite : de la note au fichier PDF, sans rien qui depende d'Obsidian (se teste avec node --test).
-import { layoutDecor } from "./page-decor";
-import { anyDecor, findPageConfig } from "../page-config";
+import { headerExtraTop, layoutDecor } from "./page-decor";
+import { anyDecor, bandUsed, findPageConfig } from "../page-config";
 import { defaultParagraphSettings, effectiveParagraphs } from "../paragraph-format";
 import { applyOverrides, defaultTypography } from "../text-style";
 import { buildExportDoc } from "./doc-tree";
@@ -108,11 +108,17 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
   // Mise en page de la note (format, orientation, marges, colonnes), sauf si une feuille est imposee : alors une seule colonne.
   const found = noteConfig;
   const layout = explicitSetup ? defaultLayout() : (found?.config.layout ?? defaultLayout());
-  const setup = explicitSetup ?? pageSetupOf(layout);
-  const columnSetup = explicitSetup ?? columnSetupOf(layout);
+  const baseSetup = explicitSetup ?? pageSetupOf(layout);
+  // Header with a picture: the top margin grows so that the picture stays clear of the top edge of the sheet (a printer cuts what is
+  // there) and of the text; the margins are never reduced. The same growth applies to every sheet (portrait, landscape, columns).
+  const english = languageOf(doc.language) === `en`;
+  const headerExtra = found && anyDecor(found.config) && bandUsed(found.config.header) ? headerExtraTop(found.config, { setup: baseSetup, title: doc.title, author: doc.author ?? assets.defaultAuthor ?? ``, typography: typography.decor, date: ``, created: ``, modified: ``, ...(images ? { images } : {}) }) : 0;
+  const grow = (s: PageSetup): PageSetup => (headerExtra > 0 ? { ...s, marginTop: s.marginTop + headerExtra } : s);
+  const setup = grow(baseSetup);
+  const columnSetup = grow(explicitSetup ?? columnSetupOf(layout));
   // Zone d'une autre orientation (etiquettes %% page: paysage %%) : sa mise en page derive de celle de la note.
   const zoneLayout = (zone: PageZone | null): PageLayout => (zone === null ? layout : sanitizeLayout({ ...layout, orientation: zone.orientation, columns: zone.columns ?? layout.columns }));
-  const zoneSetup = explicitSetup ? undefined : (zone: PageZone | null): PageSetup => (zone === null ? columnSetup : columnSetupOf(zoneLayout(zone)));
+  const zoneSetup = explicitSetup ? undefined : (zone: PageZone | null): PageSetup => (zone === null ? columnSetup : grow(columnSetupOf(zoneLayout(zone))));
   // Le texte est compose d'une traite, puis coupe aux changements de zone : chaque partie est mise en pages avec sa feuille.
   const build = (pageOf: ((a: string) => number | undefined) | undefined): { typeset: TypesetDoc; pages: Page[] } => {
     const typeset = typesetDoc(doc, columnSetup, undefined, style, { ...options, ...(zoneSetup ? { zoneSetup } : {}), ...(pageOf ? { pageOf } : {}) });
@@ -126,10 +132,10 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
     for (const part of real) {
       const l = zoneLayout(part.zone);
       const first = pages.length + 1;
-      let list = paginate({ rows: part.rows, footnotes: typeset.footnotes, title: typeset.title }, part.zone === null ? columnSetup : columnSetupOf(l), style, first);
+      let list = paginate({ rows: part.rows, footnotes: typeset.footnotes, title: typeset.title }, part.zone === null ? columnSetup : grow(columnSetupOf(l)), style, first);
       if (l.columns > 1) list = groupColumns(list, l.columns, columnWidthOf(l), gapOf(l), first);
       // Une partie dont la feuille n'est pas celle de la note la porte avec ses pages.
-      const sheet = pageSetupOf(l);
+      const sheet = grow(pageSetupOf(l));
       const differs = sheet.width !== setup.width || sheet.height !== setup.height;
       pages.push(...(differs ? list.map((p) => ({ ...p, setup: sheet })) : list));
     }
@@ -150,7 +156,6 @@ export function composeNote(text: string, fileName: string, explicitSetup: PageS
   // En-tete, pied de page et numero d'apres les reglages ecrits dans la note : ils remplacent ceux d'origine, mais seulement quand la
   // note definit au moins une bande. Une note qui n'a qu'un reglage de page (paysage, colonnes...) garde l'en-tete et le numero generaux.
   if (found && anyDecor(found.config)) {
-    const english = languageOf(doc.language) === `en`;
     const format = new Intl.DateTimeFormat(english ? `en-GB` : `fr-FR`, { dateStyle: `long` });
     const date = assets.date ?? format.format(new Date());
     const dated = (ms: number | undefined): string => (ms === undefined ? `` : format.format(new Date(ms)));
