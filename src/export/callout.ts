@@ -34,7 +34,8 @@ const ALIASES: Record<string, CalloutKind> = {
   cite: `quote`,
 };
 
-// Colours of the default theme of Obsidian (red, green, blue).
+// Colours of the default theme of Obsidian (red, green, blue). The grey of the quote is darker than in Obsidian: a very light grey ground
+// is not rendered by a printer.
 const RGB: Record<CalloutKind, [number, number, number]> = {
   note: [68, 138, 255],
   abstract: [0, 176, 255],
@@ -48,7 +49,7 @@ const RGB: Record<CalloutKind, [number, number, number]> = {
   danger: [251, 70, 76],
   bug: [251, 70, 76],
   example: [168, 130, 255],
-  quote: [158, 158, 158],
+  quote: [118, 118, 118],
 };
 
 export interface CalloutHead {
@@ -88,6 +89,10 @@ export function parseCalloutHead(line: string): CalloutHead | null {
   return { type: h.type, kind: calloutKindOf(h.type), title: h.title === `` ? defaultCalloutTitle(h.type) : h.title, ...(h.fold ? { fold: h.fold } : {}) };
 }
 
+// Share of the colour of the type in the ground of a callout (the rest is white): strong enough for a printer to render it, light enough to
+// read the text on it.
+const TINT = 0.14;
+
 const hex = (n: number): string => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, `0`);
 const toHex = (c: [number, number, number]): string => `#${hex(c[0])}${hex(c[1])}${hex(c[2])}`;
 
@@ -108,7 +113,7 @@ export function calloutColors(kind: CalloutKind): CalloutColors {
   const c = RGB[kind];
   return {
     bar: toHex(c),
-    fill: toHex([c[0] * 0.1 + 255 * 0.9, c[1] * 0.1 + 255 * 0.9, c[2] * 0.1 + 255 * 0.9]),
+    fill: toHex([c[0] * TINT + 255 * (1 - TINT), c[1] * TINT + 255 * (1 - TINT), c[2] * TINT + 255 * (1 - TINT)]),
     ink: toHex([c[0] * 0.6, c[1] * 0.6, c[2] * 0.6]),
     rgb: `${c[0]}, ${c[1]}, ${c[2]}`,
   };
@@ -214,14 +219,14 @@ export function calloutPaint(kind: CalloutKind, look: CalloutLook, override?: Ca
     return {
       look: used,
       bar: toHex(rgb),
-      fill: toHex([rgb[0] * 0.1 + 255 * 0.9, rgb[1] * 0.1 + 255 * 0.9, rgb[2] * 0.1 + 255 * 0.9]),
+      fill: toHex([rgb[0] * TINT + 255 * (1 - TINT), rgb[1] * TINT + 255 * (1 - TINT), rgb[2] * TINT + 255 * (1 - TINT)]),
       frame: ``,
       ink: toHex([rgb[0] * 0.6, rgb[1] * 0.6, rgb[2] * 0.6]),
       rgb: `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`,
     };
   }
   const black = `#000000`;
-  if (used === `gray`) return { look: used, bar: black, fill: `#ececec`, frame: ``, ink: black, rgb: `0, 0, 0` };
+  if (used === `gray`) return { look: used, bar: black, fill: `#e2e2e2`, frame: ``, ink: black, rgb: `0, 0, 0` };
   if (used === `frame`) return { look: used, bar: ``, fill: ``, frame: black, ink: black, rgb: `0, 0, 0` };
   return { look: used, bar: black, fill: ``, frame: ``, ink: black, rgb: `0, 0, 0` };
 }

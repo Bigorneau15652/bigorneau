@@ -61,7 +61,7 @@ body.plein main{margin:0;padding:24px 8px 60px}
 .mode-space p{margin:0 0 var(--ecart,.8em)}
 .feuille ul,.feuille ol{margin:0 0 .9em;padding-left:1.6em}
 .feuille blockquote{margin:0 0 .9em;padding:.1em 1em;border-left:3px solid var(--bord);color:var(--doux)}
-.feuille .callout{margin:0 0 .9em;padding:.6em 1em .5em .9em;border-left:3px solid rgb(var(--c));background:rgba(var(--c),.1);border-radius:0 4px 4px 0}
+.feuille .callout{margin:0 0 .9em;padding:.6em 1em .5em .9em;border-left:3px solid rgb(var(--c));background:rgba(var(--c),.14);border-radius:0 4px 4px 0}
 .callout-titre{display:flex;align-items:center;gap:.4em;font-weight:700;color:var(--ci);margin:0 0 .35em}
 .callout-icone{flex:none}
 .callout-corps>:last-child{margin-bottom:0}

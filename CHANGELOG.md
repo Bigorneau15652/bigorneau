@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.40.6
+
+Changed: the ground of the callouts is a little stronger (14 per cent of the colour of the type instead of 10) and the grey of the quote callout is darker, because a very light ground, the grey one above all, was drawn on the screen and in the PDF but not rendered by a printer. The ground of the black and white look with a grey ground is darker too. The bar and the other colours keep their hue.
+
+Modifié : le fond des callouts est un peu plus soutenu (14 % de la couleur du type au lieu de 10) et le gris du callout de type citation est plus foncé, parce qu'un fond très clair, le gris surtout, était dessiné à l'écran et dans le PDF mais pas rendu par une imprimante. Le fond du aspect noir et blanc à fond gris est plus foncé lui aussi. La barre et les autres couleurs gardent leur teinte.
+
 ## 0.40.5
 
 Fixed: when printing the preview, the ground and the bar of the callouts were not printed (only the title, the pictogram and the text came out). On the printed copy the page is no longer reduced, which made it lose its own drawing level, and the white of the sheet was drawn over the grounds of the callouts, which are drawn under the text. The page is now given its own drawing level again when it is printed. The cause was in the plugin, not in the printer or its options.
