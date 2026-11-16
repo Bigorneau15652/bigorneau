@@ -3,6 +3,12 @@
 Each version has a short description in English, then in French. The text of a version is copied onto its release page on GitHub.
 Chaque version a une courte description en anglais, puis en français. Le texte d'une version est recopié sur la page de sa release GitHub.
 
+## 0.40.5
+
+Fixed: when printing the preview, the ground and the bar of the callouts were not printed (only the title, the pictogram and the text came out). On the printed copy the page is no longer reduced, which made it lose its own drawing level, and the white of the sheet was drawn over the grounds of the callouts, which are drawn under the text. The page is now given its own drawing level again when it is printed. The cause was in the plugin, not in the printer or its options.
+
+Corrigé : à l'impression de l'aperçu, le fond et la barre des callouts n'étaient pas imprimés (seuls le titre, le pictogramme et le texte sortaient). Sur la copie imprimée la page n'est plus réduite, ce qui lui faisait perdre son niveau de dessin propre, et le blanc de la feuille recouvrait les fonds des callouts, qui sont dessinés sous le texte. La page reçoit maintenant de nouveau son niveau de dessin propre quand elle est imprimée. La cause était dans le plugin, pas dans l'imprimante ni dans ses options.
+
 ## 0.40.4
 
 Fixed: in the window "Modules and buttons", the small window of the question mark was drawn behind the window of the modules, so that a click on the question mark seemed to do nothing. It is now placed inside the window of the modules, above it.

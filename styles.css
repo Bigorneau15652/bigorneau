@@ -2888,8 +2888,12 @@ table.mmw-t-equal td {
     break-after: auto;
   }
 
+  /* Without its reduction, the page is no longer a stacking context: it is made one again, otherwise the white of the sheet is drawn over the
+     grounds and the bars of the callouts, which sit under the text of the page (negative level). */
   .mmw-print-page .mmw-export-page {
     transform: none !important;
+    z-index: 0;
+    isolation: isolate;
   }
 }
 
